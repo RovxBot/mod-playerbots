@@ -27,9 +27,6 @@
 #include "SpellMgr.h"
 #include "Util.h"
 
-// Forward declaration for the common "item usage" key builder
-static std::string BuildItemUsageParam(uint32 itemId, int32 randomProperty);
-
 static std::string BuildItemUsageParam(uint32 itemId, int32 randomProperty)
 {
     return ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
