@@ -313,7 +313,7 @@ static std::array<uint32, 6> const& GetSanctificationTokenIds()
         52027,
         52028,
         52029,
-        52030 
+        52030
     };
 
     return sanctificationTokenIds;
