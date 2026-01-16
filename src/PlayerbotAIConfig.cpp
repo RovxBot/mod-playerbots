@@ -632,6 +632,7 @@ bool PlayerbotAIConfig::Initialize()
     needOnProfessionRecipes = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.NeedOnProfessionRecipes", true);
     recipesIgnoreSkillRank   = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.Recipes.IgnoreSkillRank", false);
     smartNeedBySpec = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.SmartNeedBySpec", true);
+    rollUseGroupUsageChecks = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UseGroupUsageChecks", false);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);
