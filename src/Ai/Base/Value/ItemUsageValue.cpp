@@ -704,6 +704,13 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
 
     if (proto->Class == ITEM_CLASS_WEAPON)
     {
+        ItemStatProfile const stats = BuildItemStatProfile(proto);
+        const bool hasCaster = stats.hasINT || stats.hasSP || stats.hasMP5;
+        const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
+
+        if (!traits.isCaster && hasCaster && !hasPhysical)
+            return false;
+
         if (traits.isCaster)
             return proto->SubClass == ITEM_SUBCLASS_WEAPON_STAFF || proto->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ||
                    proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD ||
