@@ -852,6 +852,8 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         return usage;
 
     float newScore = sRandomItemMgr->CalculateItemWeight(bot, proto->ItemId, randomProperty);
+    if (newScore <= 0.0f)
+        return usage;
     float bestOld = 0.0f;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -870,12 +872,18 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         if (oldProto->InventoryType != proto->InventoryType)
             continue;
 
+        if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
+            continue;
+
         float oldScore = sRandomItemMgr->CalculateItemWeight(
             bot, oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
 
         if (oldScore > bestOld)
             bestOld = oldScore;
     }
+
+    if (bestOld <= 0.0f)
+        return ITEM_USAGE_EQUIP;
 
     if (bestOld > 0.0f && newScore >= bestOld * sPlayerbotAIConfig->crossArmorExtraMargin)
         return ITEM_USAGE_EQUIP;
