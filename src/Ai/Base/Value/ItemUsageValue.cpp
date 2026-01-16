@@ -279,6 +279,11 @@ std::string ItemUsageValue::BuildItemUsageParam(uint32 itemId, int32 randomPrope
 
 namespace
 {
+static bool EnableGroupUsageChecks()
+{
+    return sPlayerbotAIConfig->rollUseGroupUsageChecks;
+}
+
 static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto);
 
 static bool HasAnyStat(ItemTemplate const* proto, std::initializer_list<ItemModType> mods)
@@ -737,7 +742,8 @@ static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, i
     if (IsPrimaryForSpec(bot, proto))
         return usage;
 
-    if (GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
+    //if (GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
+    if (EnableGroupUsageChecks() && GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
         return ITEM_USAGE_BAD_EQUIP;
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
@@ -766,10 +772,12 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (sPlayerbotAIConfig->crossArmorGreedIsPass)
         return ITEM_USAGE_NONE;
 
-    if (GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
+    //if (GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
+    if (EnableGroupUsageChecks() && GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
         return usage;
 
-    if (GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
+    //if (GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
+    if (EnableGroupUsageChecks() && GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
         return usage;
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
