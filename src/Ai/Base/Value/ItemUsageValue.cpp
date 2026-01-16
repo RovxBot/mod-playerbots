@@ -636,6 +636,9 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
     if (hasTank && !hasCaster && !hasPhysical)
         return traits.isTank;
 
+    if (!traits.isTank && hasTank)
+        return false;
+
     if (hasCaster || hasPhysical || hasTank)
         return (traits.isCaster && hasCaster) || (traits.isPhysical && hasPhysical) || (traits.isTank && hasTank);
 
