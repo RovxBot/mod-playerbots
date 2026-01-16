@@ -621,22 +621,45 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
 
     const SpecTraits traits = GetSpecTraits(bot);
     ItemStatProfile const stats = BuildItemStatProfile(proto);
+    const auto isStrengthUser = [&traits]()
+    {
+        return traits.cls == CLASS_WARRIOR || traits.cls == CLASS_PALADIN || traits.cls == CLASS_DEATH_KNIGHT;
+    };
 
     const bool hasCaster = stats.hasINT || stats.hasSP || stats.hasMP5;
     const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
     const bool hasTank = stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
     const bool hasNeutral = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
+    const bool isPureCaster = hasCaster && !hasPhysical && !hasTank;
+    const bool isPurePhysical = hasPhysical && !hasCaster && !hasTank;
+    const bool isPureTank = hasTank && !hasCaster && !hasPhysical;
+    const bool isStrengthOnly = stats.hasSTR && !stats.hasAGI;
 
-    if (hasCaster && !hasPhysical && !hasTank)
+    if (isPureCaster)
         return traits.isCaster;
 
-    if (hasPhysical && !hasCaster && !hasTank)
+    if (isPurePhysical)
         return traits.isPhysical;
 
-    if (hasTank && !hasCaster && !hasPhysical)
+    if (isPureTank)
         return traits.isTank;
 
     if (!traits.isTank && hasTank)
+        return false;
+
+    if (traits.isHealer && isPurePhysical)
+        return false;
+
+    if (stats.hasMP5 && (!traits.isHealer || traits.isEnhSham))
+        return false;
+
+    if (traits.isHealer && stats.hasHIT)
+         return false;
+	 
+    if (isStrengthOnly && !isStrengthUser())
+        return false;
+
+    if (traits.isHunter && isStrengthOnly)
         return false;
 
     if (hasCaster || hasPhysical || hasTank)
@@ -823,7 +846,6 @@ static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, i
     if (IsPrimaryForSpec(bot, proto))
         return usage;
 
-    //if (GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
     if (EnableGroupUsageChecks() && GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
         return ITEM_USAGE_BAD_EQUIP;
 
@@ -853,11 +875,9 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (sPlayerbotAIConfig->crossArmorGreedIsPass)
         return ITEM_USAGE_NONE;
 
-    //if (GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
     if (EnableGroupUsageChecks() && GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
         return usage;
 
-    //if (GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
     if (EnableGroupUsageChecks() && GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
         return usage;
 
@@ -1063,7 +1083,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         // No item equipped
         if (!oldItem)
         {
-            if (shouldEquipInSlot)
+        if (shouldEquipInSlot || IsFallbackNeedReasonableForSpec(bot, itemProto))
                 return ITEM_USAGE_EQUIP;
             else
             {
