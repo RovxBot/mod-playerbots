@@ -722,6 +722,9 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
     if (IsLowerTierArmorForBot(bot, proto))
         return false;
 
+    if (!traits.isTank && HasAnyTankAvoidance(proto))
+        return false;
+
     if (traits.isTank && HasAnyTankAvoidance(proto))
         return true;
 
