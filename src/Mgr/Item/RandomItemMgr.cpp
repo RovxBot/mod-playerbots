@@ -724,6 +724,11 @@ bool RandomItemMgr::CanEquipArmor(uint8 clazz, uint32 level, ItemTemplate const*
     if (proto->InventoryType == INVTYPE_TABARD)
         return true;
 
+    if (proto->InventoryType == INVTYPE_CLOAK || proto->InventoryType == INVTYPE_NECK ||
+        proto->InventoryType == INVTYPE_FINGER || proto->InventoryType == INVTYPE_TRINKET ||
+        proto->InventoryType == INVTYPE_HOLDABLE)
+        return true;
+
     if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN || clazz == CLASS_SHAMAN) &&
         proto->SubClass == ITEM_SUBCLASS_ARMOR_SHIELD)
         return true;

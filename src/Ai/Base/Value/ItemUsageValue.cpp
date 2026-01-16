@@ -562,17 +562,25 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
     const SpecTraits traits = GetSpecTraits(bot);
     ItemStatProfile const stats = BuildItemStatProfile(proto);
 
-    if (stats.hasINT || stats.hasSP || stats.hasHIT || stats.hasCRIT || stats.hasHASTE || stats.hasMP5)
+    const bool hasCaster = stats.hasINT || stats.hasSP || stats.hasMP5;
+    const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
+    const bool hasTank = stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
+    const bool hasNeutral = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
+
+    if (hasCaster && !hasPhysical && !hasTank)
         return traits.isCaster;
 
-    if (stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP)
+    if (hasPhysical && !hasCaster && !hasTank)
         return traits.isPhysical;
 
-    if (stats.hasDef || stats.hasAvoid || stats.hasBlockValue)
+    if (hasTank && !hasCaster && !hasPhysical)
         return traits.isTank;
 
-    if (IsJewelryOrCloak(proto))
-        return true;
+    if (hasCaster || hasPhysical || hasTank)
+        return (traits.isCaster && hasCaster) || (traits.isPhysical && hasPhysical) || (traits.isTank && hasTank);
+
+    if (hasNeutral)
+        return traits.isCaster || traits.isPhysical;
 
     return true;
 }
@@ -709,7 +717,7 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
         return true;
 
     if (IsJewelryOrCloak(proto))
-        return true;
+        return IsFallbackNeedReasonableForSpec(bot, proto);
 
     if (IsLowerTierArmorForBot(bot, proto))
         return false;
