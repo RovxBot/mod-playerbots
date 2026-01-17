@@ -7,14 +7,27 @@
 #define _PLAYERBOT_ITEMUSAGEVALUE_H
 
 #include "NamedObjectContext.h"
+#include "SharedDefines.h"
 #include "Value.h"
 
 class Item;
+class Group;
 class Player;
 class PlayerbotAI;
 
 struct ItemTemplate;
+
 struct ParsedItemUsage
+
+enum RollVote : uint8;
+
+// Shared helper: infer profession SkillLine for a recipe item.
+// Uses RequiredSkill when available, otherwise falls back to SubClass/name heuristics.
+uint32 GetRecipeSkill(ItemTemplate const* proto);
+
+// Shared loot/spec helpers used by ItemUsageValue and loot-roll logic
+struct SpecTraits
+
 {
     uint32 itemId = 0;
     int32 randomPropertyId = 0;
@@ -69,7 +82,12 @@ public:
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
 };
 
+
 class ItemUpgradeValue : public ItemUsageValue
+
+
+class LootUsageValue : public ItemUsageValue
+
 {
 public:
     ItemUpgradeValue(PlayerbotAI* botAI, std::string const name = "item upgrade") : ItemUsageValue(botAI, name)
@@ -79,4 +97,13 @@ public:
     ItemUsage Calculate() override;
 };
 
+
 #endif
+
+// Loot roll helpers (used by LootRollAction)
+char const* RollVoteText(RollVote v);
+RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage,
+                               Group* group, char const* logTag);
+
+#endif
+
