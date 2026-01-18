@@ -379,6 +379,26 @@ static bool HasAnyTankAvoidance(ItemTemplate const* proto)
                               ITEM_MOD_BLOCK_RATING});
 }
 
+static bool IsRelicForClass(ItemTemplate const* proto, uint8 cls)
+{
+    if (!proto || proto->InventoryType != INVTYPE_RELIC)
+        return false;
+
+    switch (proto->SubClass)
+    {
+        case ITEM_SUBCLASS_ARMOR_IDOL:
+            return cls == CLASS_DRUID;
+        case ITEM_SUBCLASS_ARMOR_TOTEM:
+            return cls == CLASS_SHAMAN;
+        case ITEM_SUBCLASS_ARMOR_LIBRAM:
+            return cls == CLASS_PALADIN;
+        case ITEM_SUBCLASS_ARMOR_SIGIL:
+            return cls == CLASS_DEATH_KNIGHT;
+        default:
+            return false;
+    }
+}
+
 static bool IsBodyArmorInvType(uint8 invType)
 {
     switch (invType)
@@ -671,7 +691,10 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
 
     if ((traits.isHunter || traits.isEnhSham) && stats.hasSTR)
         return false;
-	 
+
+    if (traits.isRogue && stats.hasSTR)
+        return false;
+	
     if (isStrengthOnly && !isStrengthUser())
         return false;
 
@@ -796,7 +819,8 @@ ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
     for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
     {
         auto const& spell = proto->Spells[i];
-        if (!spell.SpellId || spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP)
+        if (!spell.SpellId ||
+            (spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP && spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_USE))
             continue;
 
         SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell.SpellId);
@@ -865,6 +889,14 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
     const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
     const bool hasCasterOffense = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
 
+    if (proto->InventoryType == INVTYPE_RELIC)
+    {
+        if (!IsRelicForClass(proto, traits.cls))
+            return false;
+
+        return IsFallbackNeedReasonableForSpec(bot, proto);
+    }
+
     if (proto->Class == ITEM_CLASS_WEAPON)
     {
         if (traits.isTank && hasCaster)
@@ -895,6 +927,9 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
         return false;
 
     if ((traits.isHunter || traits.isEnhSham) && stats.hasSTR)
+        return false;
+
+    if (traits.isRogue && stats.hasSTR)
         return false;
 
     if (IsJewelryOrCloak(proto))
