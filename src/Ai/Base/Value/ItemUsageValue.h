@@ -83,7 +83,9 @@ public:
 };
 
 
+
 class ItemUpgradeValue : public ItemUsageValue
+
 
 
 class LootUsageValue : public ItemUsageValue
