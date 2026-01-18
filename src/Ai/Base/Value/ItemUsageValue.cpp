@@ -694,7 +694,7 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
 
     if (traits.isRogue && stats.hasSTR)
         return false;
-	
+
     if (isStrengthOnly && !isStrengthUser())
         return false;
 
@@ -1024,7 +1024,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         if (!oldProto)
             continue;
 
-		if (oldProto->Class != ITEM_CLASS_ARMOR)
+        if (oldProto->Class != ITEM_CLASS_ARMOR)
             continue;
 
         if (oldProto->InventoryType != proto->InventoryType)
