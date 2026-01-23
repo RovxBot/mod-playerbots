@@ -503,14 +503,11 @@ uint32 StatsWeightCalculator::BuildSmartStatMask(Player* player)
     if (!player)
         return SMARTSTAT_NONE;
 
-    uint8 cls = player->getClass();
-    int tab = AiFactory::GetPlayerSpecTab(player);
-    float weights[STATS_TYPE_MAX] = {};
+    StatsWeightCalculator calculator(player);
+    calculator.Reset();
+    calculator.GenerateWeights(player);
 
-    ApplyBasicWeights(player, cls, tab, weights);
-    ApplyAdditionalWeights(player, weights);
-
-    return BuildSmartMaskFromWeights(weights);
+    return BuildSmartMaskFromWeights(calculator.stats_weights_);
 }
 
 void StatsWeightCalculator::GenerateBasicWeights(Player* player)
