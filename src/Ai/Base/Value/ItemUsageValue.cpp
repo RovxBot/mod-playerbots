@@ -586,66 +586,52 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
     if (!bot || !proto)
         return false;
 
-    const SpecTraits traits = GetSpecTraits(bot);
+    SpecTraits const traits = GetSpecTraits(bot);
+    uint32 const profile = StatsWeightCalculator::BuildSmartStatMask(bot);
+    if (profile == SMARTSTAT_NONE)
+        return true;
+
     ItemStatProfile const stats = BuildItemStatProfile(proto);
-    const auto isStrengthUser = [&traits]()
-    {
-        return traits.cls == CLASS_WARRIOR || traits.cls == CLASS_PALADIN || traits.cls == CLASS_DEATH_KNIGHT;
-    };
+    bool const hasAnyStat = stats.hasINT || stats.hasSPI || stats.hasMP5 || stats.hasSP || stats.hasSTR ||
+        stats.hasAGI || stats.hasSTA || stats.hasAP || stats.hasARP || stats.hasEXP || stats.hasHIT ||
+        stats.hasHASTE || stats.hasCRIT || stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
+ 
 
-    const bool hasCaster = stats.hasINT || stats.hasSP || stats.hasMP5;
-    const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
-    const bool hasTank = stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
-    const bool hasNeutral = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
-    const bool isPureCaster = hasCaster && !hasPhysical && !hasTank;
-    const bool isPurePhysical = hasPhysical && !hasCaster && !hasTank;
-    const bool isPureTank = hasTank && !hasCaster && !hasPhysical;
-    const bool isStrengthOnly = stats.hasSTR && !stats.hasAGI;
-    const bool isAgilityPreferred = traits.isHunter || traits.isRogue || traits.isEnhSham;
+    if (!hasAnyStat)
+        return true;
 
-    if (isPureCaster)
-        return traits.isCaster;
-
-    if (isPurePhysical)
-        return traits.isPhysical;
-
-    if (isPureTank)
-        return traits.isTank;
-
-    if (!traits.isTank && hasTank)
+    if (traits.isTank && !stats.hasSTA && !stats.hasDef && !stats.hasAvoid && !stats.hasBlockValue)
         return false;
+    if ((profile & SMARTSTAT_HIT) && stats.hasHIT)
+        return true;
+    if ((profile & SMARTSTAT_SPELL_POWER) && stats.hasSP)
+        return true;
+    if ((profile & SMARTSTAT_HASTE) && stats.hasHASTE)
+        return true;
+    if ((profile & SMARTSTAT_CRIT) && stats.hasCRIT)
+        return true;
+    if ((profile & SMARTSTAT_INTELLECT) && stats.hasINT)
+        return true;
+    if ((profile & SMARTSTAT_SPIRIT) && stats.hasSPI)
+        return true;
+    if ((profile & SMARTSTAT_EXPERTISE) && stats.hasEXP)
+        return true;
+    if ((profile & SMARTSTAT_ATTACK_POWER) && stats.hasAP)
+        return true;
+    if ((profile & SMARTSTAT_ARMOR_PEN) && stats.hasARP)
+        return true;
+    if ((profile & SMARTSTAT_AGILITY) && stats.hasAGI)
+        return true;
+    if ((profile & SMARTSTAT_STAMINA) && stats.hasSTA)
+        return true;
+    if ((profile & SMARTSTAT_AVOIDANCE) && (stats.hasAvoid || stats.hasDef))
+        return true;
+    if ((profile & SMARTSTAT_MP5) && stats.hasMP5)
+        return true;
+    if ((profile & SMARTSTAT_STRENGTH) && stats.hasSTR)
+        return true;
 
-    if (traits.isHealer && isPurePhysical)
-        return false;
-
-    if (stats.hasMP5 && (!traits.isHealer || traits.isEnhSham))
-        return false;
-
-    if (traits.isHealer && stats.hasHIT)
-         return false;
-
-    if (traits.cls == CLASS_DEATH_KNIGHT && stats.hasAGI)
-        return false;
-
-    if ((traits.isHunter || traits.isEnhSham) && stats.hasSTR)
-        return false;
-
-    if (traits.isRogue && stats.hasSTR)
-        return false;
-
-    if (isStrengthOnly && (!isStrengthUser() || isAgilityPreferred))
-        return false;
-
-    if (traits.isHunter && isStrengthOnly)
-        return false;
-
-    if (hasCaster || hasPhysical || hasTank)
-        return (traits.isCaster && hasCaster) || (traits.isPhysical && hasPhysical) || (traits.isTank && hasTank);
-
-    if (hasNeutral)
-        return traits.isCaster || traits.isPhysical;
-
-    return true;
+    return false;
 }
 } // namespace
 
@@ -705,6 +691,9 @@ ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
         {
             case ITEM_MOD_INTELLECT:
                 s.hasINT = true;
+                break;
+            case ITEM_MOD_SPIRIT:
+                s.hasSPI = true;
                 break;
             case ITEM_MOD_SPELL_POWER:
                 s.hasSP = true;
@@ -799,6 +788,16 @@ ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
                 break;
             }
 
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
+                (effectInfo.MiscValue == CR_HIT_SPELL || effectInfo.MiscValue == CR_CRIT_SPELL ||
+                 effectInfo.MiscValue == CR_HASTE_SPELL))
+            {
+                s.hasHIT = s.hasHIT || (effectInfo.MiscValue == CR_HIT_SPELL);
+                s.hasCRIT = s.hasCRIT || (effectInfo.MiscValue == CR_CRIT_SPELL);
+                s.hasHASTE = s.hasHASTE || (effectInfo.MiscValue == CR_HASTE_SPELL);
+                break;
+            }
+
             if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
                 effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
             {
@@ -840,6 +839,9 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
         if ((traits.isHunter || traits.isRogue || traits.isEnhSham) && stats.hasSTR)
             return false;
 
+        if ((traits.isProtPal || traits.isWarProt) && proto->InventoryType == INVTYPE_2HWEAPON)
+            return false;
+
         if (traits.isTank && hasCaster)
             return false;
 
@@ -855,10 +857,10 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
                 proto->SubClass == ITEM_SUBCLASS_WEAPON_STAFF || proto->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ||
                 proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD || proto->SubClass == ITEM_SUBCLASS_WEAPON_MACE ||
                 proto->SubClass == ITEM_SUBCLASS_WEAPON_WAND;
-            return isCasterWeapon;
+             return isCasterWeapon && (hasCaster || (hasCasterOffense && !hasPhysical));
         }
 
-        return true;
+        return hasPhysical;
     }
 
     if (proto->Class != ITEM_CLASS_ARMOR)
@@ -896,7 +898,7 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
         return hasCaster || (hasCasterOffense && !hasPhysical);
 
     if (traits.isPhysical)
-        return hasPhysical;
+        return hasPhysical && !hasCaster;
 
     return true;
 }
@@ -915,8 +917,7 @@ static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, i
     if (IsPrimaryForSpec(bot, proto))
         return usage;
 
-    if (EnableGroupUsageChecks() && GroupHasPrimarySpecUpgradeCandidate(bot, proto, randomProperty))
-        return ITEM_USAGE_BAD_EQUIP;
+    return ITEM_USAGE_BAD_EQUIP;
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
         return ITEM_USAGE_BAD_EQUIP;
@@ -948,11 +949,21 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         return usage;
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
+    {
+        LOG_INFO("playerbots",
+                  "[LootRollDBG] cross-armor: bot={} itemId={} blocked by fallback need check",
+                  bot->GetName(), proto->ItemId);
         return usage;
+    }
 
     float newScore = sRandomItemMgr->CalculateItemWeight(bot, proto->ItemId, randomProperty);
     if (newScore <= 0.0f)
+    {
+        LOG_INFO("playerbots",
+                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} -> skip",
+                  bot->GetName(), proto->ItemId, newScore);
         return usage;
+    }
     float bestOld = 0.0f;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -982,10 +993,27 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     }
 
     if (bestOld <= 0.0f)
+    {
+        LOG_INFO("playerbots",
+                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld=0 -> EQUIP",
+                  bot->GetName(), proto->ItemId, newScore);
         return ITEM_USAGE_EQUIP;
+    }
 
     if (bestOld > 0.0f && newScore >= bestOld * sPlayerbotAIConfig->crossArmorExtraMargin)
+    {
+        LOG_INFO("playerbots",
+                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> EQUIP",
+                  bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
         return ITEM_USAGE_EQUIP;
+    }
+
+    if (bestOld > 0.0f)
+    {
+        LOG_INFO("playerbots",
+                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> GREED",
+                  bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
+    }
 
     return usage;
 }
@@ -1164,6 +1192,15 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         }
 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
+        if (oldItemProto && oldItemProto->Quality <= ITEM_QUALITY_POOR &&
+            itemProto->Quality >= ITEM_QUALITY_UNCOMMON &&
+            IsFallbackNeedReasonableForSpec(bot, itemProto))
+        {
+            LOG_INFO("playerbots",
+                      "[LootRollDBG] poor-slot upgrade: bot={} slot={} oldItemId={} newItemId={} newQ={}",
+                      bot->GetName(), dest + i, oldItemProto->ItemId, itemProto->ItemId, itemProto->Quality);
+            return ITEM_USAGE_EQUIP;
+        }
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
         if (oldItem)
         {
@@ -1173,6 +1210,14 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
                 shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
             }
         }
+
+        /*if (!shouldEquipInSlot && itemScore > 0.0f && oldScore > 0.0f)
+        {
+            LOG_INFO("playerbots",
+                      "[LootRollDBG] equip check: bot={} slot={} newItemId={} oldItemId={} newScore={} oldScore={} threshold={}",
+                      bot->GetName(), dest + i, itemProto->ItemId, oldItemProto->ItemId, itemScore, oldScore,
+                      sPlayerbotAIConfig->equipUpgradeThreshold);
+        }*/
 
         // Bigger quiver
         if (itemProto->Class == ITEM_CLASS_QUIVER)
