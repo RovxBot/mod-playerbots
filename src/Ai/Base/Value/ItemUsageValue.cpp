@@ -658,11 +658,9 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
     bool const hasAnyStat = stats.hasINT || stats.hasSPI || stats.hasMP5 || stats.hasSP || stats.hasSTR ||
         stats.hasAGI || stats.hasSTA || stats.hasAP || stats.hasARP || stats.hasEXP || stats.hasHIT ||
         stats.hasHASTE || stats.hasCRIT || stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
- 
 
     if (!hasAnyStat)
         return true;
-
     if (traits.isTank && !stats.hasSTA && !stats.hasDef && !stats.hasAvoid && !stats.hasBlockValue)
         return false;
     if ((profile & SMARTSTAT_HIT) && stats.hasHIT)
@@ -1013,7 +1011,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
     {
-        LOG_INFO("playerbots",
+        LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} blocked by fallback need check",
                   bot->GetName(), proto->ItemId);
         return usage;
@@ -1022,7 +1020,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     float newScore = sRandomItemMgr->CalculateItemWeight(bot, proto->ItemId, randomProperty);
     if (newScore <= 0.0f)
     {
-        LOG_INFO("playerbots",
+        LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} -> skip",
                   bot->GetName(), proto->ItemId, newScore);
         return usage;
@@ -1057,7 +1055,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (bestOld <= 0.0f)
     {
-        LOG_INFO("playerbots",
+        LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld=0 -> EQUIP",
                   bot->GetName(), proto->ItemId, newScore);
         return ITEM_USAGE_EQUIP;
@@ -1065,7 +1063,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (bestOld > 0.0f && newScore >= bestOld * sPlayerbotAIConfig->crossArmorExtraMargin)
     {
-        LOG_INFO("playerbots",
+        LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> EQUIP",
                   bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
         return ITEM_USAGE_EQUIP;
@@ -1073,7 +1071,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (bestOld > 0.0f)
     {
-        LOG_INFO("playerbots",
+        LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> GREED",
                   bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
     }
@@ -1253,7 +1251,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
             itemProto->Quality >= ITEM_QUALITY_UNCOMMON &&
             IsFallbackNeedReasonableForSpec(bot, itemProto))
         {
-            LOG_INFO("playerbots",
+            LOG_DEBUG("playerbots",
                       "[LootRollDBG] poor-slot upgrade: bot={} slot={} oldItemId={} newItemId={} newQ={}",
                       bot->GetName(), dest + i, oldItemProto->ItemId, itemProto->ItemId, itemProto->Quality);
             return ITEM_USAGE_EQUIP;
@@ -1267,14 +1265,6 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
                 shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig->equipUpgradeThreshold;
             }
         }
-
-        /*if (!shouldEquipInSlot && itemScore > 0.0f && oldScore > 0.0f)
-        {
-            LOG_INFO("playerbots",
-                      "[LootRollDBG] equip check: bot={} slot={} newItemId={} oldItemId={} newScore={} oldScore={} threshold={}",
-                      bot->GetName(), dest + i, itemProto->ItemId, oldItemProto->ItemId, itemScore, oldScore,
-                      sPlayerbotAIConfig->equipUpgradeThreshold);
-        }*/
 
         // Bigger quiver
         if (itemProto->Class == ITEM_CLASS_QUIVER)
