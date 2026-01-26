@@ -26,7 +26,6 @@
 #include "RandomItemMgr.h"
 #include "ServerFacade.h"
 #include "SharedDefines.h"
-#include "Log.h"
 #include "LootAction.h"
 #include "StatsWeightCalculator.h"
 #include "Util.h"
@@ -1058,21 +1057,11 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         return usage;
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
-    {
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] cross-armor: bot={} itemId={} blocked by fallback need check",
-                  bot->GetName(), proto->ItemId);
         return usage;
-    }
 
     float newScore = sRandomItemMgr->CalculateItemWeight(bot, proto->ItemId, randomProperty);
     if (newScore <= 0.0f)
-    {
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} -> skip",
-                  bot->GetName(), proto->ItemId, newScore);
         return usage;
-    }
     float bestOld = 0.0f;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -1102,12 +1091,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     }
 
     if (bestOld <= 0.0f)
-    {
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld=0 -> EQUIP",
-                  bot->GetName(), proto->ItemId, newScore);
         return ITEM_USAGE_EQUIP;
-    }
 
     uint32 const maxLevel = static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
     bool const isLeveling = bot->GetLevel() < maxLevel;
@@ -1116,19 +1100,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
                                                          : sPlayerbotAIConfig->crossArmorExtraMargin;
 
     if (bestOld > 0.0f && newScore >= bestOld * margin)
-    {
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> EQUIP",
-                  bot->GetName(), proto->ItemId, newScore, bestOld, margin);
         return ITEM_USAGE_EQUIP;
-    }
-
-    if (bestOld > 0.0f)
-    {
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> GREED",
-                  bot->GetName(), proto->ItemId, newScore, bestOld, margin);
-    }
 
     return usage;
 }
@@ -1298,12 +1270,8 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         if (oldItemProto && oldItemProto->Quality <= ITEM_QUALITY_POOR &&
             itemProto->Quality >= ITEM_QUALITY_UNCOMMON &&
             IsFallbackNeedReasonableForSpec(bot, itemProto))
-        {
-            LOG_DEBUG("playerbots",
-                      "[LootRollDBG] poor-slot upgrade: bot={} slot={} oldItemId={} newItemId={} newQ={}",
-                      bot->GetName(), dest + i, oldItemProto->ItemId, itemProto->ItemId, itemProto->Quality);
             return ITEM_USAGE_EQUIP;
-        }
+
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
 
         // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
@@ -1971,18 +1939,6 @@ static CollectibleInfo BuildCollectibleInfo(Player* bot, ItemTemplate const* pro
     return info;
 }
 
-static void DebugRecipeRoll(Player* bot, ItemTemplate const* proto, ItemUsage usage, bool recipeChecked,
-                            bool recipeUseful, bool recipeKnown, uint32 reqSkill, uint32 reqRank, uint32 botRank,
-                            RollVote before, RollVote after)
-{
-    LOG_DEBUG("playerbots",
-              "[LootPaternDBG] {} JC:{} item:{} \"{}\" class={} sub={} bond={} usage={} "
-              "recipeChecked={} useful={} known={} reqSkill={} reqRank={} botRank={} vote:{} -> {} dupCount={}",
-              bot->GetName(), bot->GetSkillValue(SKILL_JEWELCRAFTING), proto->ItemId, proto->Name1, proto->Class,
-              proto->SubClass, proto->Bonding, (int)usage, recipeChecked, recipeUseful, recipeKnown, reqSkill, reqRank,
-              botRank, RollVoteText(before), RollVoteText(after), bot->GetItemCount(proto->ItemId, true));
-}
-
 struct RecipeInfo
 {
     uint32 requiredSkill = 0;
@@ -2233,16 +2189,6 @@ static TokenInfo BuildTokenInfo(ItemTemplate const* proto, Player* bot)
     if (info.classCanUse && info.invTypeSlot >= 0)
         info.likelyUpgrade = IsTokenLikelyUpgrade(proto, static_cast<uint8>(info.invTypeSlot), bot);
 
-    if (IsSanctificationToken(proto))
-    {
-        bool const slotKnown = info.invTypeSlot >= 0;
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG][Token] bot={} itemId={} \"{}\" classId={} isToken={} classCanUse={} invTypeSlot={} slotKnown={} likelyUpgrade={}",
-                  bot->GetName(), proto->ItemId, proto->Name1, bot->getClass(), info.isToken ? 1 : 0,
-                  info.classCanUse ? 1 : 0, static_cast<int32>(info.invTypeSlot), slotKnown ? 1 : 0,
-                  info.likelyUpgrade ? 1 : 0);
-    }
-
     return info;
 }
 
@@ -2269,11 +2215,6 @@ static bool TryTokenRollVote(ItemTemplate const* proto, Player* bot, RollVote& o
             {
                 uint32 const ownedTokens = GetOwnedSanctificationTokenCount(bot);
                 outVote = (ownedTokens < SANCTIFICATION_TOKEN_MAX_COUNT) ? NEED : GREED;
-                LOG_DEBUG("playerbots",
-                          "[LootRollDBG][Token] bot={} itemId={} \"{}\" mode={} ownedTokens={} maxTokens={} vote={}",
-                          bot->GetName(), proto->ItemId, proto->Name1,
-                          static_cast<uint32>(sPlayerbotAIConfig->sanctificationTokenRollMode),
-                          ownedTokens, SANCTIFICATION_TOKEN_MAX_COUNT, RollVoteText(outVote));
             }
             else
                 outVote = GREED;
@@ -2289,13 +2230,10 @@ static bool TryTokenRollVote(ItemTemplate const* proto, Player* bot, RollVote& o
 }
 
 static RollVote ApplyDisenchantPreference(RollVote currentVote, ItemTemplate const* proto, ItemUsage usage,
-                                          Group* group, Player* bot, char const* logTag)
+                                          Group* group, Player* bot)
 {
-    std::string const tag = logTag ? logTag : "[LootRollDBG]";
-
     bool const isDeCandidate = IsLikelyDisenchantable(proto);
     bool const hasEnchantSkill = bot && bot->HasSkill(SKILL_ENCHANTING);
-    int32 const lootMethod = group ? static_cast<int32>(group->GetLootMethod()) : -1;
 
     uint8 const deMode = sPlayerbotAIConfig->deButtonMode;
     // Mode 0 = no DE button; 1 = enchanters only; 2 = all bots can DE.
@@ -2307,31 +2245,17 @@ static RollVote ApplyDisenchantPreference(RollVote currentVote, ItemTemplate con
         (group->GetLootMethod() == NEED_BEFORE_GREED || group->GetLootMethod() == GROUP_LOOT) &&
         isDeCandidate &&
         usage == ITEM_USAGE_DISENCHANT)
-    {
-        LOG_DEBUG("playerbots",
-                  "{} DE switch: {} -> DISENCHANT (lootMethod={}, mode={}, enchSkill={}, deOK=1, usage=DISENCHANT)",
-                  tag, RollVoteText(currentVote), lootMethod, static_cast<uint32>(deMode), hasEnchantSkill ? 1 : 0);
         return DISENCHANT;
-    }
-
-    LOG_DEBUG("playerbots",
-              "{} no DE: vote={} lootMethod={} mode={} enchSkill={} deOK={} usage={}",
-              tag, RollVoteText(currentVote), lootMethod, static_cast<uint32>(deMode),
-              hasEnchantSkill ? 1 : 0, isDeCandidate ? 1 : 0, static_cast<uint32>(usage));
 
     return currentVote;
 }
 
-static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemUsage usage, Group* group, Player* bot,
-                                 char const* logTag)
+static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemUsage usage, Group* group, Player* bot)
 {
-    std::string const tag = logTag ? logTag : "[LootRollDBG]";
-
-    vote = ApplyDisenchantPreference(vote, proto, usage, group, bot, tag.c_str());
+    vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
 
     if (sPlayerbotAIConfig->lootRollLevel == 0)
     {
-        LOG_DEBUG("playerbots", "{} LootRollLevel=0 forcing PASS (was {})", tag, RollVoteText(vote));
         return PASS;
     }
 
@@ -2342,8 +2266,6 @@ static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemU
 
         else if (vote == GREED)
             vote = PASS;
-
-        LOG_DEBUG("playerbots", "{} LootRollLevel=1 adjusted vote={}", tag, RollVoteText(vote));
     }
 
     return vote;
@@ -2366,7 +2288,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
     bool recipeNeed = false;
     bool recipeUseful = false;
     bool recipeKnown = false;
-    uint32 reqSkillDbg = 0, reqRankDbg = 0, botRankDbg = 0;
 
     // Professions: NEED on useful recipes/patterns/books when enabled.
     if (sPlayerbotAIConfig->needOnProfessionRecipes && IsRecipeItem(proto))
@@ -2374,10 +2295,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
         RecipeInfo const recipe = BuildRecipeInfo(bot, proto);
 
         recipeChecked = true;
-        // Collect debug data (what the helper va décider)
-        reqSkillDbg = recipe.requiredSkill;
-        reqRankDbg = recipe.requiredRank;
-        botRankDbg = recipe.botRank;
         recipeKnown = recipe.known;
 
         recipeUseful = IsProfessionRecipeUsefulForBot(recipe);
@@ -2460,15 +2377,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
     // Final decision (with allow/deny from loot strategy).
     RollVote finalVote = StoreLootAction::IsLootAllowed(proto->ItemId, GET_PLAYERBOT_AI(bot)) ? vote : PASS;
 
-    // DEBUG: dump for recipes
-    if (IsRecipeItem(proto))
-    {
-        DebugRecipeRoll(bot, proto, usage, recipeChecked, recipeUseful, recipeKnown, reqSkillDbg, reqRankDbg,
-                        botRankDbg,
-                        /*before*/ (recipeNeed ? NEED : PASS),
-                        /*after*/ finalVote);
-    }
-
     return finalVote;
 }
 
@@ -2518,22 +2426,19 @@ char const* RollVoteText(RollVote v)
 }
 
 RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage,
-                               Group* group, char const* logTag)
+                               Group* group)
 {
     if (!bot || !proto)
         return PASS;
 
     usage = AdjustUsageForOffspec(bot, proto, randomProperty, usage);
 
-    std::string const tag = logTag ? logTag : "[LootRollDBG]";
-
     RollVote vote = PASS;
     if (!TryTokenRollVote(proto, bot, vote))
     {
         // Let CalculateBaseRollVote decide using loot-aware item usage.
         vote = CalculateBaseRollVote(bot, proto, randomProperty, usage);
-        LOG_DEBUG("playerbots", "{} after CalculateRollVote: vote={}", tag, RollVoteText(vote));
     }
 
-    return FinalizeRollVote(vote, proto, usage, group, bot, tag.c_str());
+    return FinalizeRollVote(vote, proto, usage, group, bot);
 }

@@ -136,6 +136,6 @@ public:
 // Loot roll helpers (used by LootRollAction)
 char const* RollVoteText(RollVote v);
 RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage,
-                               Group* group, char const* logTag);
+                               Group* group);
 
 #endif

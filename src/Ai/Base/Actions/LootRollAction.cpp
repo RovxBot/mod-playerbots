@@ -12,7 +12,6 @@
 #include "Event.h"
 #include "Group.h"
 #include "ItemUsageValue.h"
-#include "Log.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
@@ -69,25 +68,14 @@ bool LootRollAction::Execute(Event event)
         if (!proto)
             continue;
 
-        LOG_DEBUG("playerbots",
-                  "[LootRollDBG] start bot={} item={} \"{}\" class={} q={} lootMethod={} enchSkill={} rp={}",
-                  bot->GetName(), itemId, proto->Name1, proto->Class, proto->Quality, (int)group->GetLootMethod(),
-                  bot->HasSkill(SKILL_ENCHANTING), randomProperty);
-
         std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
         ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
 
-        LOG_DEBUG("playerbots", "[LootRollDBG] usage={} (EQUIP=1 REPLACE=2 BAD_EQUIP=8 DISENCHANT=9)", (int)usage);
-        RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group, "[LootRollDBG]");
+        RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
         // Announce + send the roll vote (if ML/FFA => PASS)
         RollVote sent = vote;
         if (group->GetLootMethod() == MASTER_LOOT || group->GetLootMethod() == FREE_FOR_ALL)
             sent = PASS;
-
-        LOG_DEBUG("playerbots", "[LootPaternDBG] send vote={} (lootMethod={} Lvl={}) -> guid={} itemId={}",
-                  RollVoteText(sent), (int)group->GetLootMethod(), sPlayerbotAIConfig->lootRollLevel,
-                  guid.ToString(),
-                  itemId);
 
         group->CountRollVote(bot->GetGUID(), guid, sent);
         // One item at a time
@@ -131,11 +119,6 @@ bool MasterLootRollAction::Execute(Event event)
     if (!group)
         return false;
 
-    LOG_DEBUG("playerbots",
-              "[LootEnchantDBG][ML] start bot={} item={} \"{}\" class={} q={} lootMethod={} enchSkill={} rp={}",
-              bot->GetName(), itemId, proto->Name1, proto->Class, proto->Quality, (int)group->GetLootMethod(),
-              bot->HasSkill(SKILL_ENCHANTING), randomPropertyId);
-
     // Compute random property and usage, same pattern as LootRollAction::Execute
     int32 randomProperty = EncodeRandomEnchantParam(randomPropertyId, randomSuffix);
 
@@ -143,15 +126,11 @@ bool MasterLootRollAction::Execute(Event event)
     ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
 
     // 1) Token heuristic: ONLY NEED if the target slot is a likely upgrade
-    RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group, "[LootEnchantDBG][ML]");
+    RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
 
     RollVote sent = vote;
     if (group->GetLootMethod() == MASTER_LOOT || group->GetLootMethod() == FREE_FOR_ALL)
         sent = PASS;
-
-    LOG_DEBUG("playerbots", "[LootEnchantDBG][ML] vote={} -> sent={} lootMethod={} enchSkill={} deOK={}",
-              RollVoteText(vote), RollVoteText(sent), (int)group->GetLootMethod(),
-              bot->HasSkill(SKILL_ENCHANTING), usage == ITEM_USAGE_DISENCHANT ? 1 : 0);
 
     group->CountRollVote(bot->GetGUID(), creatureGuid, sent);
 
