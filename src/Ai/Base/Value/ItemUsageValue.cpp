@@ -30,6 +30,7 @@
 #include "LootAction.h"
 #include "StatsWeightCalculator.h"
 #include "Util.h"
+#include "World.h"
 
 namespace
 {
@@ -45,16 +46,16 @@ struct ParsedItemUsage
 ParsedItemUsage ParseItemUsageQualifier(std::string const& qualifier)
 {
     ParsedItemUsage parsed;
-    size_t pos = qualifier.find(",");
+    size_t const pos = qualifier.find(',');
+
     if (pos != std::string::npos)
     {
         parsed.itemId = atoi(qualifier.substr(0, pos).c_str());
         parsed.randomPropertyId = atoi(qualifier.substr(pos + 1).c_str());
+        return parsed;
     }
-    else
-    {
-        parsed.itemId = atoi(qualifier.c_str());
-    }
+
+    parsed.itemId = atoi(qualifier.c_str());
 
     return parsed;
 }
@@ -414,6 +415,42 @@ static bool IsLowerTierArmorForBot(Player* bot, ItemTemplate const* proto)
     return proto->SubClass < preferred;
 }
 
+static bool IsStrictCrossArmorContext(Player* bot)
+{
+    if (!bot)
+        return true;
+
+    // Keep cross-armor strictly disabled at level cap and in raids to avoid
+    // plate/mail healers rolling NEED on cloth/leather endgame loot.
+    if (bot->GetLevel() >= static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)))
+        return true;
+
+    if (Group* group = bot->GetGroup())
+        if (group->isRaidGroup())
+            return true;
+
+    return false;
+}
+
+namespace
+{
+    static bool GroupMemberWouldEquipArmor(Player* member, PlayerbotAI* memberAI, ItemTemplate const* proto, std::string const& param)
+    {
+        if (!member || !memberAI || !proto)
+            return false;
+
+        if (IsLowerTierArmorForBot(member, proto))
+            return false;
+
+        AiObjectContext* ctx = memberAI->GetAiObjectContext();
+        if (!ctx)
+            return false;
+
+        ItemUsage const otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
+        return otherUsage == ITEM_USAGE_EQUIP || otherUsage == ITEM_USAGE_REPLACE;
+    }
+} // namespace
+
 static bool GroupHasPrimaryArmorUserLikelyToNeed(Player* self, ItemTemplate const* proto, int32 randomProperty)
 {
     if (!self || !proto)
@@ -424,22 +461,10 @@ static bool GroupHasPrimaryArmorUserLikelyToNeed(Player* self, ItemTemplate cons
 
     std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
 
-    return ForEachBotGroupMember(self,
-        [&](Player* member, PlayerbotAI* memberAI) -> bool
-        {
-            if (IsLowerTierArmorForBot(member, proto))
-                return false;
-
-            AiObjectContext* ctx = memberAI->GetAiObjectContext();
-            if (!ctx)
-                return false;
-
-            ItemUsage otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
-            if (otherUsage == ITEM_USAGE_EQUIP || otherUsage == ITEM_USAGE_REPLACE)
-                return true;
-
-            return false;
-        });
+    return ForEachBotGroupMember(self, [&](Player* member, PlayerbotAI* memberAI) -> bool
+    {
+        return GroupMemberWouldEquipArmor(member, memberAI, proto, param);
+    });
 }
 
 static bool GroupHasDesperateUpgradeUser(Player* self, ItemTemplate const* proto, int32 randomProperty)
@@ -674,139 +699,153 @@ SpecTraits GetSpecTraits(Player* bot)
     return t;
 }
 
+namespace
+{
+    static void UpdateItemStatProfileFromStats(ItemTemplate const* proto, ItemStatProfile& s)
+    {
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
+        {
+            if (proto->ItemStat[i].ItemStatValue == 0)
+                continue;
+
+            switch (proto->ItemStat[i].ItemStatType)
+            {
+                case ITEM_MOD_INTELLECT:
+                    s.hasINT = true;
+                    break;
+                case ITEM_MOD_SPIRIT:
+                    s.hasSPI = true;
+                    break;
+                case ITEM_MOD_SPELL_POWER:
+                    s.hasSP = true;
+                    break;
+                case ITEM_MOD_SPELL_HEALING_DONE:
+                    s.hasSP = true;
+                    break;
+                case ITEM_MOD_HIT_RATING:
+                    s.hasHIT = true;
+                    break;
+                case ITEM_MOD_CRIT_RATING:
+                    s.hasCRIT = true;
+                    break;
+                case ITEM_MOD_HASTE_RATING:
+                    s.hasHASTE = true;
+                    break;
+                case ITEM_MOD_MANA_REGENERATION:
+                    s.hasMP5 = true;
+                    break;
+                case ITEM_MOD_STRENGTH:
+                    s.hasSTR = true;
+                    break;
+                case ITEM_MOD_AGILITY:
+                    s.hasAGI = true;
+                    break;
+                case ITEM_MOD_ATTACK_POWER:
+                    s.hasAP = true;
+                    break;
+                case ITEM_MOD_ARMOR_PENETRATION_RATING:
+                    s.hasARP = true;
+                    break;
+                case ITEM_MOD_DEFENSE_SKILL_RATING:
+                    s.hasDef = true;
+                    break;
+                case ITEM_MOD_DODGE_RATING:
+                case ITEM_MOD_PARRY_RATING:
+                case ITEM_MOD_BLOCK_RATING:
+                    s.hasAvoid = true;
+                    break;
+                case ITEM_MOD_BLOCK_VALUE:
+                    s.hasBlockValue = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    static void UpdateItemStatProfileFromSpells(ItemTemplate const* proto, ItemStatProfile& s)
+    {
+        for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        {
+            auto const& spell = proto->Spells[i];
+            if (!spell.SpellId ||
+                (spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP && spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_USE))
+                continue;
+
+            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell.SpellId);
+            if (!spellInfo)
+                continue;
+
+            for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
+            {
+                SpellEffectInfo const& effectInfo = spellInfo->Effects[eff];
+                if (effectInfo.Effect != SPELL_EFFECT_APPLY_AURA)
+                    continue;
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_HEALING_DONE)
+                {
+                    s.hasSP = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_DONE &&
+                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
+                {
+                    s.hasSP = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RESISTANCE &&
+                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_NORMAL) == SPELL_SCHOOL_MASK_NORMAL)
+                {
+                    s.hasAvoid = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
+                    (effectInfo.MiscValue == CR_DODGE || effectInfo.MiscValue == CR_PARRY ||
+                     effectInfo.MiscValue == CR_BLOCK))
+                {
+                    s.hasAvoid = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
+                    (effectInfo.MiscValue == CR_HIT_SPELL || effectInfo.MiscValue == CR_CRIT_SPELL ||
+                     effectInfo.MiscValue == CR_HASTE_SPELL))
+                {
+                    s.hasHIT = s.hasHIT || (effectInfo.MiscValue == CR_HIT_SPELL);
+                    s.hasCRIT = s.hasCRIT || (effectInfo.MiscValue == CR_CRIT_SPELL);
+                    s.hasHASTE = s.hasHASTE || (effectInfo.MiscValue == CR_HASTE_SPELL);
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
+                    effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
+                {
+                    s.hasAP = true;
+                    break;
+                }
+            }
+
+            // Preserve original behavior: stop scanning item spells as soon as SP is detected.
+            if (s.hasSP)
+                break;
+        }
+    }
+} // namespace
+
 ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
 {
     ItemStatProfile s;
     if (!proto)
         return s;
 
-    for (uint8 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
-    {
-        if (proto->ItemStat[i].ItemStatValue == 0)
-            continue;
-
-        switch (proto->ItemStat[i].ItemStatType)
-        {
-            case ITEM_MOD_INTELLECT:
-                s.hasINT = true;
-                break;
-            case ITEM_MOD_SPIRIT:
-                s.hasSPI = true;
-                break;
-            case ITEM_MOD_SPELL_POWER:
-                s.hasSP = true;
-                break;
-            case ITEM_MOD_SPELL_HEALING_DONE:
-                s.hasSP = true;
-                break;
-            case ITEM_MOD_HIT_RATING:
-                s.hasHIT = true;
-                break;
-            case ITEM_MOD_CRIT_RATING:
-                s.hasCRIT = true;
-                break;
-            case ITEM_MOD_HASTE_RATING:
-                s.hasHASTE = true;
-                break;
-            case ITEM_MOD_MANA_REGENERATION:
-                s.hasMP5 = true;
-                break;
-            case ITEM_MOD_STRENGTH:
-                s.hasSTR = true;
-                break;
-            case ITEM_MOD_AGILITY:
-                s.hasAGI = true;
-                break;
-            case ITEM_MOD_ATTACK_POWER:
-                s.hasAP = true;
-                break;
-            case ITEM_MOD_ARMOR_PENETRATION_RATING:
-                s.hasARP = true;
-                break;
-            case ITEM_MOD_DEFENSE_SKILL_RATING:
-                s.hasDef = true;
-                break;
-            case ITEM_MOD_DODGE_RATING:
-            case ITEM_MOD_PARRY_RATING:
-            case ITEM_MOD_BLOCK_RATING:
-                s.hasAvoid = true;
-                break;
-            case ITEM_MOD_BLOCK_VALUE:
-                s.hasBlockValue = true;
-                break;
-            default:
-                break;
-        }
-    }
+    UpdateItemStatProfileFromStats(proto, s);
 
     s.hasAvoid = s.hasAvoid || HasAnyTankAvoidance(proto);
 
-    for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
-    {
-        auto const& spell = proto->Spells[i];
-        if (!spell.SpellId ||
-            (spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP && spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_USE))
-            continue;
-
-        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell.SpellId);
-        if (!spellInfo)
-            continue;
-
-        for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
-        {
-            SpellEffectInfo const& effectInfo = spellInfo->Effects[eff];
-            if (effectInfo.Effect != SPELL_EFFECT_APPLY_AURA)
-                continue;
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_HEALING_DONE)
-            {
-                s.hasSP = true;
-                break;
-            }
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_DONE &&
-                (effectInfo.MiscValue & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
-            {
-                s.hasSP = true;
-                break;
-            }
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RESISTANCE &&
-                (effectInfo.MiscValue & SPELL_SCHOOL_MASK_NORMAL) == SPELL_SCHOOL_MASK_NORMAL)
-            {
-                s.hasAvoid = true;
-                break;
-            }
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
-                (effectInfo.MiscValue == CR_DODGE || effectInfo.MiscValue == CR_PARRY ||
-                 effectInfo.MiscValue == CR_BLOCK))
-            {
-                s.hasAvoid = true;
-                break;
-            }
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
-                (effectInfo.MiscValue == CR_HIT_SPELL || effectInfo.MiscValue == CR_CRIT_SPELL ||
-                 effectInfo.MiscValue == CR_HASTE_SPELL))
-            {
-                s.hasHIT = s.hasHIT || (effectInfo.MiscValue == CR_HIT_SPELL);
-                s.hasCRIT = s.hasCRIT || (effectInfo.MiscValue == CR_CRIT_SPELL);
-                s.hasHASTE = s.hasHASTE || (effectInfo.MiscValue == CR_HASTE_SPELL);
-                break;
-            }
-
-            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
-                effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
-            {
-                s.hasAP = true;
-                break;
-            }
-        }
-
-        if (s.hasSP)
-            break;
-    }
+    UpdateItemStatProfileFromSpells(proto, s);
 
     return s;
 }
@@ -820,9 +859,13 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
 
     const SpecTraits traits = GetSpecTraits(bot);
     ItemStatProfile const stats = BuildItemStatProfile(proto);
-    const bool hasCaster = stats.hasINT || stats.hasSP || stats.hasMP5;
-    const bool hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
-    const bool hasCasterOffense = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
+    bool const hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
+    bool const hasCasterPrimary = stats.hasINT || stats.hasSP || stats.hasMP5;
+    bool const hasCasterRatings = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
+    bool const hasCaster = hasCasterPrimary || (hasCasterRatings && !hasPhysical);
+
+    // Caster offense ratings should only be considered in the caster context.
+    bool const hasCasterOffense = hasCaster && hasCasterRatings;
 
     if (proto->InventoryType == INVTYPE_RELIC)
     {
@@ -937,6 +980,11 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (proto->Class != ITEM_CLASS_ARMOR || !IsLowerTierArmorForBot(bot, proto))
         return usage;
 
+    // Endgame etiquette: do not allow cross-armor upgrades to turn into NEED
+    // at level cap or in raids.
+    if (IsStrictCrossArmorContext(bot))
+        return usage;
+
     if (sPlayerbotAIConfig->crossArmorGreedIsPass)
         return ITEM_USAGE_NONE;
 
@@ -998,11 +1046,17 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         return ITEM_USAGE_EQUIP;
     }
 
-    if (bestOld > 0.0f && newScore >= bestOld * sPlayerbotAIConfig->crossArmorExtraMargin)
+    uint32 const maxLevel = static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
+    bool const isLeveling = bot->GetLevel() < maxLevel;
+    SpecTraits const traits = GetSpecTraits(bot);
+    float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig->equipUpgradeThreshold
+                                                         : sPlayerbotAIConfig->crossArmorExtraMargin;
+
+    if (bestOld > 0.0f && newScore >= bestOld * margin)
     {
         LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> EQUIP",
-                  bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
+                  bot->GetName(), proto->ItemId, newScore, bestOld, margin);
         return ITEM_USAGE_EQUIP;
     }
 
@@ -1010,10 +1064,32 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     {
         LOG_DEBUG("playerbots",
                   "[LootRollDBG] cross-armor: bot={} itemId={} newScore={} bestOld={} margin={} -> GREED",
-                  bot->GetName(), proto->ItemId, newScore, bestOld, sPlayerbotAIConfig->crossArmorExtraMargin);
+                  bot->GetName(), proto->ItemId, newScore, bestOld, margin);
     }
 
     return usage;
+}
+
+static bool IsUniqueItemAlreadyEquipped(Player* bot, ItemTemplate const* proto, InventoryResult equipResult)
+{
+    if (!bot || !proto)
+        return false;
+
+    // CanEquipItem may return EQUIP_ERR_CANT_CARRY_MORE_OF_THIS for unique-equip items,
+    // but it can also succeed while the item is flagged UNIQUE_EQUIPPABLE.
+    bool const needToCheckUnique =
+        (equipResult == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS) || proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE);
+
+    if (!needToCheckUnique)
+        return false;
+
+    // Count the total number of the item (equipped + in bags)
+    uint32 const totalItemCount = bot->GetItemCount(proto->ItemId, true);
+    // Count the number of the item in bags only
+    uint32 const bagItemCount = bot->GetItemCount(proto->ItemId, false);
+
+    // If total > bag-only, at least one copy is equipped.
+    return totalItemCount > bagItemCount;
 }
 } // namespace
 
@@ -1039,47 +1115,21 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     if (!sRandomItemMgr->CanEquipForBot(bot, itemProto))
         return ITEM_USAGE_NONE;
 
-    Item* pItem = Item::CreateItem(itemProto->ItemId, 1, bot, false, 0, true);
+    Item* pItem = Item::CreateItem(itemProto->ItemId, 1, nullptr, false, 0, true);
     if (!pItem)
         return ITEM_USAGE_NONE;
 
-    uint16 dest;
+    uint16 dest = 0;
     InventoryResult result = botAI->CanEquipItem(NULL_SLOT, dest, pItem, true, true);
-    pItem->RemoveFromUpdateQueueOf(bot);
     delete pItem;
 
     if (result != EQUIP_ERR_OK && result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
     {
         return ITEM_USAGE_NONE;
     }
-    // Check is unique items are equipped or not
-    bool needToCheckUnique = false;
-    if (result == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
-    {
-        needToCheckUnique = true;
-    }
-    else if (itemProto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
-    {
-        needToCheckUnique = true;
-    }
 
-    if (needToCheckUnique)
-    {
-        // Count the total number of the item (equipped + in bags)
-        uint32 totalItemCount = bot->GetItemCount(itemProto->ItemId, true);
-
-        // Count the number of the item in bags only
-        uint32 bagItemCount = bot->GetItemCount(itemProto->ItemId, false);
-
-        // Determine if the unique item is already equipped
-        bool isEquipped = (totalItemCount > bagItemCount);
-
-        if (isEquipped)
-        {
-            return ITEM_USAGE_NONE;  // Item is already equipped
-        }
-        // If not equipped, continue processing
-    }
+    if (IsUniqueItemAlreadyEquipped(bot, itemProto, result))
+        return ITEM_USAGE_NONE;
 
     if (itemProto->Class == ITEM_CLASS_QUIVER)
         if (bot->getClass() != CLASS_HUNTER)
@@ -1181,12 +1231,10 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         // No item equipped
         if (!oldItem)
         {
-        if (shouldEquipInSlot || IsFallbackNeedReasonableForSpec(bot, itemProto))
+            if (shouldEquipInSlot || IsFallbackNeedReasonableForSpec(bot, itemProto))
                 return ITEM_USAGE_EQUIP;
-            else
-            {
-                return ITEM_USAGE_BAD_EQUIP;
-            }
+          
+            return ITEM_USAGE_BAD_EQUIP;
         }
 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
@@ -1200,6 +1248,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
             return ITEM_USAGE_EQUIP;
         }
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+
         if (oldItem)
         {
             // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
@@ -1209,17 +1258,18 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
             }
         }
 
+
+        // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
+        if (itemScore || oldScore)
+            shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig->equipUpgradeThreshold;
+
         // Bigger quiver
         if (itemProto->Class == ITEM_CLASS_QUIVER)
         {
             if (!oldItem || oldItemProto->ContainerSlots < itemProto->ContainerSlots)
-            {
                 return ITEM_USAGE_EQUIP;
-            }
-            else
-            {
-                return ITEM_USAGE_NONE;
-            }
+
+            return ITEM_USAGE_NONE;
         }
 
         bool existingShouldEquip = true;
@@ -1239,9 +1289,8 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         // uint32 newItemPower = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
 
         // Compare items based on item level, quality or itemId.
-        bool isBetter = false;
-        if (itemScore > oldScore)
-            isBetter = true;
+        const bool isBetter = itemScore > oldScore;
+
         // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
         //     isBetter = true;
         // else if (newItemPower == oldScore && itemProto->Quality == oldItemProto->Quality && itemProto->ItemId >
@@ -1265,21 +1314,17 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
                         // return vals will result in an attempted equip action so it wouldn't have much effect currently
                         if (itemIsBroken && !oldItemIsBroken)
                             return ITEM_USAGE_BROKEN_EQUIP;
-                        else if (shouldEquipInSlot)
+                        if (shouldEquipInSlot)
                             return ITEM_USAGE_REPLACE;
-                        else
-                            return ITEM_USAGE_BAD_EQUIP;
-
-                        break;
+                        
+                        return ITEM_USAGE_BAD_EQUIP;
                     }
                 default:
                 {
                     if (itemIsBroken && !oldItemIsBroken)
                         return ITEM_USAGE_BROKEN_EQUIP;
-                    else if (shouldEquipInSlot)
-                        return ITEM_USAGE_EQUIP;
-                    else
-                        return ITEM_USAGE_BAD_EQUIP;
+
+                    return shouldEquipInSlot ? ITEM_USAGE_EQUIP : ITEM_USAGE_BAD_EQUIP;
                 }
             }
         }
