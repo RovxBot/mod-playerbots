@@ -19,15 +19,27 @@
 #include "Playerbots.h"
 #include "SharedDefines.h"
 
-// Encode "random enchant" parameter for CalculateRollVote / ItemUsage.
-// >0 => randomPropertyId, <0 => randomSuffixId, 0 => none
-static inline int32 EncodeRandomEnchantParam(uint32 randomPropertyId, uint32 randomSuffix)
+// Encodes the "random enchant" component of an item into a single int32.
+//
+// WotLK loot can specify a random enchant as either:
+//  - a RandomPropertyId (from ItemRandomProperties.dbc), or
+//  - a RandomSuffixId   (from ItemRandomSuffix.dbc).
+//
+// We store both in one signed integer:
+//  - > 0 : RandomPropertyId
+//  - < 0 : RandomSuffixId (stored as negative)
+//  - = 0 : no random enchant
+//
+// This convention is relied upon by downstream code, notably:
+//  - StatsWeightCalculator::CalculateRandomProperty(), which interprets
+//    negative values as suffix IDs and looks them up via LookupEntry(-id).
+static inline int32 EncodeRandomEnchantParam(uint32 randomPropertyId, uint32 randomSuffixId)
 {
     if (randomPropertyId)
         return static_cast<int32>(randomPropertyId);
 
-    if (randomSuffix)
-        return -static_cast<int32>(randomSuffix);
+    if (randomSuffixId)
+        return -static_cast<int32>(randomSuffixId);
 
     return 0;
 }
@@ -174,5 +186,6 @@ bool RollAction::Execute(Event event)
             if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)
                 bot->DoRandomRoll(0, 100);
     }
+
     return true;
 }
