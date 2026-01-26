@@ -1458,57 +1458,111 @@ bool ItemUsageValue::IsItemUsefulForQuest(Player* player, ItemTemplate const* pr
     return false; // Item is not useful for any active quests
 }
 
+namespace
+{
+    // Tools / profession items used by IsItemNeededForSkill().
+    constexpr uint32 ITEM_TUNNEL_PICK                = 756;
+    constexpr uint32 ITEM_KOBOLD_EXCAVATION_PICK     = 778;
+    constexpr uint32 ITEM_GOUGING_PICK               = 1819;
+    constexpr uint32 ITEM_MINERS_REVENGE             = 1893;
+    constexpr uint32 ITEM_COLD_IRON_PICK             = 1959;
+    constexpr uint32 ITEM_MINING_PICK                = 2901;
+    constexpr uint32 ITEM_DIGMASTER_5000             = 9465;
+    constexpr uint32 ITEM_BRANNS_TRUSTY_PICK          = 20723;
+    constexpr uint32 ITEM_GNOMISH_ARMY_KNIFE          = 40772;
+    constexpr uint32 ITEM_HAMMER_PICK                = 40892;
+    constexpr uint32 ITEM_BLADED_PICKAXE             = 40893;
+    constexpr uint32 ITEM_BLACKSMITH_HAMMER          = 5956;
+    constexpr uint32 ITEM_ARCLIGHT_SPANNER           = 6219;
+    constexpr uint32 ITEM_RUNED_COPPER_ROD           = 6218;
+    constexpr uint32 ITEM_RUNED_SILVER_ROD           = 6339;
+    constexpr uint32 ITEM_RUNED_GOLDEN_ROD           = 11130;
+    constexpr uint32 ITEM_RUNED_TRUESILVER_ROD       = 11145;
+    constexpr uint32 ITEM_RUNED_ARCANITE_ROD         = 16207;
+    constexpr uint32 ITEM_SKINNING_KNIFE             = 7005;
+    constexpr uint32 ITEM_SKINNING_KNIFE_ZULIAN      = 12709;
+    constexpr uint32 ITEM_SKINNING_KNIFE_ZULIAN_2    = 19901;
+    constexpr uint32 ITEM_FLINT_AND_TINDER           = 4471;
+    constexpr uint32 ITEM_SIMPLE_WOOD                = 4470;
+    constexpr uint32 ITEM_FISHING_ROD                = 6256;
+} // namespace
+
 bool ItemUsageValue::IsItemNeededForSkill(ItemTemplate const* proto)
 {
     switch (proto->ItemId)
     {
-        case 756:  // Tunnel Pick
+        case ITEM_TUNNEL_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 778:  // Kobold Excavation Pick
+
+        case ITEM_KOBOLD_EXCAVATION_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 1819:  // Gouging Pick
+
+        case ITEM_GOUGING_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 1893:  // Miner's Revenge
+
+        case ITEM_MINERS_REVENGE:
             return botAI->HasSkill(SKILL_MINING);
-        case 1959:  // Cold Iron Pick
+
+        case ITEM_COLD_IRON_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 2901:  // Mining Pick
+
+        case ITEM_MINING_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 9465:  // Digmaster 5000
+
+        case ITEM_DIGMASTER_5000:
             return botAI->HasSkill(SKILL_MINING);
-        case 20723:  // Brann's Trusty Pick
+
+        case ITEM_BRANNS_TRUSTY_PICK:
             return botAI->HasSkill(SKILL_MINING);
-        case 40772:  // Gnomish Army Knife
-            return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_ENGINEERING) || botAI->HasSkill(SKILL_BLACKSMITHING) || botAI->HasSkill(SKILL_COOKING) || botAI->HasSkill(SKILL_SKINNING);
-        case 40892:  // Hammer Pick
+
+        case ITEM_GNOMISH_ARMY_KNIFE:
+            return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_ENGINEERING) ||
+                   botAI->HasSkill(SKILL_BLACKSMITHING) || botAI->HasSkill(SKILL_COOKING) ||
+                   botAI->HasSkill(SKILL_SKINNING);
+
+        case ITEM_HAMMER_PICK:
             return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_BLACKSMITHING);
-        case 40893:  // Bladed Pickaxe
+
+        case ITEM_BLADED_PICKAXE:
             return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_SKINNING);
-        case 5956:  // Blacksmith Hammer
+
+        case ITEM_BLACKSMITH_HAMMER:
             return botAI->HasSkill(SKILL_BLACKSMITHING) || botAI->HasSkill(SKILL_ENGINEERING);
-        case 6219:  // Arclight Spanner
+
+        case ITEM_ARCLIGHT_SPANNER:
             return botAI->HasSkill(SKILL_ENGINEERING);
-        case 6218:  // Runed copper rod
+
+        case ITEM_RUNED_COPPER_ROD:
             return botAI->HasSkill(SKILL_ENCHANTING);
-        case 6339:  // Runed silver rod
+
+        case ITEM_RUNED_SILVER_ROD:
             return botAI->HasSkill(SKILL_ENCHANTING);
-        case 11130:  // Runed golden rod
+
+        case ITEM_RUNED_GOLDEN_ROD:
             return botAI->HasSkill(SKILL_ENCHANTING);
-        case 11145:  // Runed truesilver rod
+
+        case ITEM_RUNED_TRUESILVER_ROD:
             return botAI->HasSkill(SKILL_ENCHANTING);
-        case 16207:  // Runed Arcanite Rod
+
+        case ITEM_RUNED_ARCANITE_ROD:
             return botAI->HasSkill(SKILL_ENCHANTING);
-        case 7005:  // Skinning Knife
+
+        case ITEM_SKINNING_KNIFE:
             return botAI->HasSkill(SKILL_SKINNING);
-        case 12709:
+
+        case ITEM_SKINNING_KNIFE_ZULIAN:
             return botAI->HasSkill(SKILL_SKINNING);
-        case 19901:
+
+        case ITEM_SKINNING_KNIFE_ZULIAN_2:
             return botAI->HasSkill(SKILL_SKINNING);
-        case 4471:  // Flint and Tinder
+
+        case ITEM_FLINT_AND_TINDER:
             return botAI->HasSkill(SKILL_COOKING);
-        case 4470:  // Simple Wood
+
+        case ITEM_SIMPLE_WOOD:
             return botAI->HasSkill(SKILL_COOKING);
-        case 6256:  // Fishing Rod
+
+        case ITEM_FISHING_ROD:
             return botAI->HasSkill(SKILL_FISHING);
     }
 
