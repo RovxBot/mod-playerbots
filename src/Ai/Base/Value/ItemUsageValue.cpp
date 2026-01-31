@@ -351,7 +351,7 @@ namespace
 {
 static bool EnableGroupUsageChecks()
 {
-    return sPlayerbotAIConfig->rollUseGroupUsageChecks;
+    return sPlayerbotAIConfig.rollUseGroupUsageChecks;
 }
 
 static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto);
@@ -1011,7 +1011,7 @@ static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, i
     if (!bot || !proto)
         return usage;
 
-    if (!sPlayerbotAIConfig->smartNeedBySpec)
+    if (!sPlayerbotAIConfig.smartNeedBySpec)
         return usage;
 
     if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
@@ -1047,7 +1047,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (IsStrictCrossArmorContext(bot))
         return usage;
 
-    if (sPlayerbotAIConfig->crossArmorGreedIsPass)
+    if (sPlayerbotAIConfig.crossArmorGreedIsPass)
         return ITEM_USAGE_NONE;
 
     if (EnableGroupUsageChecks() && GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
@@ -1059,7 +1059,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
         return usage;
 
-    float newScore = sRandomItemMgr->CalculateItemWeight(bot, proto->ItemId, randomProperty);
+    float newScore = sRandomItemMgr.CalculateItemWeight(bot, proto->ItemId, randomProperty);
     if (newScore <= 0.0f)
         return usage;
     float bestOld = 0.0f;
@@ -1083,7 +1083,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
             continue;
 
-        float oldScore = sRandomItemMgr->CalculateItemWeight(
+        float oldScore = sRandomItemMgr.CalculateItemWeight(
             bot, oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
 
         if (oldScore > bestOld)
@@ -1096,8 +1096,8 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     uint32 const maxLevel = static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
     bool const isLeveling = bot->GetLevel() < maxLevel;
     SpecTraits const traits = GetSpecTraits(bot);
-    float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig->equipUpgradeThreshold
-                                                         : sPlayerbotAIConfig->crossArmorExtraMargin;
+    float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig.equipUpgradeThreshold
+                                                         : sPlayerbotAIConfig.crossArmorExtraMargin;
 
     if (bestOld > 0.0f && newScore >= bestOld * margin)
         return ITEM_USAGE_EQUIP;
@@ -1147,7 +1147,7 @@ ItemUsage LootUsageValue::Calculate()
 
 ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, int32 randomPropertyId)
 {
-    if (!sRandomItemMgr->CanEquipForBot(bot, itemProto))
+    if (!sRandomItemMgr.CanEquipForBot(bot, itemProto))
         return ITEM_USAGE_NONE;
 
     Item* pItem = Item::CreateItem(itemProto->ItemId, 1, nullptr, false, 0, true);
@@ -1193,7 +1193,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     if (itemScore)
         shouldEquip = true;
 
-    if (!sRandomItemMgr->CanEquipForBot(bot, itemProto))
+    if (!sRandomItemMgr.CanEquipForBot(bot, itemProto))
         shouldEquip = false;
 
     uint8 possibleSlots = 1;
@@ -1276,7 +1276,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
         if (itemScore || oldScore)
-            shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig->equipUpgradeThreshold;
+            shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
 
         // Bigger quiver
         if (itemProto->Class == ITEM_CLASS_QUIVER)
@@ -1289,7 +1289,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         bool existingShouldEquip = true;
 
-        if (!sRandomItemMgr->CanEquipForBot(bot, oldItemProto))
+        if (!sRandomItemMgr.CanEquipForBot(bot, oldItemProto))
             existingShouldEquip = false;
 
         // uint32 oldItemPower = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
@@ -2006,7 +2006,7 @@ static bool IsProfessionRecipeUsefulForBot(RecipeInfo const& recipe)
     if (!recipe.botHasProfession)
         return false;
 
-    if (!sPlayerbotAIConfig->recipesIgnoreSkillRank && recipe.requiredRank && recipe.botRank < recipe.requiredRank)
+    if (!sPlayerbotAIConfig.recipesIgnoreSkillRank && recipe.requiredRank && recipe.botRank < recipe.requiredRank)
         return false;
 
     if (recipe.known)
@@ -2157,7 +2157,7 @@ static bool IsTokenLikelyUpgrade(ItemTemplate const* token, uint8 invTypeSlot, P
     if (!oldProto)
         return true;
 
-    float margin = sPlayerbotAIConfig->tokenILevelMargin;
+    float margin = sPlayerbotAIConfig.tokenILevelMargin;
     return (float)token->ItemLevel >= (float)oldProto->ItemLevel + margin;
 }
 
@@ -2211,7 +2211,7 @@ static bool TryTokenRollVote(ItemTemplate const* proto, Player* bot, RollVote& o
         else
         {
             // Unknown slot (e.g. T10 sanctification tokens).
-            if (IsSanctificationToken(proto) && sPlayerbotAIConfig->sanctificationTokenRollMode == 1u)
+            if (IsSanctificationToken(proto) && sPlayerbotAIConfig.sanctificationTokenRollMode == 1u)
             {
                 uint32 const ownedTokens = GetOwnedSanctificationTokenCount(bot);
                 outVote = (ownedTokens < SANCTIFICATION_TOKEN_MAX_COUNT) ? NEED : GREED;
@@ -2235,7 +2235,7 @@ static RollVote ApplyDisenchantPreference(RollVote currentVote, ItemTemplate con
     bool const isDeCandidate = IsLikelyDisenchantable(proto);
     bool const hasEnchantSkill = bot && bot->HasSkill(SKILL_ENCHANTING);
 
-    uint8 const deMode = sPlayerbotAIConfig->deButtonMode;
+    uint8 const deMode = sPlayerbotAIConfig.deButtonMode;
     // Mode 0 = no DE button; 1 = enchanters only; 2 = all bots can DE.
     bool const deAllowedForBot = (deMode == 2u) || (deMode == 1u && hasEnchantSkill);
 
@@ -2254,12 +2254,12 @@ static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemU
 {
     vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
 
-    if (sPlayerbotAIConfig->lootRollLevel == 0)
+    if (sPlayerbotAIConfig.lootRollLevel == 0)
     {
         return PASS;
     }
 
-    if (sPlayerbotAIConfig->lootRollLevel == 1)
+    if (sPlayerbotAIConfig.lootRollLevel == 1)
     {
         if (vote == NEED)
             vote = RollUniqueCheck(proto, bot) ? PASS : GREED;
@@ -2290,7 +2290,7 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
     bool recipeKnown = false;
 
     // Professions: NEED on useful recipes/patterns/books when enabled.
-    if (sPlayerbotAIConfig->needOnProfessionRecipes && IsRecipeItem(proto))
+    if (sPlayerbotAIConfig.needOnProfessionRecipes && IsRecipeItem(proto))
     {
         RecipeInfo const recipe = BuildRecipeInfo(bot, proto);
 
@@ -2349,13 +2349,13 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
 
     if (vote == NEED && !recipeNeed && !isLockbox && !isCollectibleCosmetic &&
         proto->Bonding == BIND_WHEN_EQUIPPED &&
-        !sPlayerbotAIConfig->allowBoENeedIfUpgrade)
+        !sPlayerbotAIConfig.allowBoENeedIfUpgrade)
 
         vote = GREED;
 
     if (vote == NEED && !recipeNeed && !isLockbox && !isCollectibleCosmetic &&
         proto->Bonding == BIND_WHEN_USE &&
-        !sPlayerbotAIConfig->allowBoUNeedIfUpgrade)
+        !sPlayerbotAIConfig.allowBoUNeedIfUpgrade)
 
         vote = GREED;
 
