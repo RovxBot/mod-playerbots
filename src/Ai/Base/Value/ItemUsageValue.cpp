@@ -2429,21 +2429,20 @@ static bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
 
 static bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
 {
-    // Count the total number of the item (equipped + in bags)
-    uint32 totalItemCount = bot->GetItemCount(proto->ItemId, true);
+    if (!proto || !bot)
+        return false;
 
-    // Count the number of the item in bags only
+    uint32 totalItemCount = bot->GetItemCount(proto->ItemId, true);
     uint32 bagItemCount = bot->GetItemCount(proto->ItemId, false);
 
-    // Determine if the unique item is already equipped
     bool isEquipped = (totalItemCount > bagItemCount);
     if (isEquipped && proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
-        return true;  // Unique Item is already equipped
+        return true;
 
-    else if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && (bagItemCount > 1))
-        return true;  // Unique item already in bag, don't roll for it
+    if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && bagItemCount > 0)
+        return true;
 
-    return false;  // Item is not equipped or in bags, roll for it
+    return false;
 }
 } // namespace
 
@@ -2479,6 +2478,5 @@ RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 ran
         vote = CalculateBaseRollVote(bot, proto, randomProperty, usage);
     }
 
-    return FinalizeRollVote(vote, proto, usage, group, bot, tag.c_str());
-	    return FinalizeRollVote(vote, proto, usage, group, bot);
+    return FinalizeRollVote(vote, proto, usage, group, bot);
 }
