@@ -18,20 +18,7 @@
 #include "Playerbots.h"
 #include "SharedDefines.h"
 
-// Encodes the "random enchant" component of an item into a single int32.
-//
-// WotLK loot can specify a random enchant as either:
-//  - a RandomPropertyId (from ItemRandomProperties.dbc), or
-//  - a RandomSuffixId   (from ItemRandomSuffix.dbc).
-//
-// We store both in one signed integer:
-//  - > 0 : RandomPropertyId
-//  - < 0 : RandomSuffixId (stored as negative)
-//  - = 0 : no random enchant
-//
-// This convention is relied upon by downstream code, notably:
-//  - StatsWeightCalculator::CalculateRandomProperty(), which interprets
-//    negative values as suffix IDs and looks them up via LookupEntry(-id).
+
 static inline int32 EncodeRandomEnchantParam(uint32 randomPropertyId, uint32 randomSuffixId)
 {
     if (randomPropertyId)
@@ -71,81 +58,8 @@ bool LootRollAction::Execute(Event event)
         std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
         ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
 
-        LOG_DEBUG("playerbots", "[LootRollDBG] usage={} (EQUIP=1 REPLACE=2 BAD_EQUIP=8 DISENCHANT=9)", (int)usage);
-
-        if (!TryTokenRollVote(proto, bot, vote))
-        {
-
-            if (CanBotUseToken(proto, bot))
-            {
-                vote = NEED; // Eligible for "Need"
-            }
-            else
-            {
-                vote = GREED; // Not eligible, so "Greed"
-            }
-        }
-        else
-        {
-            switch (proto->Class)
-            {
-                case ITEM_CLASS_WEAPON:
-                case ITEM_CLASS_ARMOR:
-                    if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
-                    {
-                        vote = NEED;
-                    }
-                    else if (usage != ITEM_USAGE_NONE)
-                    {
-                        vote = GREED;
-                    }
-                    break;
-                default:
-                    if (StoreLootAction::IsLootAllowed(itemId, botAI))
-                        vote = CalculateRollVote(proto); // Ensure correct Need/Greed behavior
-                    break;
-            }
-        }
-        if (sPlayerbotAIConfig.lootRollLevel == 0)
-        {
-            vote = PASS;
-        }
-        else if (sPlayerbotAIConfig.lootRollLevel == 1)
-        {
-            // Level 1 = "greed" mode: bots greed on useful items but never need
-            // Only downgrade NEED to GREED, preserve GREED votes as-is
-            if (vote == NEED)
-            {
-                if (RollUniqueCheck(proto, bot))
-                    {
-                        vote = PASS;
-                    }
-                else
-                    {
-                        vote = GREED;
-                    }
-            }
-        }
-        switch (group->GetLootMethod())
-        {
-            case MASTER_LOOT:
-            case FREE_FOR_ALL:
-                group->CountRollVote(bot->GetGUID(), guid, PASS);
-                break;
-            default:
-                group->CountRollVote(bot->GetGUID(), guid, vote);
-                break;
-            // Let CalculateRollVote decide using loot-aware item usage.
-            vote = CalculateRollVote(proto, randomProperty);
-            LOG_DEBUG("playerbots", "[LootRollDBG] after CalculateRollVote: vote={}", VoteTxt(vote));
-        }
-
-        vote = FinalizeRollVote(vote, proto, usage, group, bot, "[LootRollDBG]");
-
-        RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group, "[LootRollDBG]");
-
-
-        RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
+        // Central smart-loot decision
+        RollVote const vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
 
         // Announce + send the roll vote (if ML/FFA => PASS)
         RollVote sent = vote;
@@ -229,10 +143,8 @@ bool RollAction::Execute(Event event)
     if (!proto)
         return false;
 
-    std::string itemUsageParam;
-    itemUsageParam = std::to_string(itemId);
-
-    ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", itemUsageParam);
+    std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, 0);
+    ItemUsage usage = AI_VALUE2(ItemUsage, "item upgrade", itemUsageParam);
     switch (proto->Class)
     {
         case ITEM_CLASS_WEAPON:

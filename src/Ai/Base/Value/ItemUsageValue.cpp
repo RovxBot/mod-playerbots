@@ -33,15 +33,6 @@
 
 namespace
 {
-struct ParsedItemUsage
-{
-    ParsedItemUsage const parsed = GetItemIdFromQualifier();
-    uint32 itemId = parsed.itemId;
-    uint32 randomPropertyId = parsed.randomPropertyId;
-    uint32 itemId = 0;
-    int32 randomPropertyId = 0;
-};
-
 ParsedItemUsage ParseItemUsageQualifier(std::string const& qualifier)
 {
     ParsedItemUsage parsed;
