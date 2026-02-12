@@ -1272,6 +1272,10 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
 ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
 {
+    // Class gate for ammo logic:
+    // proceed only for Hunter/Rogue/Warrior.
+    // This must use && on the "!=" checks, otherwise the condition is always true
+    // and QueryItemUsageForAmmo() always returns ITEM_USAGE_NONE.	
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE && bot->getClass() != CLASS_WARRIOR)
         return ITEM_USAGE_NONE;
 
