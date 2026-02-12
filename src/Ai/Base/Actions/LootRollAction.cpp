@@ -68,16 +68,80 @@ bool LootRollAction::Execute(Event event)
         if (!proto)
             continue;
 
-        std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
-        ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
+        std::string itemUsageParam;
+        if (randomProperty != 0)
+        {
+            itemUsageParam = std::to_string(itemId) + "," + std::to_string(randomProperty);
+        }
+        else
+        {
+            itemUsageParam = std::to_string(itemId);
+        }
+        ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", itemUsageParam);
 
-        RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
-        // Announce + send the roll vote (if ML/FFA => PASS)
-        RollVote sent = vote;
-        if (group->GetLootMethod() == MASTER_LOOT || group->GetLootMethod() == FREE_FOR_ALL)
-            sent = PASS;
-
-        group->CountRollVote(bot->GetGUID(), guid, sent);
+        // Armor Tokens are classed as MISC JUNK (Class 15, Subclass 0), luckily no other items I found have class bits and epic quality.
+        if (proto->Class == ITEM_CLASS_MISC && proto->SubClass == ITEM_SUBCLASS_JUNK && proto->Quality == ITEM_QUALITY_EPIC)
+        {
+            if (CanBotUseToken(proto, bot))
+            {
+                vote = NEED; // Eligible for "Need"
+            }
+            else
+            {
+                vote = GREED; // Not eligible, so "Greed"
+            }
+        }
+        else
+        {
+            switch (proto->Class)
+            {
+                case ITEM_CLASS_WEAPON:
+                case ITEM_CLASS_ARMOR:
+                    if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
+                    {
+                        vote = NEED;
+                    }
+                    else if (usage != ITEM_USAGE_NONE)
+                    {
+                        vote = GREED;
+                    }
+                    break;
+                default:
+                    if (StoreLootAction::IsLootAllowed(itemId, botAI))
+                        vote = CalculateRollVote(proto); // Ensure correct Need/Greed behavior
+                    break;
+            }
+        }
+        if (sPlayerbotAIConfig.lootRollLevel == 0)
+        {
+            vote = PASS;
+        }
+        else if (sPlayerbotAIConfig.lootRollLevel == 1)
+        {
+            // Level 1 = "greed" mode: bots greed on useful items but never need
+            // Only downgrade NEED to GREED, preserve GREED votes as-is
+            if (vote == NEED)
+            {
+                if (RollUniqueCheck(proto, bot))
+                    {
+                        vote = PASS;
+                    }
+                else
+                    {
+                        vote = GREED;
+                    }
+            }
+        }
+        switch (group->GetLootMethod())
+        {
+            case MASTER_LOOT:
+            case FREE_FOR_ALL:
+                group->CountRollVote(bot->GetGUID(), guid, PASS);
+                break;
+            default:
+                group->CountRollVote(bot->GetGUID(), guid, vote);
+                break;
+        }
         // One item at a time
         return true;
     }
