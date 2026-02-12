@@ -948,15 +948,13 @@ static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, i
     if (IsPrimaryForSpec(bot, proto))
         return usage;
 
-    return ITEM_USAGE_BAD_EQUIP;
-
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
         return ITEM_USAGE_BAD_EQUIP;
 
     if (IsJewelryOrCloak(proto) && !IsDesperateJewelryUpgradeForBot(bot, proto, randomProperty))
         return ITEM_USAGE_BAD_EQUIP;
 
-    return usage;
+    return ITEM_USAGE_BAD_EQUIP;
 }
 
 static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
@@ -1123,11 +1121,10 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
     if (itemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(bot->getClass(), itemProto))
         shouldEquip = false;
-    if (itemProto->Class == ITEM_CLASS_ARMOR &&
-        !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), itemProto))
 
-    if (!sRandomItemMgr.CanEquipForBot(bot, itemProto))
-
+    if ((itemProto->Class == ITEM_CLASS_ARMOR &&
+         !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), itemProto)) ||
+        !sRandomItemMgr.CanEquipForBot(bot, itemProto))
         shouldEquip = false;
 
     uint8 possibleSlots = 1;
@@ -1208,18 +1205,6 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
 
-        if (oldItem)
-        {
-            // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-            if (itemScore || oldScore)
-            {
-                shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
-            }
-        }
-        // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
-        if (itemScore || oldScore)
-            shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
-
         // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
         if (itemScore || oldScore)
             shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
@@ -1238,10 +1223,9 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         if (oldItemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(bot->getClass(), oldItemProto))
             existingShouldEquip = false;
 
-        if (oldItemProto->Class == ITEM_CLASS_ARMOR &&
-            !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), oldItemProto))
-
-        if (!sRandomItemMgr.CanEquipForBot(bot, oldItemProto))
+        if ((oldItemProto->Class == ITEM_CLASS_ARMOR &&
+             !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), oldItemProto)) ||
+            !sRandomItemMgr.CanEquipForBot(bot, oldItemProto))
             existingShouldEquip = false;
 
         // Compare items based on item level, quality or itemId.
