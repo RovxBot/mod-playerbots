@@ -394,7 +394,7 @@ bool EquipUpgradesTriggeredAction::Execute(Event event)
         p >> itemId;
 
         ItemTemplate const* item = sObjectMgr->GetItemTemplate(itemId);
-        if (item->InventoryType == INVTYPE_NON_EQUIP)
+        if (!item || item->InventoryType == INVTYPE_NON_EQUIP)
             return false;
     }
 
