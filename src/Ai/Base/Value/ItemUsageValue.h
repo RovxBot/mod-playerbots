@@ -152,4 +152,3 @@ RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 ran
                                Group* group);
 
 #endif
-

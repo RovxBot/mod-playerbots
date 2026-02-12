@@ -18,7 +18,6 @@
 #include "Playerbots.h"
 #include "SharedDefines.h"
 
-
 static inline int32 EncodeRandomEnchantParam(uint32 randomPropertyId, uint32 randomSuffixId)
 {
     if (randomPropertyId)

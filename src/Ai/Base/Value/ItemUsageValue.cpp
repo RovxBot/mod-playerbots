@@ -1220,7 +1220,6 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         if (itemScore || oldScore)
             shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
 
-
         // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
         if (itemScore || oldScore)
             shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
@@ -1236,29 +1235,17 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         bool existingShouldEquip = true;
 
-
         if (oldItemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(bot->getClass(), oldItemProto))
             existingShouldEquip = false;
 
         if (oldItemProto->Class == ITEM_CLASS_ARMOR &&
             !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), oldItemProto))
 
-
         if (!sRandomItemMgr->CanEquipForBot(bot, oldItemProto))
-
             existingShouldEquip = false;
-
-        // uint32 oldItemPower = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-        // uint32 newItemPower = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
 
         // Compare items based on item level, quality or itemId.
         const bool isBetter = itemScore > oldScore;
-
-        // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
-        //     isBetter = true;
-        // else if (newItemPower == oldScore && itemProto->Quality == oldItemProto->Quality && itemProto->ItemId >
-        // oldItemProto->ItemId)
-        //     isBetter = true;
 
         Item* item = CurrentItem(itemProto);
         bool itemIsBroken =
@@ -1861,7 +1848,6 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
     return "";
 }
 
-
 ItemUsage ItemUpgradeValue::Calculate()
 {
     ParsedItemUsage parsed = GetItemIdFromQualifier();
@@ -1900,7 +1886,6 @@ bool ItemUsageValue::IsLockboxItem(ItemTemplate const* proto)
 
     return nameLower.find("lockbox") != std::string::npos;
 }
-
 
 namespace
 {
