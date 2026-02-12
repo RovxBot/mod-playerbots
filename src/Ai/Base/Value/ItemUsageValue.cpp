@@ -1126,7 +1126,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     if (itemProto->Class == ITEM_CLASS_ARMOR &&
         !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), itemProto))
 
-    if (!sRandomItemMgr->CanEquipForBot(bot, itemProto))
+    if (!sRandomItemMgr.CanEquipForBot(bot, itemProto))
 
         shouldEquip = false;
 
@@ -1241,7 +1241,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         if (oldItemProto->Class == ITEM_CLASS_ARMOR &&
             !sRandomItemMgr.CanEquipArmor(bot->getClass(), bot->GetLevel(), oldItemProto))
 
-        if (!sRandomItemMgr->CanEquipForBot(bot, oldItemProto))
+        if (!sRandomItemMgr.CanEquipForBot(bot, oldItemProto))
             existingShouldEquip = false;
 
         // Compare items based on item level, quality or itemId.
