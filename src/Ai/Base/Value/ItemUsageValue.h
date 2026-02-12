@@ -6,9 +6,15 @@
 #ifndef _PLAYERBOT_ITEMUSAGEVALUE_H
 #define _PLAYERBOT_ITEMUSAGEVALUE_H
 
+#include <string>
+#include <vector>
+
 #include "NamedObjectContext.h"
 #include "SharedDefines.h"
 #include "Value.h"
+
+// Shared UTF-8 lowercase helper used by item/loot logic.
+std::string ToLowerUtf8(std::string const& s);
 
 class Item;
 class Group;
@@ -78,6 +84,9 @@ private:
 public:
     static std::vector<uint32> SpellsUsingItem(uint32 itemId, Player* bot);
     static bool SpellGivesSkillUp(uint32 spellId, Player* bot);
+
+    // Shared helper: classify classic lockboxes (used by loot-roll logic).
+    static bool IsLockboxItem(ItemTemplate const* proto);
 
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
 };

@@ -1225,6 +1225,9 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
                 shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
             }
         }
+        // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
+        if (itemScore || oldScore)
+            shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
 
 
         // uint32 oldStatWeight = sRandomItemMgr->GetLiveStatWeight(bot, oldItemProto->ItemId);
@@ -1241,6 +1244,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         }
 
         bool existingShouldEquip = true;
+
 
         if (oldItemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(bot->getClass(), oldItemProto))
             existingShouldEquip = false;
@@ -2500,6 +2504,5 @@ RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 ran
     }
 
     return FinalizeRollVote(vote, proto, usage, group, bot, tag.c_str());
-}
-    return FinalizeRollVote(vote, proto, usage, group, bot);
+	    return FinalizeRollVote(vote, proto, usage, group, bot);
 }
