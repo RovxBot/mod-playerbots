@@ -135,7 +135,6 @@ public:
         creators["maintenance"] = &ChatActionContext::maintenance;
         creators["remove glyph"] = &ChatActionContext::remove_glyph;
         creators["autogear"] = &ChatActionContext::autogear;
-        creators["equip upgrade"] = &ChatActionContext::equip_upgrade;
         creators["attack my target"] = &ChatActionContext::attack_my_target;
         creators["chat"] = &ChatActionContext::chat;
         creators["home"] = &ChatActionContext::home;
