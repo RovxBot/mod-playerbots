@@ -1,5 +1,8 @@
 #include "RaidAq40Actions.h"
 
+#include <algorithm>
+
+#include "ObjectGuid.h"
 #include "RaidAq40BossHelper.h"
 
 namespace Aq40BossActions
@@ -20,6 +23,29 @@ Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::in
     }
 
     return nullptr;
+}
+
+std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& attackers,
+                                      std::initializer_list<char const*> names)
+{
+    std::vector<Unit*> found;
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        for (char const* name : names)
+        {
+            if (botAI->EqualLowercaseName(unit->GetName(), name))
+            {
+                found.push_back(unit);
+                break;
+            }
+        }
+    }
+
+    return found;
 }
 }  // namespace Aq40BossActions
 
@@ -63,6 +89,85 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
         }
     }
 
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
+}
+
+bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, attackers);
+    if (!target)
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
+}
+
+bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    std::vector<Unit*> skerams =
+        Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
+
+    if (skerams.empty())
+        return false;
+
+    Unit* target = nullptr;
+    for (Unit* skeram : skerams)
+    {
+        if (!skeram)
+            continue;
+
+        // Prefer whichever visible Skeram is currently casting.
+        if (skeram->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+        {
+            target = skeram;
+            break;
+        }
+    }
+
+    if (!target)
+        target = skerams.front();
+
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
+}
+
+bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    std::vector<Unit*> skerams =
+        Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
+
+    if (skerams.empty())
+        return false;
+
+    Unit* target = skerams.front();
+    for (Unit* skeram : skerams)
+    {
+        if (skeram && target && skeram->GetHealthPct() < target->GetHealthPct())
+            target = skeram;
+    }
+
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
+}
+
+bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
+{
+    // Keep this baseline cheap and safe:
+    // when MC pressure appears, force target normalization on Skeram.
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, attackers);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 

@@ -11,4 +11,46 @@ public:
     bool IsActive() override;
 };
 
+class Aq40SkeramActiveTrigger : public Trigger
+{
+public:
+    Aq40SkeramActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram active") {}
+    bool IsActive() override;
+};
+
+class Aq40SkeramBlinkTrigger : public Trigger
+{
+public:
+    Aq40SkeramBlinkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram blinked") {}
+    bool IsActive() override;
+};
+
+class Aq40SkeramArcaneExplosionTrigger : public Trigger
+{
+public:
+    Aq40SkeramArcaneExplosionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram interrupt cast") {}
+    bool IsActive() override;
+};
+
+class Aq40SkeramMindControlTrigger : public Trigger
+{
+public:
+    Aq40SkeramMindControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram mc detected") {}
+    bool IsActive() override;
+};
+
+class Aq40SkeramSplitTrigger : public Trigger
+{
+public:
+    Aq40SkeramSplitTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram split active") {}
+    bool IsActive() override;
+};
+
+class Aq40SkeramExecutePhaseTrigger : public Trigger
+{
+public:
+    Aq40SkeramExecutePhaseTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram execute phase") {}
+    bool IsActive() override;
+};
+
 #endif
