@@ -53,4 +53,18 @@ public:
     bool IsActive() override;
 };
 
+class Aq40SarturaActiveTrigger : public Trigger
+{
+public:
+    Aq40SarturaActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 sartura active") {}
+    bool IsActive() override;
+};
+
+class Aq40SarturaWhirlwindTrigger : public Trigger
+{
+public:
+    Aq40SarturaWhirlwindTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 sartura whirlwind") {}
+    bool IsActive() override;
+};
+
 #endif

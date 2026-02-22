@@ -23,6 +23,14 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 skeram interrupt", ACTION_RAID + 3) }));
     triggers.push_back(new TriggerNode("aq40 skeram execute phase",
         { NextAction("aq40 skeram focus real boss", ACTION_RAID + 4) }));
+
+    // Sartura baseline strategy:
+    // - prioritize royal guards before boss
+    // - non-tanks step out during whirlwind windows
+    triggers.push_back(new TriggerNode("aq40 sartura active",
+        { NextAction("aq40 sartura choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 sartura whirlwind",
+        { NextAction("aq40 sartura avoid whirlwind", ACTION_RAID + 4) }));
 }
 
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
