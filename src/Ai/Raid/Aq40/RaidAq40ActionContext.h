@@ -15,6 +15,8 @@ public:
         creators["aq40 skeram interrupt"] = &RaidAq40ActionContext::skeram_interrupt;
         creators["aq40 skeram focus real boss"] = &RaidAq40ActionContext::skeram_focus_real_boss;
         creators["aq40 skeram control mind control"] = &RaidAq40ActionContext::skeram_control_mind_control;
+        creators["aq40 sartura choose target"] = &RaidAq40ActionContext::sartura_choose_target;
+        creators["aq40 sartura avoid whirlwind"] = &RaidAq40ActionContext::sartura_avoid_whirlwind;
     }
 
 private:
@@ -28,6 +30,11 @@ private:
     static Action* skeram_control_mind_control(PlayerbotAI* botAI)
     {
         return new Aq40SkeramControlMindControlAction(botAI);
+    }
+    static Action* sartura_choose_target(PlayerbotAI* botAI) { return new Aq40SarturaChooseTargetAction(botAI); }
+    static Action* sartura_avoid_whirlwind(PlayerbotAI* botAI)
+    {
+        return new Aq40SarturaAvoidWhirlwindAction(botAI);
     }
 };
 

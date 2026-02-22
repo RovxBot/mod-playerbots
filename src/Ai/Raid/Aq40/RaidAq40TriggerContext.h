@@ -17,6 +17,8 @@ public:
         creators["aq40 skeram mc detected"] = &RaidAq40TriggerContext::skeram_mc_detected;
         creators["aq40 skeram split active"] = &RaidAq40TriggerContext::skeram_split_active;
         creators["aq40 skeram execute phase"] = &RaidAq40TriggerContext::skeram_execute_phase;
+        creators["aq40 sartura active"] = &RaidAq40TriggerContext::sartura_active;
+        creators["aq40 sartura whirlwind"] = &RaidAq40TriggerContext::sartura_whirlwind;
     }
 
 private:
@@ -27,6 +29,8 @@ private:
     static Trigger* skeram_mc_detected(PlayerbotAI* botAI) { return new Aq40SkeramMindControlTrigger(botAI); }
     static Trigger* skeram_split_active(PlayerbotAI* botAI) { return new Aq40SkeramSplitTrigger(botAI); }
     static Trigger* skeram_execute_phase(PlayerbotAI* botAI) { return new Aq40SkeramExecutePhaseTrigger(botAI); }
+    static Trigger* sartura_active(PlayerbotAI* botAI) { return new Aq40SarturaActiveTrigger(botAI); }
+    static Trigger* sartura_whirlwind(PlayerbotAI* botAI) { return new Aq40SarturaWhirlwindTrigger(botAI); }
 };
 
 #endif

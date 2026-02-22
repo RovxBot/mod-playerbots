@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "AttackAction.h"
+#include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 
@@ -15,6 +16,7 @@ std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& atta
 Unit* FindSkeramTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindSarturaTarget(PlayerbotAI* botAI, GuidVector const& attackers);
+std::vector<Unit*> FindSarturaGuards(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindFankrissTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindHuhuranTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers);
@@ -61,6 +63,20 @@ public:
         : AttackAction(botAI, "aq40 skeram control mind control")
     {
     }
+    bool Execute(Event event) override;
+};
+
+class Aq40SarturaChooseTargetAction : public AttackAction
+{
+public:
+    Aq40SarturaChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 sartura choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40SarturaAvoidWhirlwindAction : public MovementAction
+{
+public:
+    Aq40SarturaAvoidWhirlwindAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 sartura avoid whirlwind") {}
     bool Execute(Event event) override;
 };
 

@@ -1,6 +1,7 @@
 #include "RaidAq40Actions.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "ObjectGuid.h"
 #include "RaidAq40BossHelper.h"
@@ -69,7 +70,22 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
     if (!target)
-        target = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+    {
+        std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+        if (!sarturaGuards.empty())
+        {
+            target = sarturaGuards.front();
+            for (Unit* guard : sarturaGuards)
+            {
+                if (guard && target && guard->GetHealthPct() < target->GetHealthPct())
+                    target = guard;
+            }
+        }
+        else
+        {
+            target = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+        }
+    }
     if (!target)
         target = Aq40BossActions::FindBugTrioTarget(botAI, attackers);
     if (!target)
@@ -172,4 +188,71 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
         return false;
 
     return Attack(target);
+}
+
+bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    if (attackers.empty())
+        return false;
+
+    Unit* target = nullptr;
+    std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+    if (!guards.empty())
+    {
+        // Strategy baseline: kill the royal guards before Sartura.
+        target = guards.front();
+        for (Unit* guard : guards)
+        {
+            if (guard && target && guard->GetHealthPct() < target->GetHealthPct())
+                target = guard;
+        }
+    }
+    else
+    {
+        target = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+    }
+
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
+}
+
+bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
+{
+    if (botAI->IsTank(bot))
+        return false;
+
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    Unit* threat = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+    if (!threat)
+    {
+        std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+        if (!guards.empty())
+            threat = guards.front();
+    }
+    if (!threat)
+        return false;
+
+    float d = bot->GetDistance2d(threat);
+    if (d > 14.0f)
+        return false;
+
+    float dx = bot->GetPositionX() - threat->GetPositionX();
+    float dy = bot->GetPositionY() - threat->GetPositionY();
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.1f)
+    {
+        dx = std::cos(bot->GetOrientation());
+        dy = std::sin(bot->GetOrientation());
+        len = 1.0f;
+    }
+
+    float escape = 18.0f;
+    float moveX = threat->GetPositionX() + (dx / len) * escape;
+    float moveY = threat->GetPositionY() + (dy / len) * escape;
+
+    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
 }
