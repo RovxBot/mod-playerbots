@@ -68,7 +68,22 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         target = Aq40BossActions::FindHuhuranTarget(botAI, attackers);
     if (!target)
-        target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
+    {
+        std::vector<Unit*> fankrissSpawns = Aq40BossActions::FindFankrissSpawns(botAI, attackers);
+        if (!fankrissSpawns.empty())
+        {
+            target = fankrissSpawns.front();
+            for (Unit* spawn : fankrissSpawns)
+            {
+                if (spawn && target && spawn->GetHealthPct() < target->GetHealthPct())
+                    target = spawn;
+            }
+        }
+        else
+        {
+            target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
+        }
+    }
     if (!target)
     {
         std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
@@ -255,4 +270,33 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    if (attackers.empty())
+        return false;
+
+    Unit* target = nullptr;
+    std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, attackers);
+    if (!spawns.empty())
+    {
+        // Fankriss baseline: quickly remove Spawn adds before returning to boss.
+        target = spawns.front();
+        for (Unit* spawn : spawns)
+        {
+            if (spawn && target && spawn->GetHealthPct() < target->GetHealthPct())
+                target = spawn;
+        }
+    }
+    else
+    {
+        target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
+    }
+
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
 }

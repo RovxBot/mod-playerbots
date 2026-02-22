@@ -31,6 +31,14 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 sartura choose target", ACTION_RAID + 2) }));
     triggers.push_back(new TriggerNode("aq40 sartura whirlwind",
         { NextAction("aq40 sartura avoid whirlwind", ACTION_RAID + 4) }));
+
+    // Fankriss baseline strategy:
+    // - kill Spawn of Fankriss immediately
+    // - fall back to boss pressure between spawn waves
+    triggers.push_back(new TriggerNode("aq40 fankriss active",
+        { NextAction("aq40 fankriss choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 fankriss spawn active",
+        { NextAction("aq40 fankriss choose target", ACTION_RAID + 4) }));
 }
 
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)

@@ -19,6 +19,8 @@ public:
         creators["aq40 skeram execute phase"] = &RaidAq40TriggerContext::skeram_execute_phase;
         creators["aq40 sartura active"] = &RaidAq40TriggerContext::sartura_active;
         creators["aq40 sartura whirlwind"] = &RaidAq40TriggerContext::sartura_whirlwind;
+        creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
+        creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
     }
 
 private:
@@ -31,6 +33,8 @@ private:
     static Trigger* skeram_execute_phase(PlayerbotAI* botAI) { return new Aq40SkeramExecutePhaseTrigger(botAI); }
     static Trigger* sartura_active(PlayerbotAI* botAI) { return new Aq40SarturaActiveTrigger(botAI); }
     static Trigger* sartura_whirlwind(PlayerbotAI* botAI) { return new Aq40SarturaWhirlwindTrigger(botAI); }
+    static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
+    static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }
 };
 
 #endif
