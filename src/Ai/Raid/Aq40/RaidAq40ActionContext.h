@@ -17,6 +17,7 @@ public:
         creators["aq40 skeram control mind control"] = &RaidAq40ActionContext::skeram_control_mind_control;
         creators["aq40 sartura choose target"] = &RaidAq40ActionContext::sartura_choose_target;
         creators["aq40 sartura avoid whirlwind"] = &RaidAq40ActionContext::sartura_avoid_whirlwind;
+        creators["aq40 fankriss choose target"] = &RaidAq40ActionContext::fankriss_choose_target;
     }
 
 private:
@@ -36,6 +37,7 @@ private:
     {
         return new Aq40SarturaAvoidWhirlwindAction(botAI);
     }
+    static Action* fankriss_choose_target(PlayerbotAI* botAI) { return new Aq40FankrissChooseTargetAction(botAI); }
 };
 
 #endif

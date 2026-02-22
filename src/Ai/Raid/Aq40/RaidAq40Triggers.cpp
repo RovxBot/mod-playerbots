@@ -159,3 +159,35 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
 
     return false;
 }
+
+bool Aq40FankrissActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && botAI->EqualLowercaseName(unit->GetName(), "fankriss the unyielding"))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40FankrissSpawnedTrigger::IsActive()
+{
+    if (!Aq40FankrissActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && botAI->EqualLowercaseName(unit->GetName(), "spawn of fankriss"))
+            return true;
+    }
+
+    return false;
+}

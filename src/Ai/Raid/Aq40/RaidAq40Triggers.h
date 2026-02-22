@@ -67,4 +67,18 @@ public:
     bool IsActive() override;
 };
 
+class Aq40FankrissActiveTrigger : public Trigger
+{
+public:
+    Aq40FankrissActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 fankriss active") {}
+    bool IsActive() override;
+};
+
+class Aq40FankrissSpawnedTrigger : public Trigger
+{
+public:
+    Aq40FankrissSpawnedTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 fankriss spawn active") {}
+    bool IsActive() override;
+};
+
 #endif

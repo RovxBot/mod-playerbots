@@ -18,6 +18,7 @@ Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindSarturaTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 std::vector<Unit*> FindSarturaGuards(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindFankrissTarget(PlayerbotAI* botAI, GuidVector const& attackers);
+std::vector<Unit*> FindFankrissSpawns(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindHuhuranTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers);
@@ -77,6 +78,13 @@ class Aq40SarturaAvoidWhirlwindAction : public MovementAction
 {
 public:
     Aq40SarturaAvoidWhirlwindAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 sartura avoid whirlwind") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40FankrissChooseTargetAction : public AttackAction
+{
+public:
+    Aq40FankrissChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 fankriss choose target") {}
     bool Execute(Event event) override;
 };
 
