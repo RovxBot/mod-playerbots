@@ -131,4 +131,47 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlFiremawEncounterTrigger : public Trigger
+{
+public:
+    BwlFiremawEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl firemaw encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlFiremawPositioningTrigger : public Trigger
+{
+public:
+    BwlFiremawPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl firemaw positioning"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlFiremawHighFlameBuffetTrigger : public Trigger
+{
+public:
+    BwlFiremawHighFlameBuffetTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl firemaw high flame buffet"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlFiremawMainTankHighFlameBuffetTrigger : public Trigger
+{
+public:
+    BwlFiremawMainTankHighFlameBuffetTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl firemaw main tank high flame buffet"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

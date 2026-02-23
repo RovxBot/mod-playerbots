@@ -20,6 +20,10 @@ public:
         creators["bwl broodlord encounter"] = &RaidBwlTriggerContext::bwl_broodlord_encounter;
         creators["bwl broodlord positioning"] = &RaidBwlTriggerContext::bwl_broodlord_positioning;
         creators["bwl broodlord main tank mortal strike"] = &RaidBwlTriggerContext::bwl_broodlord_main_tank_mortal_strike;
+        creators["bwl firemaw encounter"] = &RaidBwlTriggerContext::bwl_firemaw_encounter;
+        creators["bwl firemaw positioning"] = &RaidBwlTriggerContext::bwl_firemaw_positioning;
+        creators["bwl firemaw high flame buffet"] = &RaidBwlTriggerContext::bwl_firemaw_high_flame_buffet;
+        creators["bwl firemaw main tank high flame buffet"] = &RaidBwlTriggerContext::bwl_firemaw_main_tank_high_flame_buffet;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -42,6 +46,13 @@ private:
     static Trigger* bwl_broodlord_main_tank_mortal_strike(PlayerbotAI* ai)
     {
         return new BwlBroodlordMainTankMortalStrikeTrigger(ai);
+    }
+    static Trigger* bwl_firemaw_encounter(PlayerbotAI* ai) { return new BwlFiremawEncounterTrigger(ai); }
+    static Trigger* bwl_firemaw_positioning(PlayerbotAI* ai) { return new BwlFiremawPositioningTrigger(ai); }
+    static Trigger* bwl_firemaw_high_flame_buffet(PlayerbotAI* ai) { return new BwlFiremawHighFlameBuffetTrigger(ai); }
+    static Trigger* bwl_firemaw_main_tank_high_flame_buffet(PlayerbotAI* ai)
+    {
+        return new BwlFiremawMainTankHighFlameBuffetTrigger(ai);
     }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }

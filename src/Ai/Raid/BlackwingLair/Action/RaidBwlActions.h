@@ -51,6 +51,20 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlFiremawChooseTargetAction : public AttackAction
+{
+public:
+    BwlFiremawChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl firemaw choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlFiremawPositionAction : public MovementAction
+{
+public:
+    BwlFiremawPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl firemaw position") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
