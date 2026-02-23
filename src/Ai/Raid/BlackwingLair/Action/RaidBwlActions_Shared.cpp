@@ -5,6 +5,8 @@
 #include <limits>
 #include <string>
 
+#include "SharedDefines.h"
+
 namespace
 {
 std::string ToLower(std::string value)
@@ -35,9 +37,9 @@ int GetBwlTrashPriority(Unit* unit)
         return 25;
     if (name.find("death talon overseer") != std::string::npos)
         return 28;
-    if (name.find("death talon captain") != std::string::npos)
-        return 30;
     if (name.find("death talon flamescale") != std::string::npos)
+        return 30;
+    if (name.find("death talon captain") != std::string::npos)
         return 35;
     if (name.find("death talon wyrmguard") != std::string::npos || name.find("death talon dragonspawn") != std::string::npos ||
         name.find("chromatic drakonid") != std::string::npos)
@@ -77,6 +79,36 @@ bool IsLikelyCasterPreferredTrash(Unit* unit)
     std::string const name = ToLower(unit->GetName());
     // Overseers and chromatic drakonids are generally handled by casters probing vulnerabilities.
     return name.find("death talon overseer") != std::string::npos || name.find("chromatic drakonid") != std::string::npos;
+}
+
+bool IsDeathTalonSeether(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+    std::string const name = ToLower(unit->GetName());
+    return name.find("death talon seether") != std::string::npos;
+}
+
+bool IsDeathTalonCaptain(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+    std::string const name = ToLower(unit->GetName());
+    return name.find("death talon captain") != std::string::npos;
+}
+
+bool HasSeetherEnrageAura(PlayerbotAI* botAI, Unit* seether)
+{
+    if (!botAI || !seether || !seether->IsAlive())
+    {
+        return false;
+    }
+
+    return botAI->GetAura("enrage", seether, false, true) || botAI->GetAura("frenzy", seether, false, true);
 }
 }  // namespace
 
@@ -119,6 +151,16 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
                 validForRole = false;
                 adjustedPriority += 1000;
             }
+            else if (botAI->IsTank(bot) && IsDeathTalonCaptain(unit))
+            {
+                // Captain Aura of Flames reflects punishing fire damage.
+                // If tank is low, avoid direct focus while aura is active.
+                if (bot->GetHealthPct() < 45.0f && botAI->GetAura("aura of flames", unit, false, true))
+                {
+                    validForRole = false;
+                    adjustedPriority += 1000;
+                }
+            }
             else if (isPhysical && IsLikelyCasterPreferredTrash(unit))
             {
                 // Keep tanks/melee on physical-friendly threats first where possible.
@@ -159,4 +201,76 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
     }
 
     return Attack(bestTarget, false);
+}
+
+bool BwlTrashTranqSeetherAction::isUseful()
+{
+    if (bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    auto hasEnragedSeether = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsDeathTalonSeether(unit))
+            {
+                continue;
+            }
+            if (HasSeetherEnrageAura(botAI, unit))
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    return hasEnragedSeether(attackers) || hasEnragedSeether(nearby);
+}
+
+bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+
+    Unit* target = nullptr;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    auto findEnragedSeether = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsDeathTalonSeether(unit))
+            {
+                continue;
+            }
+            if (HasSeetherEnrageAura(botAI, unit))
+            {
+                return unit;
+            }
+        }
+        return static_cast<Unit*>(nullptr);
+    };
+
+    target = findEnragedSeether(attackers);
+    if (!target)
+    {
+        target = findEnragedSeether(nearby);
+    }
+    if (!target)
+    {
+        return false;
+    }
+
+    return botAI->CastSpell("tranquilizing shot", target);
 }

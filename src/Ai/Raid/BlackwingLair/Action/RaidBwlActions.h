@@ -168,6 +168,14 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlTrashTranqSeetherAction : public Action
+{
+public:
+    BwlTrashTranqSeetherAction(PlayerbotAI* botAI) : Action(botAI, "bwl trash tranq seether") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "RaidBwlSpellIds.h"
+#include "SharedDefines.h"
 
 namespace
 {
@@ -88,6 +89,36 @@ bool HasBossInUnits(PlayerbotAI* botAI, GuidVector const& units)
 
     return false;
 }
+
+bool HasEnragedDeathTalonSeether(PlayerbotAI* botAI, GuidVector const& units)
+{
+    if (!botAI || units.empty())
+    {
+        return false;
+    }
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+        {
+            continue;
+        }
+
+        std::string const name = ToLower(unit->GetName());
+        if (name.find("death talon seether") == std::string::npos)
+        {
+            continue;
+        }
+
+        if (botAI->GetAura("enrage", unit, false, true) || botAI->GetAura("frenzy", unit, false, true))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 }  // namespace
 
 bool BwlMissingOnyxiaScaleCloakTrigger::IsActive()
@@ -117,4 +148,17 @@ bool BwlTrashDangerousEncounterTrigger::IsActive()
     }
 
     return HasDangerousTrashInUnits(botAI, attackers) || HasDangerousTrashInUnits(botAI, nearby);
+}
+
+bool BwlDeathTalonSeetherEnrageTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    return HasEnragedDeathTalonSeether(botAI, attackers) || HasEnragedDeathTalonSeether(botAI, nearby);
 }

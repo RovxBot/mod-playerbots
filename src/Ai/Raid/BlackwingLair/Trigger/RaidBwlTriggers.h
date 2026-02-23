@@ -346,4 +346,17 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlDeathTalonSeetherEnrageTrigger : public Trigger
+{
+public:
+    BwlDeathTalonSeetherEnrageTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl death talon seether enrage"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif
