@@ -102,6 +102,20 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TrashActiveTrigger : public Trigger
+{
+public:
+    Aq40TrashActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash active") {}
+    bool IsActive() override;
+};
+
+class Aq40TrashDangerousAoeTrigger : public Trigger
+{
+public:
+    Aq40TrashDangerousAoeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash dangerous aoe") {}
+    bool IsActive() override;
+};
+
 class Aq40HuhuranActiveTrigger : public Trigger
 {
 public:

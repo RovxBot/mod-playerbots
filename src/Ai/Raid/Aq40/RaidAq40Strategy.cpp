@@ -50,6 +50,14 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("aq40 fankriss spawn active",
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 4) }));
 
+    // AQ40 trash baseline strategy:
+    // - prioritize disruptive casters first (nullifier/eradicator)
+    // - spread out of high-danger point-blank trash AoE casts
+    triggers.push_back(new TriggerNode("aq40 trash active",
+        { NextAction("aq40 trash choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 trash dangerous aoe",
+        { NextAction("aq40 trash avoid dangerous aoe", ACTION_RAID + 5) }));
+
     // Huhuran baseline strategy:
     // - maintain boss focus
     // - move ranged non-tanks outward during poison/enrage phase
@@ -136,4 +144,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new Aq40GenericMultiplier(botAI));
+    multipliers.push_back(new Aq40BugTrioMultiplier(botAI));
+    multipliers.push_back(new Aq40OuroMultiplier(botAI));
+    multipliers.push_back(new Aq40ViscidusMultiplier(botAI));
 }

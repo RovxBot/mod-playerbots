@@ -19,6 +19,7 @@ Unit* FindSarturaTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 std::vector<Unit*> FindSarturaGuards(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindFankrissTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 std::vector<Unit*> FindFankrissSpawns(PlayerbotAI* botAI, GuidVector const& attackers);
+Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindHuhuranTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers);
@@ -102,6 +103,23 @@ class Aq40FankrissChooseTargetAction : public AttackAction
 {
 public:
     Aq40FankrissChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 fankriss choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TrashChooseTargetAction : public AttackAction
+{
+public:
+    Aq40TrashChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 trash choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TrashAvoidDangerousAoeAction : public MovementAction
+{
+public:
+    Aq40TrashAvoidDangerousAoeAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 trash avoid dangerous aoe")
+    {
+    }
     bool Execute(Event event) override;
 };
 
