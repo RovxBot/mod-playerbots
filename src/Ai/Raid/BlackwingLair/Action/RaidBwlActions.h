@@ -79,6 +79,28 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlFlamegorChooseTargetAction : public AttackAction
+{
+public:
+    BwlFlamegorChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl flamegor choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlFlamegorPositionAction : public MovementAction
+{
+public:
+    BwlFlamegorPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl flamegor position") {}
+    bool Execute(Event event) override;
+};
+
+class BwlFlamegorTranqAction : public Action
+{
+public:
+    BwlFlamegorTranqAction(PlayerbotAI* botAI) : Action(botAI, "bwl flamegor tranq") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

@@ -27,6 +27,9 @@ public:
         creators["bwl ebonroc encounter"] = &RaidBwlTriggerContext::bwl_ebonroc_encounter;
         creators["bwl ebonroc positioning"] = &RaidBwlTriggerContext::bwl_ebonroc_positioning;
         creators["bwl ebonroc main tank shadow"] = &RaidBwlTriggerContext::bwl_ebonroc_main_tank_shadow;
+        creators["bwl flamegor encounter"] = &RaidBwlTriggerContext::bwl_flamegor_encounter;
+        creators["bwl flamegor positioning"] = &RaidBwlTriggerContext::bwl_flamegor_positioning;
+        creators["bwl flamegor frenzy"] = &RaidBwlTriggerContext::bwl_flamegor_frenzy;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -60,6 +63,9 @@ private:
     static Trigger* bwl_ebonroc_encounter(PlayerbotAI* ai) { return new BwlEbonrocEncounterTrigger(ai); }
     static Trigger* bwl_ebonroc_positioning(PlayerbotAI* ai) { return new BwlEbonrocPositioningTrigger(ai); }
     static Trigger* bwl_ebonroc_main_tank_shadow(PlayerbotAI* ai) { return new BwlEbonrocMainTankShadowTrigger(ai); }
+    static Trigger* bwl_flamegor_encounter(PlayerbotAI* ai) { return new BwlFlamegorEncounterTrigger(ai); }
+    static Trigger* bwl_flamegor_positioning(PlayerbotAI* ai) { return new BwlFlamegorPositioningTrigger(ai); }
+    static Trigger* bwl_flamegor_frenzy(PlayerbotAI* ai) { return new BwlFlamegorFrenzyTrigger(ai); }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }
 };

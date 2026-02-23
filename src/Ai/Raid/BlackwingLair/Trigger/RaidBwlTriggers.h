@@ -204,4 +204,34 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlFlamegorEncounterTrigger : public Trigger
+{
+public:
+    BwlFlamegorEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl flamegor encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlFlamegorPositioningTrigger : public Trigger
+{
+public:
+    BwlFlamegorPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl flamegor positioning"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlFlamegorFrenzyTrigger : public Trigger
+{
+public:
+    BwlFlamegorFrenzyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl flamegor frenzy"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

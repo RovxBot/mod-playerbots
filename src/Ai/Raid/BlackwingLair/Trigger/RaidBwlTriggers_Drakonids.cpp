@@ -1,5 +1,8 @@
 #include "RaidBwlTriggers.h"
 
+#include "RaidBwlSpellIds.h"
+#include "SharedDefines.h"
+
 namespace
 {
 Aura* GetFlameBuffetAura(PlayerbotAI* botAI, Unit* unit)
@@ -18,6 +21,22 @@ Aura* GetFlameBuffetAura(PlayerbotAI* botAI, Unit* unit)
     // Common classic id fallback.
     aura = unit->GetAura(23341);
     return aura;
+}
+
+Aura* GetFlamegorFrenzyAura(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!botAI || !unit)
+    {
+        return nullptr;
+    }
+
+    Aura* aura = unit->GetAura(BwlSpellIds::FlamegorFrenzy);
+    if (aura)
+    {
+        return aura;
+    }
+
+    return botAI->GetAura("frenzy", unit, false, true);
 }
 }  // namespace
 
@@ -160,4 +179,55 @@ bool BwlEbonrocMainTankShadowTrigger::IsActive()
     }
 
     return shadow != nullptr;
+}
+
+bool BwlFlamegorEncounterTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* flamegor = AI_VALUE2(Unit*, "find target", "flamegor"))
+    {
+        return flamegor->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlFlamegorPositioningTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* flamegor = AI_VALUE2(Unit*, "find target", "flamegor"))
+    {
+        return flamegor->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlFlamegorFrenzyTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    Unit* flamegor = AI_VALUE2(Unit*, "find target", "flamegor");
+    if (!flamegor || !flamegor->IsAlive())
+    {
+        return false;
+    }
+
+    if (bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+
+    return GetFlamegorFrenzyAura(botAI, flamegor) != nullptr;
 }

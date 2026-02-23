@@ -12,6 +12,7 @@ namespace BwlSpellIds
     static constexpr uint32 BurningAdrenalineAlt = 23620;
     static constexpr uint32 EssenceOfTheRed = 23513;
     static constexpr uint32 ShadowOfEbonroc = 23340;
+    static constexpr uint32 FlamegorFrenzy = 23342;
 }  // namespace BwlSpellIds
 
 namespace BwlGameObjects
