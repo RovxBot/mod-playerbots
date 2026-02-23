@@ -11,6 +11,15 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl razorgore encounter",
         { NextAction("bwl razorgore choose target", ACTION_RAID + 1) }));
 
+    triggers.push_back(new TriggerNode("bwl vaelastrasz encounter",
+        { NextAction("bwl vaelastrasz choose target", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl vaelastrasz burning adrenaline self",
+        { NextAction("move from group", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("bwl vaelastrasz main tank burning adrenaline",
+        { NextAction("taunt spell", ACTION_EMERGENCY + 6) }));
+
     triggers.push_back(new TriggerNode("bwl suppression device",
                         { NextAction("bwl turn off suppression device", ACTION_RAID) }));
 

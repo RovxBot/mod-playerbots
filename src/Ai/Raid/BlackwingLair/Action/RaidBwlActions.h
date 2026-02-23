@@ -23,6 +23,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlVaelastraszChooseTargetAction : public AttackAction
+{
+public:
+    BwlVaelastraszChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl vaelastrasz choose target") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

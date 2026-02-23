@@ -49,4 +49,40 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlVaelastraszEncounterTrigger : public Trigger
+{
+public:
+    BwlVaelastraszEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl vaelastrasz encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlVaelastraszBurningAdrenalineSelfTrigger : public Trigger
+{
+public:
+    BwlVaelastraszBurningAdrenalineSelfTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl vaelastrasz burning adrenaline self"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlVaelastraszMainTankBurningAdrenalineTrigger : public Trigger
+{
+public:
+    BwlVaelastraszMainTankBurningAdrenalineTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl vaelastrasz main tank burning adrenaline"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

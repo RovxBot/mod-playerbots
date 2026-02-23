@@ -12,6 +12,7 @@ public:
     {
         creators["bwl warn onyxia scale cloak"] = &RaidBwlActionContext::bwl_warn_onyxia_scale_cloak;
         creators["bwl razorgore choose target"] = &RaidBwlActionContext::bwl_razorgore_choose_target;
+        creators["bwl vaelastrasz choose target"] = &RaidBwlActionContext::bwl_vaelastrasz_choose_target;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
         creators["bwl use hourglass sand"] = &RaidBwlActionContext::bwl_use_hourglass_sand;
     }
@@ -19,6 +20,7 @@ public:
 private:
     static Action* bwl_warn_onyxia_scale_cloak(PlayerbotAI* botAI) { return new BwlWarnOnyxiaScaleCloakAction(botAI); }
     static Action* bwl_razorgore_choose_target(PlayerbotAI* botAI) { return new BwlRazorgoreChooseTargetAction(botAI); }
+    static Action* bwl_vaelastrasz_choose_target(PlayerbotAI* botAI) { return new BwlVaelastraszChooseTargetAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }
     static Action* bwl_use_hourglass_sand(PlayerbotAI* botAI) { return new BwlUseHourglassSandAction(botAI); }
 };
