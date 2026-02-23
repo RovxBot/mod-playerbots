@@ -1,6 +1,7 @@
 #include "RaidBwlActions.h"
 
 #include <cmath>
+#include <limits>
 
 #include "SharedDefines.h"
 
@@ -100,6 +101,66 @@ bool BwlChromaggusTranqAction::Execute(Event /*event*/)
     }
 
     return botAI->CastSpell("tranquilizing shot", chromaggus);
+}
+
+bool BwlChromaggusLosHideAction::Execute(Event /*event*/)
+{
+    Unit* chromaggus = AI_VALUE2(Unit*, "find target", "chromaggus");
+    if (!chromaggus || !chromaggus->IsAlive())
+    {
+        return false;
+    }
+
+    float bestX = 0.0f;
+    float bestY = 0.0f;
+    float bestZ = bot->GetPositionZ();
+    float bestDistSq = std::numeric_limits<float>::max();
+
+    float const botX = bot->GetPositionX();
+    float const botY = bot->GetPositionY();
+    float const botZ = bot->GetPositionZ();
+    float const twoPi = static_cast<float>(2.0 * M_PI);
+    float const radii[] = {6.0f, 10.0f, 14.0f, 18.0f, 22.0f, 26.0f};
+
+    for (float radius : radii)
+    {
+        for (uint32 i = 0; i < 16; ++i)
+        {
+            float angle = (static_cast<float>(i) / 16.0f) * twoPi;
+            float testX = botX + std::cos(angle) * radius;
+            float testY = botY + std::sin(angle) * radius;
+            float testZ = botZ;
+
+            if (chromaggus->IsWithinLOS(testX, testY, testZ))
+            {
+                continue;
+            }
+
+            float dx = testX - botX;
+            float dy = testY - botY;
+            float distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                bestX = testX;
+                bestY = testY;
+                bestZ = testZ;
+            }
+        }
+    }
+
+    if (bestDistSq != std::numeric_limits<float>::max())
+    {
+        return MoveTo(bot->GetMapId(), bestX, bestY, bestZ, false, false, false, true, MovementPriority::MOVEMENT_FORCED);
+    }
+
+    // Fallback: run toward doorway side opposite the dragon's facing.
+    float fallbackX = chromaggus->GetPositionX();
+    float fallbackY = chromaggus->GetPositionY();
+    float const fallbackAngle = chromaggus->GetOrientation() + static_cast<float>(M_PI);
+    fallbackX += std::cos(fallbackAngle) * 26.0f;
+    fallbackY += std::sin(fallbackAngle) * 26.0f;
+    return MoveTo(bot->GetMapId(), fallbackX, fallbackY, botZ, false, false, false, true, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool BwlUseHourglassSandAction::Execute(Event /*event*/)

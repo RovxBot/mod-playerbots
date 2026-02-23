@@ -267,4 +267,27 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlChromaggusBreathLosTrigger : public Trigger
+{
+public:
+    BwlChromaggusBreathLosTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl chromaggus breath los"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlChromaggusMainTankTimeLapseTrigger : public Trigger
+{
+public:
+    BwlChromaggusMainTankTimeLapseTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl chromaggus main tank time lapse"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

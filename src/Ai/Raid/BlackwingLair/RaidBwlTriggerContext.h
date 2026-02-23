@@ -33,6 +33,8 @@ public:
         creators["bwl chromaggus encounter"] = &RaidBwlTriggerContext::bwl_chromaggus_encounter;
         creators["bwl chromaggus positioning"] = &RaidBwlTriggerContext::bwl_chromaggus_positioning;
         creators["bwl chromaggus frenzy"] = &RaidBwlTriggerContext::bwl_chromaggus_frenzy;
+        creators["bwl chromaggus breath los"] = &RaidBwlTriggerContext::bwl_chromaggus_breath_los;
+        creators["bwl chromaggus main tank time lapse"] = &RaidBwlTriggerContext::bwl_chromaggus_main_tank_time_lapse;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -72,6 +74,11 @@ private:
     static Trigger* bwl_chromaggus_encounter(PlayerbotAI* ai) { return new BwlChromaggusEncounterTrigger(ai); }
     static Trigger* bwl_chromaggus_positioning(PlayerbotAI* ai) { return new BwlChromaggusPositioningTrigger(ai); }
     static Trigger* bwl_chromaggus_frenzy(PlayerbotAI* ai) { return new BwlChromaggusFrenzyTrigger(ai); }
+    static Trigger* bwl_chromaggus_breath_los(PlayerbotAI* ai) { return new BwlChromaggusBreathLosTrigger(ai); }
+    static Trigger* bwl_chromaggus_main_tank_time_lapse(PlayerbotAI* ai)
+    {
+        return new BwlChromaggusMainTankTimeLapseTrigger(ai);
+    }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }
 };

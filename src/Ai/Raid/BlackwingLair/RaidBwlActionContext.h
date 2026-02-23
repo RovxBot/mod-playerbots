@@ -26,6 +26,7 @@ public:
         creators["bwl chromaggus choose target"] = &RaidBwlActionContext::bwl_chromaggus_choose_target;
         creators["bwl chromaggus position"] = &RaidBwlActionContext::bwl_chromaggus_position;
         creators["bwl chromaggus tranq"] = &RaidBwlActionContext::bwl_chromaggus_tranq;
+        creators["bwl chromaggus los hide"] = &RaidBwlActionContext::bwl_chromaggus_los_hide;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
         creators["bwl use hourglass sand"] = &RaidBwlActionContext::bwl_use_hourglass_sand;
     }
@@ -47,6 +48,7 @@ private:
     static Action* bwl_chromaggus_choose_target(PlayerbotAI* botAI) { return new BwlChromaggusChooseTargetAction(botAI); }
     static Action* bwl_chromaggus_position(PlayerbotAI* botAI) { return new BwlChromaggusPositionAction(botAI); }
     static Action* bwl_chromaggus_tranq(PlayerbotAI* botAI) { return new BwlChromaggusTranqAction(botAI); }
+    static Action* bwl_chromaggus_los_hide(PlayerbotAI* botAI) { return new BwlChromaggusLosHideAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }
     static Action* bwl_use_hourglass_sand(PlayerbotAI* botAI) { return new BwlUseHourglassSandAction(botAI); }
 };

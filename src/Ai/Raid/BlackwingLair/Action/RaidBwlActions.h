@@ -123,6 +123,13 @@ public:
     bool isUseful() override;
 };
 
+class BwlChromaggusLosHideAction : public MovementAction
+{
+public:
+    BwlChromaggusLosHideAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl chromaggus los hide") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
