@@ -9,6 +9,11 @@ Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     return FindUnitByAnyName(botAI, attackers, { "emperor vek'nilash", "emperor vek'lor" });
 }
+
+Unit* FindTwinMutateBug(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    return FindUnitByAnyName(botAI, attackers, { "mutate bug" });
+}
 }  // namespace Aq40BossActions
 
 namespace
@@ -75,6 +80,17 @@ bool IsTwinRoleMatch(Player* bot, PlayerbotAI* botAI, Player* member)
     return true;
 }
 
+bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor)
+{
+    if (!unit || !sideEmperor)
+        return false;
+
+    if (!oppositeEmperor)
+        return true;
+
+    return unit->GetDistance2d(sideEmperor) <= unit->GetDistance2d(oppositeEmperor);
+}
+
 uint32 GetTwinSideIndex(Player* bot, PlayerbotAI* botAI)
 {
     Group* group = bot->GetGroup();
@@ -138,6 +154,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     Unit* target = nullptr;
     bool isWarlockTank = IsDesignatedWarlockTank(bot);
     bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
+    bool isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+    Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, attackers);
     if (isWarlockTank)
     {
         // Warlock tank is dedicated to Vek'lor on the assigned side.
@@ -156,6 +174,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     }
     else if (botAI->IsHeal(bot))
         return false;
+    else if (isMeleeDps && mutateBug && IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
+        target = mutateBug;
     else if (botAI->IsRanged(bot))
         target = assignment.veklor;
     else
@@ -250,4 +270,35 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         acted = Attack(veklor) || acted;
 
     return acted;
+}
+
+bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
+{
+    if (IsDesignatedWarlockTank(bot))
+        return false;
+
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    if (!assignment.veklor)
+        return false;
+
+    Unit* veklor = assignment.veklor;
+    if (bot->GetDistance2d(veklor) > 18.0f)
+        return false;
+
+    float desiredRange = botAI->IsHeal(bot) ? 22.0f : 28.0f;
+    float dx = bot->GetPositionX() - veklor->GetPositionX();
+    float dy = bot->GetPositionY() - veklor->GetPositionY();
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.1f)
+    {
+        dx = std::cos(bot->GetOrientation());
+        dy = std::sin(bot->GetOrientation());
+        len = 1.0f;
+    }
+
+    float moveX = veklor->GetPositionX() + (dx / len) * desiredRange;
+    float moveY = veklor->GetPositionY() + (dy / len) * desiredRange;
+    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
 }

@@ -129,6 +129,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsAvoidArcaneBurstAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsAvoidArcaneBurstAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors avoid arcane burst")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40CthunChooseTargetAction : public AttackAction
 {
 public:

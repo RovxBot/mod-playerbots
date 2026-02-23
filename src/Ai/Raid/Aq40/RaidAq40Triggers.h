@@ -112,6 +112,16 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinEmperorsArcaneBurstRiskTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsArcaneBurstRiskTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors arcane burst risk")
+    {
+    }
+    bool IsActive() override;
+};
+
 class Aq40CthunActiveTrigger : public Trigger
 {
 public:
