@@ -25,6 +25,8 @@ public:
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
         creators["aq40 twin emperors avoid arcane burst"] =
             &RaidAq40ActionContext::twin_emperors_avoid_arcane_burst;
+        creators["aq40 twin emperors enforce separation"] =
+            &RaidAq40ActionContext::twin_emperors_enforce_separation;
         creators["aq40 cthun choose target"] = &RaidAq40ActionContext::cthun_choose_target;
         creators["aq40 cthun maintain spread"] = &RaidAq40ActionContext::cthun_maintain_spread;
         creators["aq40 cthun avoid dark glare"] = &RaidAq40ActionContext::cthun_avoid_dark_glare;
@@ -67,6 +69,10 @@ private:
     static Action* twin_emperors_avoid_arcane_burst(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsAvoidArcaneBurstAction(botAI);
+    }
+    static Action* twin_emperors_enforce_separation(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsEnforceSeparationAction(botAI);
     }
     static Action* cthun_choose_target(PlayerbotAI* botAI) { return new Aq40CthunChooseTargetAction(botAI); }
     static Action* cthun_maintain_spread(PlayerbotAI* botAI) { return new Aq40CthunMaintainSpreadAction(botAI); }
