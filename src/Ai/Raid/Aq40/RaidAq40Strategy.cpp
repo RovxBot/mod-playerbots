@@ -52,7 +52,11 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor
     // - recover target assignment quickly after teleport/target drift
     triggers.push_back(new TriggerNode("aq40 twin emperors active",
-        { NextAction("aq40 twin emperors choose target", ACTION_RAID + 2) }));
+        {
+            NextAction("aq40 twin emperors choose target", ACTION_RAID + 2),
+            NextAction("aq40 twin emperors hold split", ACTION_RAID + 3),
+            NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 4),
+        }));
     triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
         { NextAction("aq40 twin emperors choose target", ACTION_RAID + 4) }));
 }
