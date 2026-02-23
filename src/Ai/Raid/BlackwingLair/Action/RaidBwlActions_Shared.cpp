@@ -54,6 +54,30 @@ int GetBwlTrashPriority(Unit* unit)
 
     return std::numeric_limits<int>::max();
 }
+
+bool IsMagicImmuneBwlTrash(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+
+    std::string const name = ToLower(unit->GetName());
+    // Confirmed BWL trash immunity: spellbinders are magic-immune.
+    return name.find("blackwing spellbinder") != std::string::npos;
+}
+
+bool IsLikelyCasterPreferredTrash(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+
+    std::string const name = ToLower(unit->GetName());
+    // Overseers and chromatic drakonids are generally handled by casters probing vulnerabilities.
+    return name.find("death talon overseer") != std::string::npos || name.find("chromatic drakonid") != std::string::npos;
+}
 }  // namespace
 
 bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
@@ -66,6 +90,11 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
 {
     Unit* bestTarget = nullptr;
     int bestPriority = std::numeric_limits<int>::max();
+    Unit* fallbackTarget = nullptr;
+    int fallbackPriority = std::numeric_limits<int>::max();
+
+    bool const isCaster = botAI->IsCaster(bot);
+    bool const isPhysical = !isCaster;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
@@ -76,9 +105,35 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
         {
             Unit* unit = botAI->GetUnit(guid);
             int const priority = GetBwlTrashPriority(unit);
-            if (priority < bestPriority)
+            if (priority == std::numeric_limits<int>::max())
             {
-                bestPriority = priority;
+                continue;
+            }
+
+            // Second pass: role-aware validity for "melee-only/caster-only" style trash handling.
+            bool validForRole = true;
+            int adjustedPriority = priority;
+
+            if (isCaster && IsMagicImmuneBwlTrash(unit))
+            {
+                validForRole = false;
+                adjustedPriority += 1000;
+            }
+            else if (isPhysical && IsLikelyCasterPreferredTrash(unit))
+            {
+                // Keep tanks/melee on physical-friendly threats first where possible.
+                adjustedPriority += 6;
+            }
+
+            if (priority < fallbackPriority)
+            {
+                fallbackPriority = priority;
+                fallbackTarget = unit;
+            }
+
+            if (validForRole && adjustedPriority < bestPriority)
+            {
+                bestPriority = adjustedPriority;
                 bestTarget = unit;
             }
         }
@@ -86,6 +141,12 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
 
     evaluate(attackers);
     evaluate(nearby);
+
+    if (!bestTarget)
+    {
+        bestTarget = fallbackTarget;
+        bestPriority = fallbackPriority;
+    }
 
     if (!bestTarget || bestPriority == std::numeric_limits<int>::max())
     {
