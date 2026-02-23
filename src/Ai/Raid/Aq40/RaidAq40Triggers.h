@@ -67,6 +67,27 @@ public:
     bool IsActive() override;
 };
 
+class Aq40BugTrioActiveTrigger : public Trigger
+{
+public:
+    Aq40BugTrioActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 bug trio active") {}
+    bool IsActive() override;
+};
+
+class Aq40BugTrioHealCastTrigger : public Trigger
+{
+public:
+    Aq40BugTrioHealCastTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 bug trio heal cast") {}
+    bool IsActive() override;
+};
+
+class Aq40BugTrioPoisonCloudTrigger : public Trigger
+{
+public:
+    Aq40BugTrioPoisonCloudTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 bug trio poison cloud") {}
+    bool IsActive() override;
+};
+
 class Aq40FankrissActiveTrigger : public Trigger
 {
 public:
@@ -129,6 +150,55 @@ public:
         : Trigger(botAI, "aq40 twin emperors need separation")
     {
     }
+    bool IsActive() override;
+};
+
+class Aq40OuroActiveTrigger : public Trigger
+{
+public:
+    Aq40OuroActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 ouro active") {}
+    bool IsActive() override;
+};
+
+class Aq40OuroScarabsTrigger : public Trigger
+{
+public:
+    Aq40OuroScarabsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 ouro scarabs present") {}
+    bool IsActive() override;
+};
+
+class Aq40OuroSweepTrigger : public Trigger
+{
+public:
+    Aq40OuroSweepTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 ouro sweep risk") {}
+    bool IsActive() override;
+};
+
+class Aq40OuroSubmergeTrigger : public Trigger
+{
+public:
+    Aq40OuroSubmergeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 ouro submerge hazard") {}
+    bool IsActive() override;
+};
+
+class Aq40ViscidusActiveTrigger : public Trigger
+{
+public:
+    Aq40ViscidusActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 viscidus active") {}
+    bool IsActive() override;
+};
+
+class Aq40ViscidusFrozenTrigger : public Trigger
+{
+public:
+    Aq40ViscidusFrozenTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 viscidus frozen") {}
+    bool IsActive() override;
+};
+
+class Aq40ViscidusGlobTrigger : public Trigger
+{
+public:
+    Aq40ViscidusGlobTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 viscidus globs present") {}
     bool IsActive() override;
 };
 

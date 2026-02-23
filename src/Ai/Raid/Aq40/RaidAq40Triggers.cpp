@@ -196,6 +196,61 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
     return false;
 }
 
+bool Aq40BugTrioActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" });
+}
+
+bool Aq40BugTrioHealCastTrigger::IsActive()
+{
+    if (!Aq40BugTrioActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess yauj"))
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell)
+            continue;
+
+        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
+            return true;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool Aq40BugTrioPoisonCloudTrigger::IsActive()
+{
+    if (!Aq40BugTrioActiveTrigger::IsActive() || botAI->IsTank(bot))
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "lord kri"))
+            continue;
+
+        bool poisonCloudWindow = unit->GetHealthPct() <= 5.0f ||
+                                 Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::BugTrioPoisonCloud });
+        if (poisonCloudWindow && bot->GetDistance2d(unit) <= 12.0f)
+            return true;
+    }
+
+    return false;
+}
+
 bool Aq40FankrissActiveTrigger::IsActive()
 {
     if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
@@ -378,6 +433,100 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
         return false;
 
     return veklor->GetDistance2d(veknilash) < 20.0f;
+}
+
+bool Aq40OuroActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
+}
+
+bool Aq40OuroScarabsTrigger::IsActive()
+{
+    if (!Aq40OuroActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers, { "qiraji scarab", "scarab" });
+}
+
+bool Aq40OuroSweepTrigger::IsActive()
+{
+    if (!Aq40OuroActiveTrigger::IsActive() || botAI->IsTank(bot))
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "ouro"))
+            continue;
+
+        if (bot->GetDistance2d(unit) <= 10.0f)
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40OuroSubmergeTrigger::IsActive()
+{
+    if (!Aq40OuroActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "dirt mound"))
+            continue;
+
+        if (bot->GetDistance2d(unit) <= 16.0f)
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40ViscidusActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers, { "viscidus", "glob of viscidus", "toxic slime" });
+}
+
+bool Aq40ViscidusFrozenTrigger::IsActive()
+{
+    if (!Aq40ViscidusActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "viscidus"))
+            continue;
+
+        if (Aq40SpellIds::HasAnyAura(botAI, unit,
+                { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore }))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40ViscidusGlobTrigger::IsActive()
+{
+    if (!Aq40ViscidusActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers, { "glob of viscidus" });
 }
 
 bool Aq40CthunActiveTrigger::IsActive()
