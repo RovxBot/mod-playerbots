@@ -25,6 +25,17 @@ bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initia
     return false;
 }
 
+bool IsAq40BossEncounterActive(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    return IsAnyNamedUnit(botAI, attackers, { "the prophet skeram", "battleguard sartura", "sartura's royal guard",
+                                               "lord kri", "princess yauj", "vem", "yauj brood",
+                                               "fankriss the unyielding", "spawn of fankriss", "princess huhuran",
+                                               "emperor vek'nilash", "emperor vek'lor", "ouro", "dirt mound",
+                                               "viscidus", "glob of viscidus", "toxic slime", "c'thun",
+                                               "eye of c'thun", "eye tentacle", "claw tentacle",
+                                               "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+}
+
 }  // namespace
 
 bool Aq40EngageTrigger::IsActive()
@@ -223,8 +234,6 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
 
         if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
             return true;
-
-        return true;
     }
 
     return false;
@@ -277,6 +286,56 @@ bool Aq40FankrissSpawnedTrigger::IsActive()
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && botAI->EqualLowercaseName(unit->GetName(), "spawn of fankriss"))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TrashActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    if (attackers.empty() || IsAq40BossEncounterActive(botAI, attackers))
+        return false;
+
+    return IsAnyNamedUnit(botAI, attackers,
+                          { "anubisath warder", "anubisath defender", "obsidian eradicator", "obsidian nullifier",
+                              "vekniss stinger", "qiraji slayer", "qiraji champion", "qiraji mindslayer",
+                              "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
+                              "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
+                              "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+}
+
+bool Aq40TrashDangerousAoeTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
+        return false;
+
+    if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
+        return true;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell)
+            continue;
+
+        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40EradicatorShockBlast }) &&
+            bot->GetDistance2d(unit) <= 14.0f)
+            return true;
+
+        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap,
+                    Aq40SpellIds::Aq40DefenderShadowStorm }) &&
+            bot->GetDistance2d(unit) <= 18.0f)
             return true;
     }
 

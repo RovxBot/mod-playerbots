@@ -24,6 +24,8 @@ public:
         creators["aq40 bug trio poison cloud"] = &RaidAq40TriggerContext::bug_trio_poison_cloud;
         creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
         creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
+        creators["aq40 trash active"] = &RaidAq40TriggerContext::trash_active;
+        creators["aq40 trash dangerous aoe"] = &RaidAq40TriggerContext::trash_dangerous_aoe;
         creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
@@ -63,6 +65,8 @@ private:
     static Trigger* bug_trio_poison_cloud(PlayerbotAI* botAI) { return new Aq40BugTrioPoisonCloudTrigger(botAI); }
     static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
     static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }
+    static Trigger* trash_active(PlayerbotAI* botAI) { return new Aq40TrashActiveTrigger(botAI); }
+    static Trigger* trash_dangerous_aoe(PlayerbotAI* botAI) { return new Aq40TrashDangerousAoeTrigger(botAI); }
     static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
     static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
     static Trigger* twin_emperors_active(PlayerbotAI* botAI) { return new Aq40TwinEmperorsActiveTrigger(botAI); }

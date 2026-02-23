@@ -1,5 +1,7 @@
 #include "RaidAq40Actions.h"
 
+#include <cmath>
+
 #include "RaidAq40SpellIds.h"
 
 namespace Aq40BossActions
@@ -99,7 +101,23 @@ bool Aq40ViscidusShatterAction::Execute(Event /*event*/)
         return Attack(viscidus);
 
     if (bot->GetDistance2d(viscidus) > 6.0f)
-        return Attack(viscidus);
+    {
+        float dx = bot->GetPositionX() - viscidus->GetPositionX();
+        float dy = bot->GetPositionY() - viscidus->GetPositionY();
+        float len = std::sqrt(dx * dx + dy * dy);
+        if (len < 0.1f)
+        {
+            dx = std::cos(bot->GetOrientation());
+            dy = std::sin(bot->GetOrientation());
+            len = 1.0f;
+        }
+
+        float desired = 4.0f;
+        float moveX = viscidus->GetPositionX() + (dx / len) * desired;
+        float moveY = viscidus->GetPositionY() + (dy / len) * desired;
+        return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT);
+    }
 
     return false;
 }
