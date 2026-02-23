@@ -8,6 +8,9 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl missing onyxia scale cloak",
         { NextAction("bwl warn onyxia scale cloak", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode("bwl razorgore encounter",
+        { NextAction("bwl razorgore choose target", ACTION_RAID + 1) }));
+
     triggers.push_back(new TriggerNode("bwl suppression device",
                         { NextAction("bwl turn off suppression device", ACTION_RAID) }));
 

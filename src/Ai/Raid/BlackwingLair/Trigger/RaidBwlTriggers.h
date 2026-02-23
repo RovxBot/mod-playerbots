@@ -39,4 +39,14 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlRazorgoreEncounterTrigger : public Trigger
+{
+public:
+    BwlRazorgoreEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl razorgore encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

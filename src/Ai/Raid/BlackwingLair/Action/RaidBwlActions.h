@@ -16,6 +16,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlRazorgoreChooseTargetAction : public AttackAction
+{
+public:
+    BwlRazorgoreChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl razorgore choose target") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
