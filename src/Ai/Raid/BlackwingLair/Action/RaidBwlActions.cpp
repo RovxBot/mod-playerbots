@@ -2,15 +2,39 @@
 
 #include "Playerbots.h"
 
-bool BwlOnyxiaScaleCloakAuraCheckAction::Execute(Event /*event*/)
+bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
 {
-    bot->AddAura(22683, bot);
+    botAI->TellMasterNoFacing("Warning: missing Onyxia Scale Cloak aura in BWL.");
     return true;
 }
 
-bool BwlOnyxiaScaleCloakAuraCheckAction::isUseful() { return !bot->HasAura(22683); }
-
 bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
+{
+    bool usedAny = false;
+    GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
+    for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
+    {
+        GameObject* go = botAI->GetGameObject(*i);
+        if (!go)
+        {
+            continue;
+        }
+        if (go->GetEntry() != BwlGameObjects::SuppressionDevice || go->GetDistance(bot) >= 15.0f || go->GetGoState() != GO_STATE_READY)
+        {
+            continue;
+        }
+        go->Use(bot);
+        usedAny = true;
+    }
+    return usedAny;
+}
+
+bool BwlUseHourglassSandAction::Execute(Event /*event*/)
+{
+    return botAI->CastSpell(BwlSpellIds::HourglassSandCure, bot);
+}
+
+bool BwlTurnOffSuppressionDeviceAction::isUseful()
 {
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
@@ -20,16 +44,20 @@ bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
         {
             continue;
         }
-        if (go->GetEntry() != 179784 || go->GetDistance(bot) >= 15.0f || go->GetGoState() != GO_STATE_READY)
+        if (go->GetEntry() == BwlGameObjects::SuppressionDevice && go->GetDistance(bot) < 15.0f && go->GetGoState() == GO_STATE_READY)
         {
-            continue;
+            return true;
         }
-        go->SetGoState(GO_STATE_ACTIVE);
     }
-    return true;
+    return false;
 }
 
-bool BwlUseHourglassSandAction::Execute(Event /*event*/)
+bool BwlUseHourglassSandAction::isUseful()
 {
-    return botAI->CastSpell(23645, bot);
+    if (!botAI->HasAura(BwlSpellIds::AfflictionBronze, bot))
+    {
+        return false;
+    }
+
+    return bot->HasItemCount(BwlItems::HourglassSand, 1, false);
 }

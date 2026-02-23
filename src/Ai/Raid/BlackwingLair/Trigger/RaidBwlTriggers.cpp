@@ -1,9 +1,15 @@
 #include "RaidBwlTriggers.h"
 
+#include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 
 bool BwlSuppressionDeviceTrigger::IsActive()
 {
+    if (!helper.IsInBwl())
+    {
+        return false;
+    }
+
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
     {
@@ -12,7 +18,7 @@ bool BwlSuppressionDeviceTrigger::IsActive()
         {
             continue;
         }
-        if (go->GetEntry() != 179784 || go->GetDistance(bot) >= 15.0f || go->GetGoState() != GO_STATE_READY)
+        if (go->GetEntry() != BwlGameObjects::SuppressionDevice || go->GetDistance(bot) >= 15.0f || go->GetGoState() != GO_STATE_READY)
         {
             continue;
         }
@@ -21,4 +27,22 @@ bool BwlSuppressionDeviceTrigger::IsActive()
     return false;
 }
 
-bool BwlAfflictionBronzeTrigger::IsActive() { return bot->HasAura(23170); }
+bool BwlAfflictionBronzeTrigger::IsActive()
+{
+    if (!helper.IsInBwl())
+    {
+        return false;
+    }
+
+    return helper.HasBronzeAffliction() && helper.HasHourglassSand();
+}
+
+bool BwlMissingOnyxiaScaleCloakTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    return !botAI->HasAura(BwlSpellIds::OnyxiaScaleCloakAura, bot);
+}
