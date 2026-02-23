@@ -112,4 +112,21 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsHoldSplitAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsHoldSplitAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin emperors hold split") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsWarlockTankAction : public AttackAction
+{
+public:
+    Aq40TwinEmperorsWarlockTankAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "aq40 twin emperors warlock tank")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 #endif
