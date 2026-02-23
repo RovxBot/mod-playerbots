@@ -91,6 +91,17 @@ bool IsDeathTalonSeether(Unit* unit)
     return name.find("death talon seether") != std::string::npos;
 }
 
+bool IsDeathTalonMob(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+
+    std::string const name = ToLower(unit->GetName());
+    return name.find("death talon") != std::string::npos;
+}
+
 bool IsDeathTalonCaptain(Unit* unit)
 {
     if (!unit || !unit->IsAlive())
@@ -109,6 +120,28 @@ bool HasSeetherEnrageAura(PlayerbotAI* botAI, Unit* seether)
     }
 
     return botAI->GetAura("enrage", seether, false, true) || botAI->GetAura("frenzy", seether, false, true);
+}
+
+int GetDetectMagicPriority(Unit* unit)
+{
+    if (!IsDeathTalonMob(unit))
+    {
+        return std::numeric_limits<int>::max();
+    }
+
+    std::string const name = ToLower(unit->GetName());
+    if (name.find("death talon wyrmguard") != std::string::npos)
+        return 10;
+    if (name.find("death talon captain") != std::string::npos)
+        return 20;
+    if (name.find("death talon seether") != std::string::npos)
+        return 30;
+    if (name.find("death talon flamescale") != std::string::npos)
+        return 40;
+    if (name.find("death talon overseer") != std::string::npos)
+        return 50;
+
+    return 90;
 }
 }  // namespace
 
@@ -273,4 +306,82 @@ bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
     }
 
     return botAI->CastSpell("tranquilizing shot", target);
+}
+
+bool BwlTrashDetectMagicAction::isUseful()
+{
+    if (bot->getClass() != CLASS_MAGE)
+    {
+        return false;
+    }
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    auto hasUndetectedDeathTalon = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsDeathTalonMob(unit))
+            {
+                continue;
+            }
+            if (!botAI->GetAura("detect magic", unit, false, true))
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    return hasUndetectedDeathTalon(attackers) || hasUndetectedDeathTalon(nearby);
+}
+
+bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_MAGE)
+    {
+        return false;
+    }
+
+    Unit* target = nullptr;
+    int bestPriority = std::numeric_limits<int>::max();
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    auto evaluate = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsDeathTalonMob(unit))
+            {
+                continue;
+            }
+
+            if (botAI->GetAura("detect magic", unit, false, true))
+            {
+                continue;
+            }
+
+            int const priority = GetDetectMagicPriority(unit);
+            if (priority < bestPriority)
+            {
+                bestPriority = priority;
+                target = unit;
+            }
+        }
+    };
+
+    evaluate(attackers);
+    evaluate(nearby);
+
+    if (!target)
+    {
+        return false;
+    }
+
+    return botAI->CastSpell("detect magic", target);
 }

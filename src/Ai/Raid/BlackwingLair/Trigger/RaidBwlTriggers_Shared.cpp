@@ -119,6 +119,36 @@ bool HasEnragedDeathTalonSeether(PlayerbotAI* botAI, GuidVector const& units)
 
     return false;
 }
+
+bool HasUndetectedDeathTalon(PlayerbotAI* botAI, GuidVector const& units)
+{
+    if (!botAI || units.empty())
+    {
+        return false;
+    }
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+        {
+            continue;
+        }
+
+        std::string const name = ToLower(unit->GetName());
+        if (name.find("death talon") == std::string::npos)
+        {
+            continue;
+        }
+
+        if (!botAI->GetAura("detect magic", unit, false, true))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 }  // namespace
 
 bool BwlMissingOnyxiaScaleCloakTrigger::IsActive()
@@ -161,4 +191,17 @@ bool BwlDeathTalonSeetherEnrageTrigger::IsActive()
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
 
     return HasEnragedDeathTalonSeether(botAI, attackers) || HasEnragedDeathTalonSeether(botAI, nearby);
+}
+
+bool BwlDeathTalonDetectMagicTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || bot->getClass() != CLASS_MAGE)
+    {
+        return false;
+    }
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+
+    return HasUndetectedDeathTalon(botAI, attackers) || HasUndetectedDeathTalon(botAI, nearby);
 }

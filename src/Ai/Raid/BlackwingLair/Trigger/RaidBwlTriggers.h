@@ -359,4 +359,14 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlDeathTalonDetectMagicTrigger : public Trigger
+{
+public:
+    BwlDeathTalonDetectMagicTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl death talon detect magic"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

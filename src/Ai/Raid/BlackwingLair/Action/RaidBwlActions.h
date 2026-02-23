@@ -176,6 +176,14 @@ public:
     bool isUseful() override;
 };
 
+class BwlTrashDetectMagicAction : public Action
+{
+public:
+    BwlTrashDetectMagicAction(PlayerbotAI* botAI) : Action(botAI, "bwl trash detect magic") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
