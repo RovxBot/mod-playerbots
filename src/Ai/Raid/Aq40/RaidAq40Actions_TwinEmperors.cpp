@@ -302,3 +302,45 @@ bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
     return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }
+
+bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    if (!assignment.veklor || !assignment.veknilash)
+        return false;
+
+    if (assignment.veklor->GetDistance2d(assignment.veknilash) >= 22.0f)
+        return false;
+
+    bool isWarlockTank = IsDesignatedWarlockTank(bot);
+    bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
+    if (!isWarlockTank && !isMeleeTank)
+        return false;
+
+    Unit* desiredBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
+    if (!desiredBoss)
+        return false;
+
+    bool acted = false;
+    if (AI_VALUE(Unit*, "current target") != desiredBoss)
+        acted = Attack(desiredBoss) || acted;
+
+    float desiredRange = isWarlockTank ? 24.0f : 4.0f;
+    float dx = bot->GetPositionX() - desiredBoss->GetPositionX();
+    float dy = bot->GetPositionY() - desiredBoss->GetPositionY();
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.1f)
+    {
+        dx = std::cos(bot->GetOrientation());
+        dy = std::sin(bot->GetOrientation());
+        len = 1.0f;
+    }
+
+    float moveX = desiredBoss->GetPositionX() + (dx / len) * desiredRange;
+    float moveY = desiredBoss->GetPositionY() + (dy / len) * desiredRange;
+    acted = MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+                   MovementPriority::MOVEMENT_COMBAT) || acted;
+
+    return acted;
+}

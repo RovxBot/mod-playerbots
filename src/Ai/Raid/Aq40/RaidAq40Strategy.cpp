@@ -58,9 +58,14 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 4),
         }));
     triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
-        { NextAction("aq40 twin emperors choose target", ACTION_RAID + 4) }));
+        {
+            NextAction("aq40 twin emperors choose target", ACTION_RAID + 5),
+            NextAction("aq40 twin emperors hold split", ACTION_RAID + 4),
+        }));
     triggers.push_back(new TriggerNode("aq40 twin emperors arcane burst risk",
         { NextAction("aq40 twin emperors avoid arcane burst", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 twin emperors need separation",
+        { NextAction("aq40 twin emperors enforce separation", ACTION_RAID + 6) }));
 
     // C'Thun pass 1 strategy:
     // - maintain spread and add kill priority

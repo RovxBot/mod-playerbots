@@ -122,6 +122,16 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinEmperorsNeedSeparationTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsNeedSeparationTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors need separation")
+    {
+    }
+    bool IsActive() override;
+};
+
 class Aq40CthunActiveTrigger : public Trigger
 {
 public:

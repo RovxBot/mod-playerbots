@@ -370,6 +370,32 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     return false;
 }
 
+bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    Unit* veklor = nullptr;
+    Unit* veknilash = nullptr;
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
+            veklor = unit;
+        else if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash"))
+            veknilash = unit;
+    }
+
+    if (!veklor || !veknilash)
+        return false;
+
+    return veklor->GetDistance2d(veknilash) < 20.0f;
+}
+
 bool Aq40CthunActiveTrigger::IsActive()
 {
     if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())

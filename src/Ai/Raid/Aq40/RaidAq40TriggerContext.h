@@ -27,6 +27,8 @@ public:
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
         creators["aq40 twin emperors arcane burst risk"] =
             &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
+        creators["aq40 twin emperors need separation"] =
+            &RaidAq40TriggerContext::twin_emperors_need_separation;
         creators["aq40 cthun active"] = &RaidAq40TriggerContext::cthun_active;
         creators["aq40 cthun phase2"] = &RaidAq40TriggerContext::cthun_phase2;
         creators["aq40 cthun adds present"] = &RaidAq40TriggerContext::cthun_adds_present;
@@ -58,6 +60,10 @@ private:
     static Trigger* twin_emperors_arcane_burst_risk(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsArcaneBurstRiskTrigger(botAI);
+    }
+    static Trigger* twin_emperors_need_separation(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsNeedSeparationTrigger(botAI);
     }
     static Trigger* cthun_active(PlayerbotAI* botAI) { return new Aq40CthunActiveTrigger(botAI); }
     static Trigger* cthun_phase2(PlayerbotAI* botAI) { return new Aq40CthunPhase2Trigger(botAI); }
