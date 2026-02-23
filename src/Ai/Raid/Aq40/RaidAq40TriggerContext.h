@@ -21,6 +21,10 @@ public:
         creators["aq40 sartura whirlwind"] = &RaidAq40TriggerContext::sartura_whirlwind;
         creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
         creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
+        creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
+        creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
+        creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
+        creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
     }
 
 private:
@@ -35,6 +39,13 @@ private:
     static Trigger* sartura_whirlwind(PlayerbotAI* botAI) { return new Aq40SarturaWhirlwindTrigger(botAI); }
     static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
     static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }
+    static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
+    static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
+    static Trigger* twin_emperors_active(PlayerbotAI* botAI) { return new Aq40TwinEmperorsActiveTrigger(botAI); }
+    static Trigger* twin_emperors_role_mismatch(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsRoleMismatchTrigger(botAI);
+    }
 };
 
 #endif

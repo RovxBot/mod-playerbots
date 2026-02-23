@@ -88,4 +88,28 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40HuhuranChooseTargetAction : public AttackAction
+{
+public:
+    Aq40HuhuranChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 huhuran choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40HuhuranPoisonSpreadAction : public MovementAction
+{
+public:
+    Aq40HuhuranPoisonSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 huhuran poison spread") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsChooseTargetAction : public AttackAction
+{
+public:
+    Aq40TwinEmperorsChooseTargetAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "aq40 twin emperors choose target")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 #endif

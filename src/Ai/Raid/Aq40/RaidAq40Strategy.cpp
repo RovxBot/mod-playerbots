@@ -39,6 +39,22 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 2) }));
     triggers.push_back(new TriggerNode("aq40 fankriss spawn active",
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 4) }));
+
+    // Huhuran baseline strategy:
+    // - maintain boss focus
+    // - move ranged non-tanks outward during poison/enrage phase
+    triggers.push_back(new TriggerNode("aq40 huhuran active",
+        { NextAction("aq40 huhuran choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 huhuran poison phase",
+        { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
+
+    // Twin Emperors baseline strategy:
+    // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor
+    // - recover target assignment quickly after teleport/target drift
+    triggers.push_back(new TriggerNode("aq40 twin emperors active",
+        { NextAction("aq40 twin emperors choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
+        { NextAction("aq40 twin emperors choose target", ACTION_RAID + 4) }));
 }
 
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
