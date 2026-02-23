@@ -1,149 +1,8 @@
 #include "RaidBwlActions.h"
 
-#include <algorithm>
-#include <cctype>
 #include <limits>
-#include <string>
 
 #include "SharedDefines.h"
-
-namespace
-{
-std::string ToLower(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value;
-}
-
-int GetBwlTrashPriority(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return std::numeric_limits<int>::max();
-    }
-
-    std::string const name = ToLower(unit->GetName());
-
-    // Research-based kill order for dangerous BWL trash mechanics.
-    if (name.find("blackwing spellbinder") != std::string::npos)
-        return 10;
-    if (name.find("blackwing warlock") != std::string::npos)
-        return 15;
-    if (name.find("enchanted felguard") != std::string::npos || name.find("felguard") != std::string::npos)
-        return 18;
-    if (name.find("blackwing taskmaster") != std::string::npos)
-        return 20;
-    if (name.find("death talon seether") != std::string::npos)
-        return 25;
-    if (name.find("death talon overseer") != std::string::npos)
-        return 28;
-    if (name.find("death talon flamescale") != std::string::npos)
-        return 30;
-    if (name.find("death talon captain") != std::string::npos)
-        return 35;
-    if (name.find("death talon wyrmguard") != std::string::npos || name.find("death talon dragonspawn") != std::string::npos ||
-        name.find("chromatic drakonid") != std::string::npos)
-        return 40;
-    if (name.find("death talon hatcher") != std::string::npos)
-        return 45;
-    if (name.find("blackwing technician") != std::string::npos)
-        return 50;
-    if (name.find("corrupted") != std::string::npos && name.find("whelp") != std::string::npos)
-        return 60;
-
-    if (name.find("blackwing") != std::string::npos || name.find("death talon") != std::string::npos)
-        return 90;
-
-    return std::numeric_limits<int>::max();
-}
-
-bool IsMagicImmuneBwlTrash(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-
-    std::string const name = ToLower(unit->GetName());
-    // Confirmed BWL trash immunity: spellbinders are magic-immune.
-    return name.find("blackwing spellbinder") != std::string::npos;
-}
-
-bool IsLikelyCasterPreferredTrash(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-
-    std::string const name = ToLower(unit->GetName());
-    // Overseers and chromatic drakonids are generally handled by casters probing vulnerabilities.
-    return name.find("death talon overseer") != std::string::npos || name.find("chromatic drakonid") != std::string::npos;
-}
-
-bool IsDeathTalonSeether(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-    std::string const name = ToLower(unit->GetName());
-    return name.find("death talon seether") != std::string::npos;
-}
-
-bool IsDeathTalonMob(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-
-    std::string const name = ToLower(unit->GetName());
-    return name.find("death talon") != std::string::npos;
-}
-
-bool IsDeathTalonCaptain(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-    std::string const name = ToLower(unit->GetName());
-    return name.find("death talon captain") != std::string::npos;
-}
-
-bool HasSeetherEnrageAura(PlayerbotAI* botAI, Unit* seether)
-{
-    if (!botAI || !seether || !seether->IsAlive())
-    {
-        return false;
-    }
-
-    return botAI->GetAura("enrage", seether, false, true) || botAI->GetAura("frenzy", seether, false, true);
-}
-
-int GetDetectMagicPriority(Unit* unit)
-{
-    if (!IsDeathTalonMob(unit))
-    {
-        return std::numeric_limits<int>::max();
-    }
-
-    std::string const name = ToLower(unit->GetName());
-    if (name.find("death talon wyrmguard") != std::string::npos)
-        return 10;
-    if (name.find("death talon captain") != std::string::npos)
-        return 20;
-    if (name.find("death talon seether") != std::string::npos)
-        return 30;
-    if (name.find("death talon flamescale") != std::string::npos)
-        return 40;
-    if (name.find("death talon overseer") != std::string::npos)
-        return 50;
-
-    return 90;
-}
-}  // namespace
 
 bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
 {
@@ -153,6 +12,7 @@ bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
 
 bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* bestTarget = nullptr;
     int bestPriority = std::numeric_limits<int>::max();
     Unit* fallbackTarget = nullptr;
@@ -169,7 +29,7 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
         for (ObjectGuid const guid : units)
         {
             Unit* unit = botAI->GetUnit(guid);
-            int const priority = GetBwlTrashPriority(unit);
+            int const priority = helper.GetTrashPriority(unit);
             if (priority == std::numeric_limits<int>::max())
             {
                 continue;
@@ -179,12 +39,12 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
             bool validForRole = true;
             int adjustedPriority = priority;
 
-            if (isCaster && IsMagicImmuneBwlTrash(unit))
+            if (isCaster && helper.IsMagicImmuneTrash(unit))
             {
                 validForRole = false;
                 adjustedPriority += 1000;
             }
-            else if (botAI->IsTank(bot) && IsDeathTalonCaptain(unit))
+            else if (botAI->IsTank(bot) && helper.IsDeathTalonCaptain(unit))
             {
                 // Captain Aura of Flames reflects punishing fire damage.
                 // If tank is low, avoid direct focus while aura is active.
@@ -194,7 +54,7 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
                     adjustedPriority += 1000;
                 }
             }
-            else if (isPhysical && IsLikelyCasterPreferredTrash(unit))
+            else if (isPhysical && helper.IsCasterPreferredTrash(unit))
             {
                 // Keep tanks/melee on physical-friendly threats first where possible.
                 adjustedPriority += 6;
@@ -242,28 +102,8 @@ bool BwlTrashTranqSeetherAction::isUseful()
     {
         return false;
     }
-
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
-
-    auto hasEnragedSeether = [&](GuidVector const& units)
-    {
-        for (ObjectGuid const guid : units)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!IsDeathTalonSeether(unit))
-            {
-                continue;
-            }
-            if (HasSeetherEnrageAura(botAI, unit))
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    return hasEnragedSeether(attackers) || hasEnragedSeether(nearby);
+    BwlBossHelper helper(botAI);
+    return helper.HasEnragedDeathTalonSeetherNearbyOrAttacking();
 }
 
 bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
@@ -274,6 +114,7 @@ bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
     }
 
     Unit* target = nullptr;
+    BwlBossHelper helper(botAI);
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
@@ -283,11 +124,11 @@ bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
         for (ObjectGuid const guid : units)
         {
             Unit* unit = botAI->GetUnit(guid);
-            if (!IsDeathTalonSeether(unit))
+            if (!helper.IsDeathTalonSeether(unit))
             {
                 continue;
             }
-            if (HasSeetherEnrageAura(botAI, unit))
+            if (helper.HasEnragedDeathTalonSeether(unit))
             {
                 return unit;
             }
@@ -314,28 +155,8 @@ bool BwlTrashDetectMagicAction::isUseful()
     {
         return false;
     }
-
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
-
-    auto hasUndetectedDeathTalon = [&](GuidVector const& units)
-    {
-        for (ObjectGuid const guid : units)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!IsDeathTalonMob(unit))
-            {
-                continue;
-            }
-            if (!botAI->GetAura("detect magic", unit, false, true))
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    return hasUndetectedDeathTalon(attackers) || hasUndetectedDeathTalon(nearby);
+    BwlBossHelper helper(botAI);
+    return helper.HasUndetectedDeathTalonNearbyOrAttacking();
 }
 
 bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
@@ -347,6 +168,7 @@ bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
 
     Unit* target = nullptr;
     int bestPriority = std::numeric_limits<int>::max();
+    BwlBossHelper helper(botAI);
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
@@ -356,7 +178,7 @@ bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
         for (ObjectGuid const guid : units)
         {
             Unit* unit = botAI->GetUnit(guid);
-            if (!IsDeathTalonMob(unit))
+            if (!helper.IsDeathTalonMob(unit))
             {
                 continue;
             }
@@ -366,7 +188,7 @@ bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
                 continue;
             }
 
-            int const priority = GetDetectMagicPriority(unit);
+            int const priority = helper.GetDetectMagicPriority(unit);
             if (priority < bestPriority)
             {
                 bestPriority = priority;

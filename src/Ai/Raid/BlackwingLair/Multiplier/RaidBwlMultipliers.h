@@ -14,4 +14,24 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlEncounterTargetingMultiplier : public Multiplier
+{
+public:
+    BwlEncounterTargetingMultiplier(PlayerbotAI* ai) : Multiplier(ai, "bwl encounter targeting"), helper(ai) {}
+    float GetValue(Action* action) override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlEncounterPositioningMultiplier : public Multiplier
+{
+public:
+    BwlEncounterPositioningMultiplier(PlayerbotAI* ai) : Multiplier(ai, "bwl encounter positioning"), helper(ai) {}
+    float GetValue(Action* action) override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

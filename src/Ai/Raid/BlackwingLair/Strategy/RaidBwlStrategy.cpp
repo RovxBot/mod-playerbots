@@ -108,4 +108,6 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 void RaidBwlStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new BwlGenericMultiplier(botAI));
+    multipliers.push_back(new BwlEncounterTargetingMultiplier(botAI));
+    multipliers.push_back(new BwlEncounterPositioningMultiplier(botAI));
 }

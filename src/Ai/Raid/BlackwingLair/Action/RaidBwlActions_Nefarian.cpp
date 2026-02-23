@@ -1,32 +1,9 @@
 #include "RaidBwlActions.h"
-
-#include <algorithm>
-#include <cctype>
 #include <cmath>
-#include <string>
-
-namespace
-{
-bool ContainsToken(std::string value, char const* token)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value.find(token) != std::string::npos;
-}
-
-bool IsNefarianPhaseOneAdd(Unit* unit)
-{
-    if (!unit || !unit->IsAlive())
-    {
-        return false;
-    }
-
-    std::string name = unit->GetName();
-    return ContainsToken(name, "drakonid") || ContainsToken(name, "dragonspawn") || ContainsToken(name, "wyrmguard");
-}
-}  // namespace
 
 bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     Unit* target = nullptr;
 
@@ -38,7 +15,7 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
             continue;
         }
 
-        if (IsNefarianPhaseOneAdd(unit))
+        if (helper.IsNefarianPhaseOneAdd(unit))
         {
             target = unit;
             break;
