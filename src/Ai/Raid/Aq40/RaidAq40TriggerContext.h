@@ -25,6 +25,13 @@ public:
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
+        creators["aq40 cthun active"] = &RaidAq40TriggerContext::cthun_active;
+        creators["aq40 cthun phase2"] = &RaidAq40TriggerContext::cthun_phase2;
+        creators["aq40 cthun adds present"] = &RaidAq40TriggerContext::cthun_adds_present;
+        creators["aq40 cthun dark glare"] = &RaidAq40TriggerContext::cthun_dark_glare;
+        creators["aq40 cthun in stomach"] = &RaidAq40TriggerContext::cthun_in_stomach;
+        creators["aq40 cthun vulnerable"] = &RaidAq40TriggerContext::cthun_vulnerable;
+        creators["aq40 cthun eye cast"] = &RaidAq40TriggerContext::cthun_eye_cast;
     }
 
 private:
@@ -46,6 +53,13 @@ private:
     {
         return new Aq40TwinEmperorsRoleMismatchTrigger(botAI);
     }
+    static Trigger* cthun_active(PlayerbotAI* botAI) { return new Aq40CthunActiveTrigger(botAI); }
+    static Trigger* cthun_phase2(PlayerbotAI* botAI) { return new Aq40CthunPhase2Trigger(botAI); }
+    static Trigger* cthun_adds_present(PlayerbotAI* botAI) { return new Aq40CthunAddsPresentTrigger(botAI); }
+    static Trigger* cthun_dark_glare(PlayerbotAI* botAI) { return new Aq40CthunDarkGlareTrigger(botAI); }
+    static Trigger* cthun_in_stomach(PlayerbotAI* botAI) { return new Aq40CthunInStomachTrigger(botAI); }
+    static Trigger* cthun_vulnerable(PlayerbotAI* botAI) { return new Aq40CthunVulnerableTrigger(botAI); }
+    static Trigger* cthun_eye_cast(PlayerbotAI* botAI) { return new Aq40CthunEyeCastTrigger(botAI); }
 };
 
 #endif

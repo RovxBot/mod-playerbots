@@ -129,4 +129,63 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40CthunChooseTargetAction : public AttackAction
+{
+public:
+    Aq40CthunChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 cthun choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunMaintainSpreadAction : public MovementAction
+{
+public:
+    Aq40CthunMaintainSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 cthun maintain spread") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunAvoidDarkGlareAction : public MovementAction
+{
+public:
+    Aq40CthunAvoidDarkGlareAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 cthun avoid dark glare") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunStomachDpsAction : public AttackAction
+{
+public:
+    Aq40CthunStomachDpsAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 cthun stomach dps") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunStomachExitAction : public MovementAction
+{
+public:
+    Aq40CthunStomachExitAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 cthun stomach exit") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunPhase2AddPriorityAction : public AttackAction
+{
+public:
+    Aq40CthunPhase2AddPriorityAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "aq40 cthun phase2 add priority")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunVulnerableBurstAction : public AttackAction
+{
+public:
+    Aq40CthunVulnerableBurstAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 cthun vulnerable burst") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40CthunInterruptEyeAction : public AttackAction
+{
+public:
+    Aq40CthunInterruptEyeAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 cthun interrupt eye") {}
+    bool Execute(Event event) override;
+};
+
 #endif
