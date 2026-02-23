@@ -31,6 +31,7 @@ public:
         creators["bwl nefarian phase one tunnel position"] = &RaidBwlActionContext::bwl_nefarian_phase_one_tunnel_position;
         creators["bwl nefarian phase two choose target"] = &RaidBwlActionContext::bwl_nefarian_phase_two_choose_target;
         creators["bwl nefarian phase two position"] = &RaidBwlActionContext::bwl_nefarian_phase_two_position;
+        creators["bwl trash choose target"] = &RaidBwlActionContext::bwl_trash_choose_target;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
         creators["bwl use hourglass sand"] = &RaidBwlActionContext::bwl_use_hourglass_sand;
     }
@@ -66,6 +67,7 @@ private:
         return new BwlNefarianPhaseTwoChooseTargetAction(botAI);
     }
     static Action* bwl_nefarian_phase_two_position(PlayerbotAI* botAI) { return new BwlNefarianPhaseTwoPositionAction(botAI); }
+    static Action* bwl_trash_choose_target(PlayerbotAI* botAI) { return new BwlTrashChooseTargetAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }
     static Action* bwl_use_hourglass_sand(PlayerbotAI* botAI) { return new BwlUseHourglassSandAction(botAI); }
 };

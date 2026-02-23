@@ -161,6 +161,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlTrashChooseTargetAction : public AttackAction
+{
+public:
+    BwlTrashChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl trash choose target") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

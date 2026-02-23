@@ -8,6 +8,9 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl missing onyxia scale cloak",
         { NextAction("bwl warn onyxia scale cloak", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode("bwl trash dangerous encounter",
+        { NextAction("bwl trash choose target", ACTION_RAID + 2) }));
+
     triggers.push_back(new TriggerNode("bwl razorgore encounter",
         { NextAction("bwl razorgore choose target", ACTION_RAID + 1) }));
 

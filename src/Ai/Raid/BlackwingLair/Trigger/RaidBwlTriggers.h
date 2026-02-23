@@ -336,4 +336,14 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlTrashDangerousEncounterTrigger : public Trigger
+{
+public:
+    BwlTrashDangerousEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl trash dangerous encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif
