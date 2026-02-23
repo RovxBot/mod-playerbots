@@ -234,4 +234,37 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlChromaggusEncounterTrigger : public Trigger
+{
+public:
+    BwlChromaggusEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl chromaggus encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlChromaggusPositioningTrigger : public Trigger
+{
+public:
+    BwlChromaggusPositioningTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl chromaggus positioning"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlChromaggusFrenzyTrigger : public Trigger
+{
+public:
+    BwlChromaggusFrenzyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl chromaggus frenzy"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

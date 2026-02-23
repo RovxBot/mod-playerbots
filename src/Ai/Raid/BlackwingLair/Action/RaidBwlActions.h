@@ -101,6 +101,28 @@ public:
     bool isUseful() override;
 };
 
+class BwlChromaggusChooseTargetAction : public AttackAction
+{
+public:
+    BwlChromaggusChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl chromaggus choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlChromaggusPositionAction : public MovementAction
+{
+public:
+    BwlChromaggusPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl chromaggus position") {}
+    bool Execute(Event event) override;
+};
+
+class BwlChromaggusTranqAction : public Action
+{
+public:
+    BwlChromaggusTranqAction(PlayerbotAI* botAI) : Action(botAI, "bwl chromaggus tranq") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

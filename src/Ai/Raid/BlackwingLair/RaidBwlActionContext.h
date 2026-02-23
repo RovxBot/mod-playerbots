@@ -23,6 +23,9 @@ public:
         creators["bwl flamegor choose target"] = &RaidBwlActionContext::bwl_flamegor_choose_target;
         creators["bwl flamegor position"] = &RaidBwlActionContext::bwl_flamegor_position;
         creators["bwl flamegor tranq"] = &RaidBwlActionContext::bwl_flamegor_tranq;
+        creators["bwl chromaggus choose target"] = &RaidBwlActionContext::bwl_chromaggus_choose_target;
+        creators["bwl chromaggus position"] = &RaidBwlActionContext::bwl_chromaggus_position;
+        creators["bwl chromaggus tranq"] = &RaidBwlActionContext::bwl_chromaggus_tranq;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
         creators["bwl use hourglass sand"] = &RaidBwlActionContext::bwl_use_hourglass_sand;
     }
@@ -41,6 +44,9 @@ private:
     static Action* bwl_flamegor_choose_target(PlayerbotAI* botAI) { return new BwlFlamegorChooseTargetAction(botAI); }
     static Action* bwl_flamegor_position(PlayerbotAI* botAI) { return new BwlFlamegorPositionAction(botAI); }
     static Action* bwl_flamegor_tranq(PlayerbotAI* botAI) { return new BwlFlamegorTranqAction(botAI); }
+    static Action* bwl_chromaggus_choose_target(PlayerbotAI* botAI) { return new BwlChromaggusChooseTargetAction(botAI); }
+    static Action* bwl_chromaggus_position(PlayerbotAI* botAI) { return new BwlChromaggusPositionAction(botAI); }
+    static Action* bwl_chromaggus_tranq(PlayerbotAI* botAI) { return new BwlChromaggusTranqAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }
     static Action* bwl_use_hourglass_sand(PlayerbotAI* botAI) { return new BwlUseHourglassSandAction(botAI); }
 };

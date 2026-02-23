@@ -62,6 +62,15 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl flamegor frenzy",
         { NextAction("bwl flamegor tranq", ACTION_EMERGENCY + 7) }));
 
+    triggers.push_back(new TriggerNode("bwl chromaggus encounter",
+        { NextAction("bwl chromaggus choose target", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl chromaggus positioning",
+        { NextAction("bwl chromaggus position", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl chromaggus frenzy",
+        { NextAction("bwl chromaggus tranq", ACTION_EMERGENCY + 7) }));
+
     triggers.push_back(new TriggerNode("bwl suppression device",
                         { NextAction("bwl turn off suppression device", ACTION_RAID) }));
 
