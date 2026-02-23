@@ -78,3 +78,25 @@ bool BwlVaelastraszMainTankBurningAdrenalineTrigger::IsActive()
 
     return HasBurningAdrenaline(botAI, mainTank);
 }
+
+bool BwlVaelastraszPositioningTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
+    if (!vael || !vael->IsAlive())
+    {
+        return false;
+    }
+
+    // BA bots should run out; movement handled by dedicated trigger/action.
+    if (HasBurningAdrenaline(botAI, bot))
+    {
+        return false;
+    }
+
+    return true;
+}

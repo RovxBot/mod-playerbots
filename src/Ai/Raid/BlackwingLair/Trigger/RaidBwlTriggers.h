@@ -85,4 +85,17 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlVaelastraszPositioningTrigger : public Trigger
+{
+public:
+    BwlVaelastraszPositioningTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl vaelastrasz positioning"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

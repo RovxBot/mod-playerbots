@@ -30,6 +30,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlVaelastraszPositionAction : public MovementAction
+{
+public:
+    BwlVaelastraszPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl vaelastrasz position") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
