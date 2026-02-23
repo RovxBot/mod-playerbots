@@ -32,6 +32,16 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("aq40 sartura whirlwind",
         { NextAction("aq40 sartura avoid whirlwind", ACTION_RAID + 4) }));
 
+    // Bug Trio baseline strategy:
+    // - follow stable kill order and prioritize Yauj heal interruptions
+    // - move out from Kri poison cloud death zone
+    triggers.push_back(new TriggerNode("aq40 bug trio active",
+        { NextAction("aq40 bug trio choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 bug trio heal cast",
+        { NextAction("aq40 bug trio choose target", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 bug trio poison cloud",
+        { NextAction("aq40 bug trio avoid poison cloud", ACTION_RAID + 5) }));
+
     // Fankriss baseline strategy:
     // - kill Spawn of Fankriss immediately
     // - fall back to boss pressure between spawn waves
@@ -66,6 +76,36 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 twin emperors avoid arcane burst", ACTION_RAID + 5) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors need separation",
         { NextAction("aq40 twin emperors enforce separation", ACTION_RAID + 6) }));
+
+    // Ouro baseline strategy:
+    // - keep melee contact to reduce avoidable submerge windows
+    // - non-tanks avoid sweep range and dirt mound submerge hazards
+    // - prioritize spawned scarabs immediately
+    triggers.push_back(new TriggerNode("aq40 ouro active",
+        {
+            NextAction("aq40 ouro choose target", ACTION_RAID + 2),
+            NextAction("aq40 ouro hold melee contact", ACTION_RAID + 3),
+        }));
+    triggers.push_back(new TriggerNode("aq40 ouro scarabs present",
+        { NextAction("aq40 ouro choose target", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 ouro sweep risk",
+        { NextAction("aq40 ouro avoid sweep", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 ouro submerge hazard",
+        { NextAction("aq40 ouro avoid submerge", ACTION_RAID + 5) }));
+
+    // Viscidus baseline strategy:
+    // - maintain boss/glob priority targeting
+    // - ranged applies frost pressure in non-frozen phases
+    // - melee commits during frozen shatter windows
+    triggers.push_back(new TriggerNode("aq40 viscidus active",
+        {
+            NextAction("aq40 viscidus choose target", ACTION_RAID + 2),
+            NextAction("aq40 viscidus use frost", ACTION_RAID + 3),
+        }));
+    triggers.push_back(new TriggerNode("aq40 viscidus frozen",
+        { NextAction("aq40 viscidus shatter", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 viscidus globs present",
+        { NextAction("aq40 viscidus choose target", ACTION_RAID + 5) }));
 
     // C'Thun pass 1 strategy:
     // - maintain spread and add kill priority

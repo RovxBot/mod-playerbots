@@ -19,6 +19,9 @@ public:
         creators["aq40 skeram execute phase"] = &RaidAq40TriggerContext::skeram_execute_phase;
         creators["aq40 sartura active"] = &RaidAq40TriggerContext::sartura_active;
         creators["aq40 sartura whirlwind"] = &RaidAq40TriggerContext::sartura_whirlwind;
+        creators["aq40 bug trio active"] = &RaidAq40TriggerContext::bug_trio_active;
+        creators["aq40 bug trio heal cast"] = &RaidAq40TriggerContext::bug_trio_heal_cast;
+        creators["aq40 bug trio poison cloud"] = &RaidAq40TriggerContext::bug_trio_poison_cloud;
         creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
         creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
         creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
@@ -29,6 +32,13 @@ public:
             &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
         creators["aq40 twin emperors need separation"] =
             &RaidAq40TriggerContext::twin_emperors_need_separation;
+        creators["aq40 ouro active"] = &RaidAq40TriggerContext::ouro_active;
+        creators["aq40 ouro scarabs present"] = &RaidAq40TriggerContext::ouro_scarabs_present;
+        creators["aq40 ouro sweep risk"] = &RaidAq40TriggerContext::ouro_sweep_risk;
+        creators["aq40 ouro submerge hazard"] = &RaidAq40TriggerContext::ouro_submerge_hazard;
+        creators["aq40 viscidus active"] = &RaidAq40TriggerContext::viscidus_active;
+        creators["aq40 viscidus frozen"] = &RaidAq40TriggerContext::viscidus_frozen;
+        creators["aq40 viscidus globs present"] = &RaidAq40TriggerContext::viscidus_globs_present;
         creators["aq40 cthun active"] = &RaidAq40TriggerContext::cthun_active;
         creators["aq40 cthun phase2"] = &RaidAq40TriggerContext::cthun_phase2;
         creators["aq40 cthun adds present"] = &RaidAq40TriggerContext::cthun_adds_present;
@@ -48,6 +58,9 @@ private:
     static Trigger* skeram_execute_phase(PlayerbotAI* botAI) { return new Aq40SkeramExecutePhaseTrigger(botAI); }
     static Trigger* sartura_active(PlayerbotAI* botAI) { return new Aq40SarturaActiveTrigger(botAI); }
     static Trigger* sartura_whirlwind(PlayerbotAI* botAI) { return new Aq40SarturaWhirlwindTrigger(botAI); }
+    static Trigger* bug_trio_active(PlayerbotAI* botAI) { return new Aq40BugTrioActiveTrigger(botAI); }
+    static Trigger* bug_trio_heal_cast(PlayerbotAI* botAI) { return new Aq40BugTrioHealCastTrigger(botAI); }
+    static Trigger* bug_trio_poison_cloud(PlayerbotAI* botAI) { return new Aq40BugTrioPoisonCloudTrigger(botAI); }
     static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
     static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }
     static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
@@ -65,6 +78,13 @@ private:
     {
         return new Aq40TwinEmperorsNeedSeparationTrigger(botAI);
     }
+    static Trigger* ouro_active(PlayerbotAI* botAI) { return new Aq40OuroActiveTrigger(botAI); }
+    static Trigger* ouro_scarabs_present(PlayerbotAI* botAI) { return new Aq40OuroScarabsTrigger(botAI); }
+    static Trigger* ouro_sweep_risk(PlayerbotAI* botAI) { return new Aq40OuroSweepTrigger(botAI); }
+    static Trigger* ouro_submerge_hazard(PlayerbotAI* botAI) { return new Aq40OuroSubmergeTrigger(botAI); }
+    static Trigger* viscidus_active(PlayerbotAI* botAI) { return new Aq40ViscidusActiveTrigger(botAI); }
+    static Trigger* viscidus_frozen(PlayerbotAI* botAI) { return new Aq40ViscidusFrozenTrigger(botAI); }
+    static Trigger* viscidus_globs_present(PlayerbotAI* botAI) { return new Aq40ViscidusGlobTrigger(botAI); }
     static Trigger* cthun_active(PlayerbotAI* botAI) { return new Aq40CthunActiveTrigger(botAI); }
     static Trigger* cthun_phase2(PlayerbotAI* botAI) { return new Aq40CthunPhase2Trigger(botAI); }
     static Trigger* cthun_adds_present(PlayerbotAI* botAI) { return new Aq40CthunAddsPresentTrigger(botAI); }

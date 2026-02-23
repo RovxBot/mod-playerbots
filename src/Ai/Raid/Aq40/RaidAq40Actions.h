@@ -81,6 +81,23 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40BugTrioChooseTargetAction : public AttackAction
+{
+public:
+    Aq40BugTrioChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 bug trio choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40BugTrioAvoidPoisonCloudAction : public MovementAction
+{
+public:
+    Aq40BugTrioAvoidPoisonCloudAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 bug trio avoid poison cloud")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40FankrissChooseTargetAction : public AttackAction
 {
 public:
@@ -146,6 +163,58 @@ public:
         : MovementAction(botAI, "aq40 twin emperors enforce separation")
     {
     }
+    bool Execute(Event event) override;
+};
+
+class Aq40OuroChooseTargetAction : public AttackAction
+{
+public:
+    Aq40OuroChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 ouro choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40OuroHoldMeleeContactAction : public MovementAction
+{
+public:
+    Aq40OuroHoldMeleeContactAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 ouro hold melee contact")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40OuroAvoidSweepAction : public MovementAction
+{
+public:
+    Aq40OuroAvoidSweepAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 ouro avoid sweep") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40OuroAvoidSubmergeAction : public MovementAction
+{
+public:
+    Aq40OuroAvoidSubmergeAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 ouro avoid submerge") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40ViscidusChooseTargetAction : public AttackAction
+{
+public:
+    Aq40ViscidusChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 viscidus choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40ViscidusUseFrostAction : public AttackAction
+{
+public:
+    Aq40ViscidusUseFrostAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 viscidus use frost") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40ViscidusShatterAction : public AttackAction
+{
+public:
+    Aq40ViscidusShatterAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 viscidus shatter") {}
     bool Execute(Event event) override;
 };
 
