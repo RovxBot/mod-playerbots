@@ -1,6 +1,7 @@
 #include "RaidAq40Triggers.h"
 
 #include <initializer_list>
+#include <limits>
 
 #include "ObjectGuid.h"
 
@@ -22,6 +23,37 @@ bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initia
     }
 
     return false;
+}
+
+uint32 GetAliveWarlockOrdinal(Player* player)
+{
+    if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
+        return std::numeric_limits<uint32>::max();
+
+    Group* group = player->GetGroup();
+    if (!group)
+        return 0;
+
+    uint32 ordinal = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
+            continue;
+
+        if (member->GetGUID() == player->GetGUID())
+            return ordinal;
+
+        ++ordinal;
+    }
+
+    return std::numeric_limits<uint32>::max();
+}
+
+bool IsDesignatedTwinWarlockTank(Player* player)
+{
+    uint32 ordinal = GetAliveWarlockOrdinal(player);
+    return ordinal != std::numeric_limits<uint32>::max() && ordinal < 2;
 }
 }  // namespace
 
@@ -300,6 +332,9 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     }
 
     bool preferVeknilash = botAI->IsTank(bot) || !botAI->IsRanged(bot);
+    if (IsDesignatedTwinWarlockTank(bot))
+        preferVeknilash = false;
+
     if (preferVeknilash &&
         botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor") && hasVeknilash)
         return true;
@@ -311,6 +346,28 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     bool onEmperor = botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") ||
                      botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor");
     return !onEmperor;
+}
+
+bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+        return false;
+
+    if (IsDesignatedTwinWarlockTank(bot))
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
+            continue;
+
+        if (bot->GetDistance2d(unit) <= 18.0f)
+            return true;
+    }
+
+    return false;
 }
 
 bool Aq40CthunActiveTrigger::IsActive()
