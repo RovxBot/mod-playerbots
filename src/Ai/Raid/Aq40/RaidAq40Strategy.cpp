@@ -59,6 +59,31 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         }));
     triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
         { NextAction("aq40 twin emperors choose target", ACTION_RAID + 4) }));
+
+    // C'Thun pass 1 strategy:
+    // - maintain spread and add kill priority
+    // - react to Dark Glare with lateral movement
+    // - stomach team kills Flesh Tentacle and exits on high acid stacks
+    triggers.push_back(new TriggerNode("aq40 cthun active",
+        {
+            NextAction("aq40 cthun choose target", ACTION_RAID + 2),
+            NextAction("aq40 cthun maintain spread", ACTION_RAID + 3),
+        }));
+    triggers.push_back(new TriggerNode("aq40 cthun phase2",
+        { NextAction("aq40 cthun phase2 add priority", ACTION_RAID + 3) }));
+    triggers.push_back(new TriggerNode("aq40 cthun adds present",
+        { NextAction("aq40 cthun phase2 add priority", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 cthun dark glare",
+        { NextAction("aq40 cthun avoid dark glare", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 cthun eye cast",
+        { NextAction("aq40 cthun interrupt eye", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 cthun in stomach",
+        {
+            NextAction("aq40 cthun stomach dps", ACTION_RAID + 4),
+            NextAction("aq40 cthun stomach exit", ACTION_RAID + 5),
+        }));
+    triggers.push_back(new TriggerNode("aq40 cthun vulnerable",
+        { NextAction("aq40 cthun vulnerable burst", ACTION_RAID + 4) }));
 }
 
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)

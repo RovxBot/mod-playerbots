@@ -23,6 +23,14 @@ public:
         creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
+        creators["aq40 cthun choose target"] = &RaidAq40ActionContext::cthun_choose_target;
+        creators["aq40 cthun maintain spread"] = &RaidAq40ActionContext::cthun_maintain_spread;
+        creators["aq40 cthun avoid dark glare"] = &RaidAq40ActionContext::cthun_avoid_dark_glare;
+        creators["aq40 cthun stomach dps"] = &RaidAq40ActionContext::cthun_stomach_dps;
+        creators["aq40 cthun stomach exit"] = &RaidAq40ActionContext::cthun_stomach_exit;
+        creators["aq40 cthun phase2 add priority"] = &RaidAq40ActionContext::cthun_phase2_add_priority;
+        creators["aq40 cthun vulnerable burst"] = &RaidAq40ActionContext::cthun_vulnerable_burst;
+        creators["aq40 cthun interrupt eye"] = &RaidAq40ActionContext::cthun_interrupt_eye;
     }
 
 private:
@@ -54,6 +62,20 @@ private:
     {
         return new Aq40TwinEmperorsWarlockTankAction(botAI);
     }
+    static Action* cthun_choose_target(PlayerbotAI* botAI) { return new Aq40CthunChooseTargetAction(botAI); }
+    static Action* cthun_maintain_spread(PlayerbotAI* botAI) { return new Aq40CthunMaintainSpreadAction(botAI); }
+    static Action* cthun_avoid_dark_glare(PlayerbotAI* botAI) { return new Aq40CthunAvoidDarkGlareAction(botAI); }
+    static Action* cthun_stomach_dps(PlayerbotAI* botAI) { return new Aq40CthunStomachDpsAction(botAI); }
+    static Action* cthun_stomach_exit(PlayerbotAI* botAI) { return new Aq40CthunStomachExitAction(botAI); }
+    static Action* cthun_phase2_add_priority(PlayerbotAI* botAI)
+    {
+        return new Aq40CthunPhase2AddPriorityAction(botAI);
+    }
+    static Action* cthun_vulnerable_burst(PlayerbotAI* botAI)
+    {
+        return new Aq40CthunVulnerableBurstAction(botAI);
+    }
+    static Action* cthun_interrupt_eye(PlayerbotAI* botAI) { return new Aq40CthunInterruptEyeAction(botAI); }
 };
 
 #endif

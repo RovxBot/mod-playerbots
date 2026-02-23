@@ -112,4 +112,53 @@ public:
     bool IsActive() override;
 };
 
+class Aq40CthunActiveTrigger : public Trigger
+{
+public:
+    Aq40CthunActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun active") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunPhase2Trigger : public Trigger
+{
+public:
+    Aq40CthunPhase2Trigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun phase2") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunAddsPresentTrigger : public Trigger
+{
+public:
+    Aq40CthunAddsPresentTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun adds present") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunDarkGlareTrigger : public Trigger
+{
+public:
+    Aq40CthunDarkGlareTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun dark glare") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunInStomachTrigger : public Trigger
+{
+public:
+    Aq40CthunInStomachTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun in stomach") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunVulnerableTrigger : public Trigger
+{
+public:
+    Aq40CthunVulnerableTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun vulnerable") {}
+    bool IsActive() override;
+};
+
+class Aq40CthunEyeCastTrigger : public Trigger
+{
+public:
+    Aq40CthunEyeCastTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 cthun eye cast") {}
+    bool IsActive() override;
+};
+
 #endif

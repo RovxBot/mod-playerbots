@@ -1,6 +1,29 @@
 #include "RaidAq40Triggers.h"
 
+#include <initializer_list>
+
 #include "ObjectGuid.h"
+
+namespace
+{
+bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
+{
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        for (char const* name : names)
+        {
+            if (botAI->EqualLowercaseName(unit->GetName(), name))
+                return true;
+        }
+    }
+
+    return false;
+}
+}  // namespace
 
 bool Aq40EngageTrigger::IsActive()
 {
@@ -288,4 +311,107 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     bool onEmperor = botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") ||
                      botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor");
     return !onEmperor;
+}
+
+bool Aq40CthunActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers,
+                          { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
+                            "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+}
+
+bool Aq40CthunPhase2Trigger::IsActive()
+{
+    if (!Aq40CthunActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers,
+                          { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+}
+
+bool Aq40CthunAddsPresentTrigger::IsActive()
+{
+    if (!Aq40CthunActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    return IsAnyNamedUnit(botAI, attackers,
+                          { "eye tentacle", "claw tentacle", "giant eye tentacle", "giant claw tentacle",
+                            "flesh tentacle" });
+}
+
+bool Aq40CthunDarkGlareTrigger::IsActive()
+{
+    if (!Aq40CthunActiveTrigger::IsActive())
+        return false;
+
+    if (Aq40CthunInStomachTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (!botAI->EqualLowercaseName(unit->GetName(), "eye of c'thun"))
+            continue;
+
+        if (unit->GetCurrentSpell(CURRENT_GENERIC_SPELL) || botAI->HasAura("dark glare", unit))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40CthunInStomachTrigger::IsActive()
+{
+    return botAI->GetAura("digestive acid", bot, false, false) ||
+           botAI->GetAura("digestive acid", bot, false, true, 1);
+}
+
+bool Aq40CthunVulnerableTrigger::IsActive()
+{
+    if (!Aq40CthunPhase2Trigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (botAI->EqualLowercaseName(unit->GetName(), "c'thun") && botAI->HasAura("weakened", unit))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40CthunEyeCastTrigger::IsActive()
+{
+    if (!Aq40CthunActiveTrigger::IsActive() || Aq40CthunInStomachTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        bool isEyeTentacle = botAI->EqualLowercaseName(unit->GetName(), "eye tentacle") ||
+                             botAI->EqualLowercaseName(unit->GetName(), "giant eye tentacle");
+        if (isEyeTentacle && unit->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+            return true;
+    }
+
+    return false;
 }
