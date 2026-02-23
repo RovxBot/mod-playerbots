@@ -191,3 +191,101 @@ bool Aq40FankrissSpawnedTrigger::IsActive()
 
     return false;
 }
+
+bool Aq40HuhuranActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && botAI->EqualLowercaseName(unit->GetName(), "princess huhuran"))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
+{
+    if (!Aq40HuhuranActiveTrigger::IsActive())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess huhuran"))
+            continue;
+
+        // Phase transition baseline:
+        // spread ranged during the dangerous poison volley/enrage window.
+        if (unit->GetHealthPct() <= 32.0f)
+            return true;
+
+        if (botAI->HasAura("frenzy", unit) || botAI->HasAura("berserk", unit))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TwinEmperorsActiveTrigger::IsActive()
+{
+    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash") ||
+            botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+        return false;
+
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (!currentTarget)
+        return true;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    bool hasVeknilash = false;
+    bool hasVeklor = false;
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash"))
+            hasVeknilash = true;
+        else if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
+            hasVeklor = true;
+    }
+
+    bool preferVeknilash = botAI->IsTank(bot) || !botAI->IsRanged(bot);
+    if (preferVeknilash &&
+        botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor") && hasVeknilash)
+        return true;
+
+    if (!preferVeknilash &&
+        botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") && hasVeklor)
+        return true;
+
+    bool onEmperor = botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") ||
+                     botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor");
+    return !onEmperor;
+}

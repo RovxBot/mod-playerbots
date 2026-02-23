@@ -81,4 +81,35 @@ public:
     bool IsActive() override;
 };
 
+class Aq40HuhuranActiveTrigger : public Trigger
+{
+public:
+    Aq40HuhuranActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 huhuran active") {}
+    bool IsActive() override;
+};
+
+class Aq40HuhuranPoisonPhaseTrigger : public Trigger
+{
+public:
+    Aq40HuhuranPoisonPhaseTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 huhuran poison phase") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinEmperorsActiveTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin emperors active") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinEmperorsRoleMismatchTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsRoleMismatchTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors role mismatch")
+    {
+    }
+    bool IsActive() override;
+};
+
 #endif
