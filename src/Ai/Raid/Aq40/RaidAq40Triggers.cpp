@@ -1,9 +1,9 @@
 #include "RaidAq40Triggers.h"
 
 #include <initializer_list>
-#include <limits>
 
 #include "ObjectGuid.h"
+#include "RaidAq40SpellIds.h"
 
 namespace
 {
@@ -25,36 +25,6 @@ bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initia
     return false;
 }
 
-uint32 GetAliveWarlockOrdinal(Player* player)
-{
-    if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
-        return std::numeric_limits<uint32>::max();
-
-    Group* group = player->GetGroup();
-    if (!group)
-        return 0;
-
-    uint32 ordinal = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
-            continue;
-
-        if (member->GetGUID() == player->GetGUID())
-            return ordinal;
-
-        ++ordinal;
-    }
-
-    return std::numeric_limits<uint32>::max();
-}
-
-bool IsDesignatedTwinWarlockTank(Player* player)
-{
-    uint32 ordinal = GetAliveWarlockOrdinal(player);
-    return ordinal != std::numeric_limits<uint32>::max() && ordinal < 2;
-}
 }  // namespace
 
 bool Aq40EngageTrigger::IsActive()
@@ -105,7 +75,12 @@ bool Aq40SkeramArcaneExplosionTrigger::IsActive()
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram"))
             continue;
 
-        if (unit->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::SkeramArcaneExplosion }))
+            return true;
+
+        if (spell)
             return true;
     }
 
@@ -125,7 +100,10 @@ bool Aq40SkeramMindControlTrigger::IsActive()
             continue;
 
         // "True Fulfillment" can force players/bots into hostile behavior.
-        if (unit->IsPlayer() && (unit->IsCharmed() || botAI->HasAura("true fulfillment", unit)))
+        if (unit->IsPlayer() &&
+            (unit->IsCharmed() ||
+             Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::SkeramTrueFulfillment }) ||
+             botAI->HasAura("true fulfillment", unit)))
             return true;
     }
 
@@ -204,7 +182,10 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
 
         // Use broad detection to avoid core-script dependencies:
         // either active cast window or whirlwind aura.
-        bool spinning = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL) || botAI->HasAura("whirlwind", unit);
+        bool spinning = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL) ||
+                        Aq40SpellIds::HasAnyAura(botAI, unit,
+                                                 { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+                        botAI->HasAura("whirlwind", unit);
         if (!spinning)
             continue;
 
@@ -332,7 +313,7 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     }
 
     bool preferVeknilash = botAI->IsTank(bot) || !botAI->IsRanged(bot);
-    if (IsDesignatedTwinWarlockTank(bot))
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         preferVeknilash = false;
 
     if (preferVeknilash &&
@@ -353,7 +334,7 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     if (!Aq40TwinEmperorsActiveTrigger::IsActive())
         return false;
 
-    if (IsDesignatedTwinWarlockTank(bot))
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -363,7 +344,10 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
             continue;
 
-        if (bot->GetDistance2d(unit) <= 18.0f)
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        bool castingArcaneBurst =
+            spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinArcaneBurst });
+        if (bot->GetDistance2d(unit) <= 18.0f || (castingArcaneBurst && bot->GetDistance2d(unit) <= 22.0f))
             return true;
     }
 
@@ -446,7 +430,12 @@ bool Aq40CthunDarkGlareTrigger::IsActive()
         if (!botAI->EqualLowercaseName(unit->GetName(), "eye of c'thun"))
             continue;
 
-        if (unit->GetCurrentSpell(CURRENT_GENERIC_SPELL) || botAI->HasAura("dark glare", unit))
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        bool castingDarkGlare =
+            spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::CthunDarkGlare });
+        bool hasDarkGlare = Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::CthunDarkGlare }) ||
+                            botAI->HasAura("dark glare", unit);
+        if (castingDarkGlare || hasDarkGlare)
             return true;
     }
 
@@ -455,7 +444,8 @@ bool Aq40CthunDarkGlareTrigger::IsActive()
 
 bool Aq40CthunInStomachTrigger::IsActive()
 {
-    return botAI->GetAura("digestive acid", bot, false, false) ||
+    return Aq40SpellIds::GetAnyAura(bot, { Aq40SpellIds::CthunDigestiveAcid }) ||
+           botAI->GetAura("digestive acid", bot, false, false) ||
            botAI->GetAura("digestive acid", bot, false, true, 1);
 }
 
@@ -492,7 +482,9 @@ bool Aq40CthunEyeCastTrigger::IsActive()
 
         bool isEyeTentacle = botAI->EqualLowercaseName(unit->GetName(), "eye tentacle") ||
                              botAI->EqualLowercaseName(unit->GetName(), "giant eye tentacle");
-        if (isEyeTentacle && unit->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        bool eyeCast = spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::CthunMindFlay });
+        if (isEyeTentacle && (eyeCast || spell))
             return true;
     }
 

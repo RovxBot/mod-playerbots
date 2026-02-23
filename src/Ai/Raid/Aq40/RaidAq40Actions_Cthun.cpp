@@ -7,6 +7,7 @@
 
 #include "GameObject.h"
 #include "ObjectGuid.h"
+#include "RaidAq40SpellIds.h"
 #include "Timer.h"
 
 namespace Aq40BossActions
@@ -195,7 +196,8 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 
     Unit* target = nullptr;
 
-    if (botAI->GetAura("digestive acid", bot, false, false))
+    if (Aq40SpellIds::GetAnyAura(bot, { Aq40SpellIds::CthunDigestiveAcid }) ||
+        botAI->GetAura("digestive acid", bot, false, false))
         target = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle" });
 
     if (!target)
@@ -284,7 +286,9 @@ bool Aq40CthunStomachDpsAction::Execute(Event /*event*/)
 
 bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
 {
-    Aura* acid = botAI->GetAura("digestive acid", bot, false, true);
+    Aura* acid = Aq40SpellIds::GetAnyAura(bot, { Aq40SpellIds::CthunDigestiveAcid });
+    if (!acid)
+        acid = botAI->GetAura("digestive acid", bot, false, true);
     if (!acid)
         return false;
 

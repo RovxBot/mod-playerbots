@@ -1,7 +1,8 @@
 #include "RaidAq40Actions.h"
 
 #include <cmath>
-#include <limits>
+
+#include "RaidAq40BossHelper.h"
 
 namespace Aq40BossActions
 {
@@ -26,52 +27,17 @@ struct TwinAssignments
     Unit* veknilash = nullptr;
 };
 
-uint32 GetAliveWarlockOrdinal(Player* player)
-{
-    if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
-        return std::numeric_limits<uint32>::max();
-
-    Group* group = player->GetGroup();
-    if (!group)
-        return 0;
-
-    uint32 ordinal = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
-            continue;
-
-        if (member->GetGUID() == player->GetGUID())
-            return ordinal;
-
-        ++ordinal;
-    }
-
-    return std::numeric_limits<uint32>::max();
-}
-
-bool IsDesignatedWarlockTank(Player* player)
-{
-    uint32 ordinal = GetAliveWarlockOrdinal(player);
-    if (ordinal == std::numeric_limits<uint32>::max())
-        return false;
-
-    // Auto-designate up to two lock tanks in stable group order.
-    return ordinal < 2;
-}
-
 bool IsTwinRoleMatch(Player* bot, PlayerbotAI* botAI, Player* member)
 {
     if (!member || !member->IsAlive())
         return false;
 
-    bool botIsWarlockTank = IsDesignatedWarlockTank(bot);
+    bool botIsWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool botIsMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
     bool botIsHealer = botAI->IsHeal(bot);
 
     if (botIsWarlockTank)
-        return IsDesignatedWarlockTank(member);
+        return Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
     if (botIsMeleeTank)
         return GET_PLAYERBOT_AI(member) && GET_PLAYERBOT_AI(member)->IsTank(member) && !GET_PLAYERBOT_AI(member)->IsRanged(member);
     if (botIsHealer)
@@ -152,7 +118,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     Unit* target = nullptr;
-    bool isWarlockTank = IsDesignatedWarlockTank(bot);
+    bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
     bool isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, attackers);
@@ -195,7 +161,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         return false;
 
     // Split only tanks/healers by side. Damage dealers stay on target logic.
-    bool isWarlockTank = IsDesignatedWarlockTank(bot);
+    bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && !isWarlockTank)
         return false;
 
@@ -230,7 +196,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 {
-    if (!IsDesignatedWarlockTank(bot))
+    if (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -274,7 +240,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 
 bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
 {
-    if (IsDesignatedWarlockTank(bot))
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -313,7 +279,7 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
     if (assignment.veklor->GetDistance2d(assignment.veknilash) >= 22.0f)
         return false;
 
-    bool isWarlockTank = IsDesignatedWarlockTank(bot);
+    bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
     if (!isWarlockTank && !isMeleeTank)
         return false;
