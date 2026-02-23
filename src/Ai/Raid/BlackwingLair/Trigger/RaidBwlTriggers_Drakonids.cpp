@@ -103,3 +103,61 @@ bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
     Aura* selfBuffet = GetFlameBuffetAura(botAI, bot);
     return !selfBuffet || selfBuffet->GetStackAmount() < 5;
 }
+
+bool BwlEbonrocEncounterTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* ebonroc = AI_VALUE2(Unit*, "find target", "ebonroc"))
+    {
+        return ebonroc->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlEbonrocPositioningTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* ebonroc = AI_VALUE2(Unit*, "find target", "ebonroc"))
+    {
+        return ebonroc->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlEbonrocMainTankShadowTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTank(bot))
+    {
+        return false;
+    }
+
+    Unit* ebonroc = AI_VALUE2(Unit*, "find target", "ebonroc");
+    if (!ebonroc || !ebonroc->IsAlive())
+    {
+        return false;
+    }
+
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    if (!mainTank || mainTank == bot)
+    {
+        return false;
+    }
+
+    Aura* shadow = mainTank->GetAura(BwlSpellIds::ShadowOfEbonroc);
+    if (!shadow)
+    {
+        shadow = botAI->GetAura("shadow of ebonroc", mainTank, false, true);
+    }
+
+    return shadow != nullptr;
+}

@@ -174,4 +174,34 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlEbonrocEncounterTrigger : public Trigger
+{
+public:
+    BwlEbonrocEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl ebonroc encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlEbonrocPositioningTrigger : public Trigger
+{
+public:
+    BwlEbonrocPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl ebonroc positioning"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlEbonrocMainTankShadowTrigger : public Trigger
+{
+public:
+    BwlEbonrocMainTankShadowTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl ebonroc main tank shadow"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

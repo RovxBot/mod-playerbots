@@ -44,6 +44,15 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl firemaw main tank high flame buffet",
         { NextAction("bwl firemaw choose target", ACTION_EMERGENCY + 5) }));
 
+    triggers.push_back(new TriggerNode("bwl ebonroc encounter",
+        { NextAction("bwl ebonroc choose target", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl ebonroc positioning",
+        { NextAction("bwl ebonroc position", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl ebonroc main tank shadow",
+        { NextAction("taunt spell", ACTION_EMERGENCY + 6), NextAction("bwl ebonroc choose target", ACTION_EMERGENCY + 5) }));
+
     triggers.push_back(new TriggerNode("bwl suppression device",
                         { NextAction("bwl turn off suppression device", ACTION_RAID) }));
 
