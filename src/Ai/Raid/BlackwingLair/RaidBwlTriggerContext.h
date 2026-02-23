@@ -17,6 +17,9 @@ public:
         creators["bwl vaelastrasz main tank burning adrenaline"] =
             &RaidBwlTriggerContext::bwl_vaelastrasz_main_tank_burning_adrenaline;
         creators["bwl vaelastrasz positioning"] = &RaidBwlTriggerContext::bwl_vaelastrasz_positioning;
+        creators["bwl broodlord encounter"] = &RaidBwlTriggerContext::bwl_broodlord_encounter;
+        creators["bwl broodlord positioning"] = &RaidBwlTriggerContext::bwl_broodlord_positioning;
+        creators["bwl broodlord main tank mortal strike"] = &RaidBwlTriggerContext::bwl_broodlord_main_tank_mortal_strike;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -34,6 +37,12 @@ private:
         return new BwlVaelastraszMainTankBurningAdrenalineTrigger(ai);
     }
     static Trigger* bwl_vaelastrasz_positioning(PlayerbotAI* ai) { return new BwlVaelastraszPositioningTrigger(ai); }
+    static Trigger* bwl_broodlord_encounter(PlayerbotAI* ai) { return new BwlBroodlordEncounterTrigger(ai); }
+    static Trigger* bwl_broodlord_positioning(PlayerbotAI* ai) { return new BwlBroodlordPositioningTrigger(ai); }
+    static Trigger* bwl_broodlord_main_tank_mortal_strike(PlayerbotAI* ai)
+    {
+        return new BwlBroodlordMainTankMortalStrikeTrigger(ai);
+    }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }
 };

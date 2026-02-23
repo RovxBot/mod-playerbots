@@ -25,3 +25,60 @@ bool BwlSuppressionDeviceTrigger::IsActive()
     }
     return false;
 }
+
+bool BwlBroodlordEncounterTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* broodlord = AI_VALUE2(Unit*, "find target", "broodlord lashlayer"))
+    {
+        return broodlord->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlBroodlordPositioningTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat())
+    {
+        return false;
+    }
+
+    if (Unit* broodlord = AI_VALUE2(Unit*, "find target", "broodlord lashlayer"))
+    {
+        return broodlord->IsAlive();
+    }
+
+    return false;
+}
+
+bool BwlBroodlordMainTankMortalStrikeTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTankOfIndex(bot, 0))
+    {
+        return false;
+    }
+
+    Unit* broodlord = AI_VALUE2(Unit*, "find target", "broodlord lashlayer");
+    if (!broodlord || !broodlord->IsAlive())
+    {
+        return false;
+    }
+
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    if (!mainTank || mainTank == bot)
+    {
+        return false;
+    }
+
+    if (Aura* msAura = botAI->GetAura("mortal strike", mainTank, false, true))
+    {
+        return msAura->GetDuration() > 1000;
+    }
+
+    return false;
+}

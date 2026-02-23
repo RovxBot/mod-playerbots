@@ -14,6 +14,8 @@ public:
         creators["bwl razorgore choose target"] = &RaidBwlActionContext::bwl_razorgore_choose_target;
         creators["bwl vaelastrasz choose target"] = &RaidBwlActionContext::bwl_vaelastrasz_choose_target;
         creators["bwl vaelastrasz position"] = &RaidBwlActionContext::bwl_vaelastrasz_position;
+        creators["bwl broodlord choose target"] = &RaidBwlActionContext::bwl_broodlord_choose_target;
+        creators["bwl broodlord position"] = &RaidBwlActionContext::bwl_broodlord_position;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
         creators["bwl use hourglass sand"] = &RaidBwlActionContext::bwl_use_hourglass_sand;
     }
@@ -23,6 +25,8 @@ private:
     static Action* bwl_razorgore_choose_target(PlayerbotAI* botAI) { return new BwlRazorgoreChooseTargetAction(botAI); }
     static Action* bwl_vaelastrasz_choose_target(PlayerbotAI* botAI) { return new BwlVaelastraszChooseTargetAction(botAI); }
     static Action* bwl_vaelastrasz_position(PlayerbotAI* botAI) { return new BwlVaelastraszPositionAction(botAI); }
+    static Action* bwl_broodlord_choose_target(PlayerbotAI* botAI) { return new BwlBroodlordChooseTargetAction(botAI); }
+    static Action* bwl_broodlord_position(PlayerbotAI* botAI) { return new BwlBroodlordPositionAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }
     static Action* bwl_use_hourglass_sand(PlayerbotAI* botAI) { return new BwlUseHourglassSandAction(botAI); }
 };

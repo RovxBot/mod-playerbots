@@ -98,4 +98,37 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlBroodlordEncounterTrigger : public Trigger
+{
+public:
+    BwlBroodlordEncounterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl broodlord encounter"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlBroodlordPositioningTrigger : public Trigger
+{
+public:
+    BwlBroodlordPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl broodlord positioning"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlBroodlordMainTankMortalStrikeTrigger : public Trigger
+{
+public:
+    BwlBroodlordMainTankMortalStrikeTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl broodlord main tank mortal strike"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

@@ -37,6 +37,20 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlBroodlordChooseTargetAction : public AttackAction
+{
+public:
+    BwlBroodlordChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl broodlord choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlBroodlordPositionAction : public MovementAction
+{
+public:
+    BwlBroodlordPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl broodlord position") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:
