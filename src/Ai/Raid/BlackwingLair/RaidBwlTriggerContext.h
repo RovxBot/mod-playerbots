@@ -35,6 +35,10 @@ public:
         creators["bwl chromaggus frenzy"] = &RaidBwlTriggerContext::bwl_chromaggus_frenzy;
         creators["bwl chromaggus breath los"] = &RaidBwlTriggerContext::bwl_chromaggus_breath_los;
         creators["bwl chromaggus main tank time lapse"] = &RaidBwlTriggerContext::bwl_chromaggus_main_tank_time_lapse;
+        creators["bwl nefarian phase one"] = &RaidBwlTriggerContext::bwl_nefarian_phase_one;
+        creators["bwl nefarian phase one tunnel positioning"] = &RaidBwlTriggerContext::bwl_nefarian_phase_one_tunnel_positioning;
+        creators["bwl nefarian phase two"] = &RaidBwlTriggerContext::bwl_nefarian_phase_two;
+        creators["bwl nefarian phase two positioning"] = &RaidBwlTriggerContext::bwl_nefarian_phase_two_positioning;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -78,6 +82,16 @@ private:
     static Trigger* bwl_chromaggus_main_tank_time_lapse(PlayerbotAI* ai)
     {
         return new BwlChromaggusMainTankTimeLapseTrigger(ai);
+    }
+    static Trigger* bwl_nefarian_phase_one(PlayerbotAI* ai) { return new BwlNefarianPhaseOneTrigger(ai); }
+    static Trigger* bwl_nefarian_phase_one_tunnel_positioning(PlayerbotAI* ai)
+    {
+        return new BwlNefarianPhaseOneTunnelPositioningTrigger(ai);
+    }
+    static Trigger* bwl_nefarian_phase_two(PlayerbotAI* ai) { return new BwlNefarianPhaseTwoTrigger(ai); }
+    static Trigger* bwl_nefarian_phase_two_positioning(PlayerbotAI* ai)
+    {
+        return new BwlNefarianPhaseTwoPositioningTrigger(ai);
     }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }

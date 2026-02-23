@@ -290,4 +290,50 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlNefarianPhaseOneTrigger : public Trigger
+{
+public:
+    BwlNefarianPhaseOneTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl nefarian phase one"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlNefarianPhaseOneTunnelPositioningTrigger : public Trigger
+{
+public:
+    BwlNefarianPhaseOneTunnelPositioningTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl nefarian phase one tunnel positioning"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlNefarianPhaseTwoTrigger : public Trigger
+{
+public:
+    BwlNefarianPhaseTwoTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl nefarian phase two"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
+class BwlNefarianPhaseTwoPositioningTrigger : public Trigger
+{
+public:
+    BwlNefarianPhaseTwoPositioningTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl nefarian phase two positioning"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif

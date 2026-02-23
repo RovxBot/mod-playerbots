@@ -130,6 +130,37 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlNefarianPhaseOneChooseTargetAction : public AttackAction
+{
+public:
+    BwlNefarianPhaseOneChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl nefarian phase one choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlNefarianPhaseOneTunnelPositionAction : public MovementAction
+{
+public:
+    BwlNefarianPhaseOneTunnelPositionAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "bwl nefarian phase one tunnel position")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class BwlNefarianPhaseTwoChooseTargetAction : public AttackAction
+{
+public:
+    BwlNefarianPhaseTwoChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl nefarian phase two choose target") {}
+    bool Execute(Event event) override;
+};
+
+class BwlNefarianPhaseTwoPositionAction : public MovementAction
+{
+public:
+    BwlNefarianPhaseTwoPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl nefarian phase two position") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

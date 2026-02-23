@@ -77,6 +77,18 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl chromaggus main tank time lapse",
         { NextAction("taunt spell", ACTION_EMERGENCY + 6), NextAction("bwl chromaggus choose target", ACTION_EMERGENCY + 5) }));
 
+    triggers.push_back(new TriggerNode("bwl nefarian phase one",
+        { NextAction("bwl nefarian phase one choose target", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl nefarian phase one tunnel positioning",
+        { NextAction("bwl nefarian phase one tunnel position", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl nefarian phase two",
+        { NextAction("bwl nefarian phase two choose target", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("bwl nefarian phase two positioning",
+        { NextAction("bwl nefarian phase two position", ACTION_RAID + 1) }));
+
     triggers.push_back(new TriggerNode("bwl suppression device",
                         { NextAction("bwl turn off suppression device", ACTION_RAID) }));
 
