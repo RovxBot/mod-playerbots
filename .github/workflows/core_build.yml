@@ -1,13 +1,10 @@
 name: ubuntu-build
 
 on:
-  push:
-    branches: [ "master", "test-staging" ]
-  pull_request:
-    branches: [ "master", "test-staging" ]
+  workflow_dispatch:
 
 concurrency:
-  group: "core-build-${{ github.event.pull_request.number }}"
+  group: "core-build-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
