@@ -11,6 +11,7 @@
 #include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 #include "Spell.h"
+#include "Unit.h"
 
 class BwlBossHelper : public AiObject
 {
@@ -24,7 +25,7 @@ public:
 
     Unit* FindAliveTarget(char const* targetName) const
     {
-        Unit* unit = AI_VALUE2(Unit*, "find target", targetName);
+        Unit* unit = context->GetValue<Unit*>("find target", targetName)->Get();
         if (!unit || !unit->IsAlive())
         {
             return nullptr;
@@ -76,13 +77,13 @@ public:
             return true;
         }
 
-        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
         if (HasNefarianPhaseOneAddsInUnits(attackers))
         {
             return true;
         }
 
-        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
         return HasNefarianPhaseOneAddsInUnits(nearby);
     }
 
@@ -117,8 +118,8 @@ public:
             return false;
         }
 
-        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
         return HasBossInUnits(attackers) || HasBossInUnits(nearby) || IsNefarianPhaseOneActive() || IsNefarianPhaseTwoActive();
     }
 
@@ -151,8 +152,8 @@ public:
             return false;
         }
 
-        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
 
         if (HasBossInUnits(attackers) || HasBossInUnits(nearby) || IsNefarianPhaseOneActive() || IsNefarianPhaseTwoActive())
         {
@@ -234,15 +235,15 @@ public:
 
     bool HasEnragedDeathTalonSeetherNearbyOrAttacking() const
     {
-        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
         return HasEnragedDeathTalonSeetherInUnits(attackers) || HasEnragedDeathTalonSeetherInUnits(nearby);
     }
 
     bool HasUndetectedDeathTalonNearbyOrAttacking() const
     {
-        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
         return HasUndetectedDeathTalonInUnits(attackers) || HasUndetectedDeathTalonInUnits(nearby);
     }
 
