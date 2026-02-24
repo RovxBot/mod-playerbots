@@ -1,6 +1,15 @@
 #include "RaidBwlActions.h"
 #include <cmath>
 
+namespace
+{
+// Stable Nefarian balcony anchor used when Victor is temporarily unavailable in target cache.
+constexpr float NefarianP1FallbackAnchorX = -7588.27f;
+constexpr float NefarianP1FallbackAnchorY = -1261.92f;
+constexpr float NefarianP1FallbackAnchorZ = 482.03f;
+constexpr float NefarianP1FallbackFacing = 1.20f;
+}  // namespace
+
 bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 {
     BwlBossHelper helper(botAI);
@@ -44,50 +53,19 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 {
     Unit* anchor = AI_VALUE2(Unit*, "find target", "lord victor nefarius");
+    float targetX = NefarianP1FallbackAnchorX;
+    float targetY = NefarianP1FallbackAnchorY;
+    float targetZ = NefarianP1FallbackAnchorZ;
+    float facing = NefarianP1FallbackFacing;
 
-    BwlBossHelper helper(botAI);
-    if (!anchor || !anchor->IsAlive())
+    if (anchor && anchor->IsAlive())
     {
-        anchor = AI_VALUE2(Unit*, "find target", "chromatic drakonid");
+        targetX = anchor->GetPositionX();
+        targetY = anchor->GetPositionY();
+        targetZ = anchor->GetPositionZ();
+        facing = anchor->GetOrientation();
     }
 
-    if (!anchor || !anchor->IsAlive())
-    {
-        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-        for (ObjectGuid const guid : attackers)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (helper.IsNefarianPhaseOneAdd(unit))
-            {
-                anchor = unit;
-                break;
-            }
-        }
-    }
-
-    if (!anchor || !anchor->IsAlive())
-    {
-        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
-        for (ObjectGuid const guid : nearby)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (helper.IsNefarianPhaseOneAdd(unit))
-            {
-                anchor = unit;
-                break;
-            }
-        }
-    }
-
-    if (!anchor || !anchor->IsAlive())
-    {
-        return false;
-    }
-
-    float targetX = anchor->GetPositionX();
-    float targetY = anchor->GetPositionY();
-    float targetZ = bot->GetPositionZ();
-    float const facing = anchor->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
     // Two tunnel split:
