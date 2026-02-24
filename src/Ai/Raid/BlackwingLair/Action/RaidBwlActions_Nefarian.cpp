@@ -147,11 +147,32 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 10.0f;
     }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    else if (botAI->IsHeal(bot))
+    {
+        // Healers hold a central rear pocket so both lock/hunter lanes stay in healing range.
+        float spread = ((slot % 5) - 2.0f) * 0.08f;
+        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
+        distance = 30.0f;
+    }
+    else if (bot->getClass() == CLASS_HUNTER)
+    {
+        // Hunter lane: rear-right arc from healers.
+        float spread = ((slot % 4) - 1.5f) * 0.08f;
+        angleOffset = static_cast<float>(-M_PI / 2.0f) + 0.55f + spread;
+        distance = 33.0f;
+    }
+    else if (bot->getClass() == CLASS_WARLOCK)
+    {
+        // Warlock lane: rear-left arc from healers.
+        float spread = ((slot % 4) - 1.5f) * 0.08f;
+        angleOffset = static_cast<float>(-M_PI / 2.0f) - 0.55f + spread;
+        distance = 33.0f;
+    }
+    else if (botAI->IsRanged(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.10f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
-        distance = botAI->IsHeal(bot) ? 30.0f : 34.0f;
+        distance = 34.0f;
     }
     else
     {
