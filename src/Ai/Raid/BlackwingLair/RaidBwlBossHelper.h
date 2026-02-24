@@ -48,8 +48,9 @@ public:
         }
 
         std::string const name = ToLower(unit->GetName());
-        return name.find("drakonid") != std::string::npos || name.find("dragonspawn") != std::string::npos ||
-            name.find("wyrmguard") != std::string::npos;
+        // Nefarian P1 add waves are Chromatic Drakonids.
+        // Do not match generic dragonspawn/wyrmguard trash elsewhere in BWL.
+        return name.find("chromatic drakonid") != std::string::npos;
     }
 
     bool HasNefarianPhaseOneAddsInUnits(GuidVector const& units) const
@@ -346,12 +347,23 @@ public:
         {
             spell = chromaggus->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
         }
-        if (!spell || !spell->GetSpellInfo() || !spell->GetSpellInfo()->SpellName[LOCALE_enUS])
+        if (!spell || !spell->GetSpellInfo())
         {
             return false;
         }
 
-        std::string const spellName = ToLower(spell->GetSpellInfo()->SpellName[LOCALE_enUS]);
+        SpellInfo const* spellInfo = spell->GetSpellInfo();
+        if (spellInfo->Id == BwlSpellIds::ChromaggusTimeLapse)
+        {
+            return true;
+        }
+
+        if (!spellInfo->SpellName[LOCALE_enUS])
+        {
+            return false;
+        }
+
+        std::string const spellName = ToLower(spellInfo->SpellName[LOCALE_enUS]);
         return spellName.find("time lapse") != std::string::npos || spellName.find("time warp") != std::string::npos;
     }
 

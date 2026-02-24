@@ -5,6 +5,7 @@
 bool BwlRazorgoreChooseTargetAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
     Unit* target = nullptr;
     Unit* razorgore = nullptr;
 
@@ -13,51 +14,60 @@ bool BwlRazorgoreChooseTargetAction::Execute(Event /*event*/)
     std::vector<Unit*> dragonkin;
     std::vector<Unit*> otherBlackwing;
 
-    for (ObjectGuid const guid : attackers)
+    auto evaluate = [&](GuidVector const& units)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        for (ObjectGuid const guid : units)
         {
-            continue;
-        }
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive())
+            {
+                continue;
+            }
 
-        std::string name = unit->GetName();
-        if (botAI->EqualLowercaseName(name, "razorgore the untamed"))
-        {
-            razorgore = unit;
-            continue;
-        }
+            std::string name = unit->GetName();
+            if (botAI->EqualLowercaseName(name, "razorgore the untamed"))
+            {
+                razorgore = unit;
+                continue;
+            }
 
-        // Pre-fight controller should still be burned down fast.
-        if (botAI->EqualLowercaseName(name, "grethok the controller"))
-        {
-            target = unit;
-            break;
-        }
+            // Pre-fight controller should still be burned down fast.
+            if (botAI->EqualLowercaseName(name, "grethok the controller"))
+            {
+                target = unit;
+                return;
+            }
 
-        if (botAI->EqualLowercaseName(name, "blackwing mage"))
-        {
-            mages.push_back(unit);
-            continue;
-        }
+            if (botAI->EqualLowercaseName(name, "blackwing mage"))
+            {
+                mages.push_back(unit);
+                continue;
+            }
 
-        if (botAI->EqualLowercaseName(name, "blackwing legionnaire"))
-        {
-            legionnaires.push_back(unit);
-            continue;
-        }
+            if (botAI->EqualLowercaseName(name, "blackwing legionnaire"))
+            {
+                legionnaires.push_back(unit);
+                continue;
+            }
 
-        if (botAI->EqualLowercaseName(name, "death talon dragonspawn") ||
-            botAI->EqualLowercaseName(name, "death talon wyrmguard"))
-        {
-            dragonkin.push_back(unit);
-            continue;
-        }
+            if (botAI->EqualLowercaseName(name, "death talon dragonspawn") ||
+                botAI->EqualLowercaseName(name, "death talon wyrmguard"))
+            {
+                dragonkin.push_back(unit);
+                continue;
+            }
 
-        if (name.find("Blackwing") != std::string::npos || name.find("Death Talon") != std::string::npos)
-        {
-            otherBlackwing.push_back(unit);
+            if (name.find("Blackwing") != std::string::npos || name.find("Death Talon") != std::string::npos)
+            {
+                otherBlackwing.push_back(unit);
+            }
         }
+    };
+
+    evaluate(attackers);
+    if (!target)
+    {
+        evaluate(nearby);
     }
 
     if (!razorgore)

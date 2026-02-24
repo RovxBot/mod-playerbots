@@ -43,16 +43,51 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 {
-    Unit* victor = AI_VALUE2(Unit*, "find target", "lord victor nefarius");
-    if (!victor || !victor->IsAlive())
+    Unit* anchor = AI_VALUE2(Unit*, "find target", "lord victor nefarius");
+
+    BwlBossHelper helper(botAI);
+    if (!anchor || !anchor->IsAlive())
+    {
+        anchor = AI_VALUE2(Unit*, "find target", "chromatic drakonid");
+    }
+
+    if (!anchor || !anchor->IsAlive())
+    {
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        for (ObjectGuid const guid : attackers)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (helper.IsNefarianPhaseOneAdd(unit))
+            {
+                anchor = unit;
+                break;
+            }
+        }
+    }
+
+    if (!anchor || !anchor->IsAlive())
+    {
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
+        for (ObjectGuid const guid : nearby)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (helper.IsNefarianPhaseOneAdd(unit))
+            {
+                anchor = unit;
+                break;
+            }
+        }
+    }
+
+    if (!anchor || !anchor->IsAlive())
     {
         return false;
     }
 
-    float targetX = victor->GetPositionX();
-    float targetY = victor->GetPositionY();
+    float targetX = anchor->GetPositionX();
+    float targetY = anchor->GetPositionY();
     float targetZ = bot->GetPositionZ();
-    float const facing = victor->GetOrientation();
+    float const facing = anchor->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
     // Two tunnel split:

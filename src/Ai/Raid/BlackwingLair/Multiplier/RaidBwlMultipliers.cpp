@@ -5,16 +5,6 @@
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 
-float BwlGenericMultiplier::GetValue(Action* /*action*/)
-{
-    if (!helper.IsInBwl())
-    {
-        return 1.0f;
-    }
-
-    return 1.0f;
-}
-
 float BwlEncounterTargetingMultiplier::GetValue(Action* action)
 {
     if (!helper.IsInBwl())

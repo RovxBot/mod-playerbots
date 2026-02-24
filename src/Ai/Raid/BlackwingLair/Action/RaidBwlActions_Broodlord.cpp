@@ -5,8 +5,36 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 
+namespace
+{
+bool ShouldHandleSuppressionDevice(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+    {
+        return false;
+    }
+
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTank(bot))
+    {
+        return true;
+    }
+
+    if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
+    {
+        return false;
+    }
+
+    return (botAI->GetGroupSlotIndex(bot) % 3) == 0;
+}
+}  // namespace
+
 bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 {
+    if (!ShouldHandleSuppressionDevice(botAI, bot))
+    {
+        return false;
+    }
+
     bool usedAny = false;
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
@@ -28,6 +56,11 @@ bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 
 bool BwlTurnOffSuppressionDeviceAction::isUseful()
 {
+    if (!ShouldHandleSuppressionDevice(botAI, bot))
+    {
+        return false;
+    }
+
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
     {
@@ -87,9 +120,17 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
         {
             spell = broodlord->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
         }
-        if (spell && spell->GetSpellInfo() && spell->GetSpellInfo()->SpellName[LOCALE_enUS])
+        if (spell && spell->GetSpellInfo())
         {
-            blastWaveCasting = botAI->EqualLowercaseName(spell->GetSpellInfo()->SpellName[LOCALE_enUS], "blast wave");
+            SpellInfo const* spellInfo = spell->GetSpellInfo();
+            if (spellInfo->Id == BwlSpellIds::BroodlordBlastWave)
+            {
+                blastWaveCasting = true;
+            }
+            else if (spellInfo->SpellName[LOCALE_enUS])
+            {
+                blastWaveCasting = botAI->EqualLowercaseName(spellInfo->SpellName[LOCALE_enUS], "blast wave");
+            }
         }
     }
 
