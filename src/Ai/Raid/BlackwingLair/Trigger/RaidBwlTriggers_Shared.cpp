@@ -5,7 +5,7 @@
 
 bool BwlMissingOnyxiaScaleCloakTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl())
     {
         return false;
     }
