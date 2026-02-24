@@ -6,7 +6,18 @@
 
 bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
 {
-    botAI->TellMasterNoFacing("Warning: missing Onyxia Scale Cloak aura in BWL.");
+    if (botAI->HasAura(BwlSpellIds::OnyxiaScaleCloakAura, bot))
+    {
+        return false;
+    }
+
+    Aura* const aura = bot->AddAura(BwlSpellIds::OnyxiaScaleCloakAura, bot);
+    if (!aura)
+    {
+        botAI->TellMasterNoFacing("Warning: failed to apply Onyxia Scale Cloak aura in BWL.");
+        return false;
+    }
+
     return true;
 }
 
