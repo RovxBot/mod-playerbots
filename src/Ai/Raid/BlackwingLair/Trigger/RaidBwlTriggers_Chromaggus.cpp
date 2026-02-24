@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "RaidBwlSpellIds.h"
 #include "Spell.h"
 #include "SharedDefines.h"
 
@@ -34,12 +35,31 @@ ChromaggusBreathCast GetChromaggusBreathCast(PlayerbotAI* botAI, Unit* chromaggu
     {
         spell = chromaggus->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
     }
-    if (!spell || !spell->GetSpellInfo() || !spell->GetSpellInfo()->SpellName[LOCALE_enUS])
+    if (!spell || !spell->GetSpellInfo())
     {
         return ChromaggusBreathCast::None;
     }
 
-    std::string name = spell->GetSpellInfo()->SpellName[LOCALE_enUS];
+    SpellInfo const* spellInfo = spell->GetSpellInfo();
+    uint32 const spellId = spellInfo->Id;
+
+    if (spellId == BwlSpellIds::ChromaggusTimeLapse)
+    {
+        return ChromaggusBreathCast::TimeLapse;
+    }
+
+    if (spellId == BwlSpellIds::ChromaggusIncinerate || spellId == BwlSpellIds::ChromaggusFrostBurn ||
+        spellId == BwlSpellIds::ChromaggusCorrosiveAcid || spellId == BwlSpellIds::ChromaggusIgniteFlesh)
+    {
+        return ChromaggusBreathCast::OtherBreath;
+    }
+
+    if (!spellInfo->SpellName[LOCALE_enUS])
+    {
+        return ChromaggusBreathCast::None;
+    }
+
+    std::string name = spellInfo->SpellName[LOCALE_enUS];
     if (name.empty())
     {
         return ChromaggusBreathCast::None;
