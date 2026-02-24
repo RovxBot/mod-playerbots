@@ -165,15 +165,16 @@ bool BwlChromaggusLosHideAction::Execute(Event /*event*/)
 
 bool BwlUseHourglassSandAction::Execute(Event /*event*/)
 {
+    if (!bot->HasItemCount(BwlItems::HourglassSand, 1, false))
+    {
+        bot->RemoveAurasDueToSpell(BwlSpellIds::AfflictionBronze);
+        return !botAI->HasAura(BwlSpellIds::AfflictionBronze, bot);
+    }
+
     return botAI->CastSpell(BwlSpellIds::HourglassSandCure, bot);
 }
 
 bool BwlUseHourglassSandAction::isUseful()
 {
-    if (!botAI->HasAura(BwlSpellIds::AfflictionBronze, bot))
-    {
-        return false;
-    }
-
-    return bot->HasItemCount(BwlItems::HourglassSand, 1, false);
+    return botAI->HasAura(BwlSpellIds::AfflictionBronze, bot);
 }
