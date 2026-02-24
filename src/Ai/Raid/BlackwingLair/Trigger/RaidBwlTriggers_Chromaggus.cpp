@@ -174,5 +174,5 @@ bool BwlAfflictionBronzeTrigger::IsActive()
         return false;
     }
 
-    return helper.HasBronzeAffliction() && helper.HasHourglassSand();
+    return helper.HasBronzeAffliction();
 }
