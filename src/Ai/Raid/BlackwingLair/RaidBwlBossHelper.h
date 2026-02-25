@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <initializer_list>
 #include <limits>
 #include <string>
 
@@ -47,9 +48,13 @@ public:
             return false;
         }
 
+        if (IsCreatureEntry(unit, BwlCreatureIds::ChromaticDrakonid))
+        {
+            return true;
+        }
+
+        // Fallback to name for custom creature data.
         std::string const name = ToLower(unit->GetName());
-        // Nefarian P1 add waves are Chromatic Drakonids.
-        // Do not match generic dragonspawn/wyrmguard trash elsewhere in BWL.
         return name.find("chromatic drakonid") != std::string::npos;
     }
 
@@ -96,8 +101,15 @@ public:
             return false;
         }
 
-        std::string const name = ToLower(unit->GetName());
-        return IsBwlBossName(name);
+        if (IsAnyCreatureEntry(unit, {BwlCreatureIds::RazorgoreTheUntamed, BwlCreatureIds::GrethokTheController,
+                                      BwlCreatureIds::VaelastraszTheCorrupt, BwlCreatureIds::BroodlordLashlayer,
+                                      BwlCreatureIds::Firemaw, BwlCreatureIds::Ebonroc, BwlCreatureIds::Flamegor,
+                                      BwlCreatureIds::Chromaggus, BwlCreatureIds::LordVictorNefarius, BwlCreatureIds::Nefarian}))
+        {
+            return true;
+        }
+
+        return IsBwlBossName(ToLower(unit->GetName()));
     }
 
     bool HasBossInUnits(GuidVector const& units) const
@@ -131,6 +143,20 @@ public:
         {
             return false;
         }
+
+        if (IsAnyCreatureEntry(unit, {BwlCreatureIds::BlackwingSpellbinder, BwlCreatureIds::BlackwingWarlock,
+                                      BwlCreatureIds::BlackwingTaskmaster, BwlCreatureIds::BlackwingMage,
+                                      BwlCreatureIds::BlackwingLegionnaire, BwlCreatureIds::BlackwingTechnician,
+                                      BwlCreatureIds::DeathTalonDragonspawn, BwlCreatureIds::DeathTalonWyrmguard,
+                                      BwlCreatureIds::DeathTalonOverseer, BwlCreatureIds::DeathTalonFlamescale,
+                                      BwlCreatureIds::DeathTalonSeether, BwlCreatureIds::DeathTalonCaptain,
+                                      BwlCreatureIds::DeathTalonHatcher, BwlCreatureIds::ChromaticDrakonid,
+                                      BwlCreatureIds::CorruptedRedWhelp, BwlCreatureIds::CorruptedGreenWhelp,
+                                      BwlCreatureIds::CorruptedBlueWhelp, BwlCreatureIds::CorruptedBronzeWhelp}))
+        {
+            return true;
+        }
+
         return IsDangerousTrashName(ToLower(unit->GetName()));
     }
 
@@ -172,6 +198,14 @@ public:
             return false;
         }
 
+        if (IsAnyCreatureEntry(unit, {BwlCreatureIds::DeathTalonDragonspawn, BwlCreatureIds::DeathTalonWyrmguard,
+                                      BwlCreatureIds::DeathTalonOverseer, BwlCreatureIds::DeathTalonFlamescale,
+                                      BwlCreatureIds::DeathTalonSeether, BwlCreatureIds::DeathTalonCaptain,
+                                      BwlCreatureIds::DeathTalonHatcher}))
+        {
+            return true;
+        }
+
         return ToLower(unit->GetName()).find("death talon") != std::string::npos;
     }
 
@@ -182,6 +216,11 @@ public:
             return false;
         }
 
+        if (IsCreatureEntry(unit, BwlCreatureIds::DeathTalonSeether))
+        {
+            return true;
+        }
+
         return ToLower(unit->GetName()).find("death talon seether") != std::string::npos;
     }
 
@@ -190,6 +229,11 @@ public:
         if (!unit || !unit->IsAlive())
         {
             return false;
+        }
+
+        if (IsCreatureEntry(unit, BwlCreatureIds::DeathTalonCaptain))
+        {
+            return true;
         }
 
         return ToLower(unit->GetName()).find("death talon captain") != std::string::npos;
@@ -256,6 +300,43 @@ public:
             return std::numeric_limits<int>::max();
         }
 
+        switch (unit->GetEntry())
+        {
+            case BwlCreatureIds::BlackwingSpellbinder:
+                return 10;
+            case BwlCreatureIds::BlackwingWarlock:
+                return 15;
+            case BwlCreatureIds::BlackwingTaskmaster:
+                return 20;
+            case BwlCreatureIds::BlackwingMage:
+                return 22;
+            case BwlCreatureIds::BlackwingLegionnaire:
+                return 24;
+            case BwlCreatureIds::DeathTalonSeether:
+                return 25;
+            case BwlCreatureIds::DeathTalonOverseer:
+                return 28;
+            case BwlCreatureIds::DeathTalonFlamescale:
+                return 30;
+            case BwlCreatureIds::DeathTalonCaptain:
+                return 35;
+            case BwlCreatureIds::DeathTalonWyrmguard:
+            case BwlCreatureIds::DeathTalonDragonspawn:
+            case BwlCreatureIds::ChromaticDrakonid:
+                return 40;
+            case BwlCreatureIds::DeathTalonHatcher:
+                return 45;
+            case BwlCreatureIds::BlackwingTechnician:
+                return 50;
+            case BwlCreatureIds::CorruptedRedWhelp:
+            case BwlCreatureIds::CorruptedGreenWhelp:
+            case BwlCreatureIds::CorruptedBlueWhelp:
+            case BwlCreatureIds::CorruptedBronzeWhelp:
+                return 60;
+            default:
+                break;
+        }
+
         std::string const name = ToLower(unit->GetName());
 
         if (name.find("blackwing spellbinder") != std::string::npos)
@@ -297,6 +378,11 @@ public:
             return false;
         }
 
+        if (IsCreatureEntry(unit, BwlCreatureIds::BlackwingSpellbinder))
+        {
+            return true;
+        }
+
         std::string const name = ToLower(unit->GetName());
         return name.find("blackwing spellbinder") != std::string::npos;
     }
@@ -308,6 +394,11 @@ public:
             return false;
         }
 
+        if (IsAnyCreatureEntry(unit, {BwlCreatureIds::DeathTalonOverseer, BwlCreatureIds::ChromaticDrakonid}))
+        {
+            return true;
+        }
+
         std::string const name = ToLower(unit->GetName());
         return name.find("death talon overseer") != std::string::npos || name.find("chromatic drakonid") != std::string::npos;
     }
@@ -317,6 +408,22 @@ public:
         if (!IsDeathTalonMob(unit))
         {
             return std::numeric_limits<int>::max();
+        }
+
+        switch (unit->GetEntry())
+        {
+            case BwlCreatureIds::DeathTalonWyrmguard:
+                return 10;
+            case BwlCreatureIds::DeathTalonCaptain:
+                return 20;
+            case BwlCreatureIds::DeathTalonSeether:
+                return 30;
+            case BwlCreatureIds::DeathTalonFlamescale:
+                return 40;
+            case BwlCreatureIds::DeathTalonOverseer:
+                return 50;
+            default:
+                break;
         }
 
         std::string const name = ToLower(unit->GetName());
@@ -353,7 +460,7 @@ public:
         }
 
         SpellInfo const* spellInfo = spell->GetSpellInfo();
-        if (spellInfo->Id == BwlSpellIds::ChromaggusTimeLapse)
+        if (BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::ChromaggusTimeLapse}))
         {
             return true;
         }
@@ -368,6 +475,30 @@ public:
     }
 
 private:
+    static bool IsCreatureEntry(Unit* unit, uint32 entry)
+    {
+        return unit && unit->GetTypeId() == TYPEID_UNIT && unit->GetEntry() == entry;
+    }
+
+    static bool IsAnyCreatureEntry(Unit* unit, std::initializer_list<uint32> entries)
+    {
+        if (!unit || unit->GetTypeId() != TYPEID_UNIT)
+        {
+            return false;
+        }
+
+        uint32 const entry = unit->GetEntry();
+        for (uint32 id : entries)
+        {
+            if (entry == id)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     static std::string ToLower(std::string value)
     {
         std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -376,22 +507,22 @@ private:
 
     static bool IsBwlBossName(std::string const& name)
     {
-        return name.find("razorgore the untamed") != std::string::npos || name.find("grethok the controller") != std::string::npos ||
-            name.find("vaelastrasz the corrupt") != std::string::npos || name.find("broodlord lashlayer") != std::string::npos ||
-            name.find("firemaw") != std::string::npos || name.find("ebonroc") != std::string::npos ||
-            name.find("flamegor") != std::string::npos || name.find("chromaggus") != std::string::npos ||
-            name.find("lord victor nefarius") != std::string::npos || name.find("nefarian") != std::string::npos;
+        return name == "razorgore the untamed" || name == "grethok the controller" || name == "vaelastrasz the corrupt" ||
+            name == "broodlord lashlayer" || name == "firemaw" || name == "ebonroc" || name == "flamegor" ||
+            name == "chromaggus" || name == "lord victor nefarius" || name == "nefarian";
     }
 
     static bool IsDangerousTrashName(std::string const& name)
     {
-        if (name.find("blackwing spellbinder") != std::string::npos || name.find("blackwing warlock") != std::string::npos ||
-            name.find("blackwing taskmaster") != std::string::npos || name.find("blackwing technician") != std::string::npos)
+        if (name == "blackwing spellbinder" || name == "blackwing warlock" || name == "blackwing taskmaster" ||
+            name == "blackwing mage" || name == "blackwing legionnaire" || name == "blackwing technician")
         {
             return true;
         }
 
-        if (name.find("death talon") != std::string::npos || name.find("chromatic drakonid") != std::string::npos)
+        if (name == "death talon dragonspawn" || name == "death talon wyrmguard" || name == "death talon overseer" ||
+            name == "death talon flamescale" || name == "death talon seether" || name == "death talon captain" ||
+            name == "death talon hatcher" || name == "chromatic drakonid")
         {
             return true;
         }
