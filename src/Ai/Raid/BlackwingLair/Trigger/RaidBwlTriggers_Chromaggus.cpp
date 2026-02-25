@@ -41,15 +41,14 @@ ChromaggusBreathCast GetChromaggusBreathCast(PlayerbotAI* botAI, Unit* chromaggu
     }
 
     SpellInfo const* spellInfo = spell->GetSpellInfo();
-    uint32 const spellId = spellInfo->Id;
-
-    if (spellId == BwlSpellIds::ChromaggusTimeLapse)
+    if (BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::ChromaggusTimeLapse}))
     {
         return ChromaggusBreathCast::TimeLapse;
     }
 
-    if (spellId == BwlSpellIds::ChromaggusIncinerate || spellId == BwlSpellIds::ChromaggusFrostBurn ||
-        spellId == BwlSpellIds::ChromaggusCorrosiveAcid || spellId == BwlSpellIds::ChromaggusIgniteFlesh)
+    if (BwlSpellIds::MatchesAnySpellId(
+            spellInfo, {BwlSpellIds::ChromaggusIncinerate, BwlSpellIds::ChromaggusFrostBurn, BwlSpellIds::ChromaggusCorrosiveAcid,
+                        BwlSpellIds::ChromaggusIgniteFlesh}))
     {
         return ChromaggusBreathCast::OtherBreath;
     }
@@ -179,7 +178,8 @@ bool BwlChromaggusMainTankTimeLapseTrigger::IsActive()
         return false;
     }
 
-    if (botAI->GetAura("time lapse", mainTank, false, true) || botAI->GetAura("time warp", mainTank, false, true))
+    if (BwlSpellIds::HasAnyAura(botAI, mainTank, {BwlSpellIds::ChromaggusTimeLapse}) ||
+        botAI->GetAura("time lapse", mainTank, false, true) || botAI->GetAura("time warp", mainTank, false, true))
     {
         return true;
     }

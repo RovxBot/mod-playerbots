@@ -11,7 +11,7 @@ bool HasBurningAdrenaline(PlayerbotAI* botAI, Unit* unit)
         return false;
     }
 
-    if (botAI->HasAura(BwlSpellIds::BurningAdrenaline, unit) || botAI->HasAura(BwlSpellIds::BurningAdrenalineAlt, unit))
+    if (BwlSpellIds::HasAnyAura(botAI, unit, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}))
     {
         return true;
     }

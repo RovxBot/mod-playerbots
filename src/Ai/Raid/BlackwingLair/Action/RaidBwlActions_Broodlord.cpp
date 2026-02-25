@@ -123,7 +123,7 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
         if (spell && spell->GetSpellInfo())
         {
             SpellInfo const* spellInfo = spell->GetSpellInfo();
-            if (spellInfo->Id == BwlSpellIds::BroodlordBlastWave)
+            if (BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::BroodlordBlastWave}))
             {
                 blastWaveCasting = true;
             }
