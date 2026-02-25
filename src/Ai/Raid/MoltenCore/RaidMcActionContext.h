@@ -26,6 +26,9 @@ public:
         creators["mc golemagg assist tank attack core rager"] = &RaidMcActionContext::golemagg_assist_tank_attack_core_rager;
         creators["mc majordomo shadow resistance"] = &RaidMcActionContext::majordomo_shadow_resistance;
         creators["mc ragnaros fire resistance"] = &RaidMcActionContext::ragnaros_fire_resistance;
+        creators["mc ragnaros position"] = &RaidMcActionContext::ragnaros_position;
+        creators["mc ragnaros melee step out"] = &RaidMcActionContext::ragnaros_melee_step_out;
+        creators["mc ragnaros sons target"] = &RaidMcActionContext::ragnaros_sons_target;
     }
 
 private:
@@ -44,6 +47,9 @@ private:
     static Action* golemagg_assist_tank_attack_core_rager(PlayerbotAI* botAI) { return new McGolemaggAssistTankAttackCoreRagerAction(botAI); }
     static Action* majordomo_shadow_resistance(PlayerbotAI* botAI) { return new BossShadowResistanceAction(botAI, "majordomo executus"); }
     static Action* ragnaros_fire_resistance(PlayerbotAI* botAI) { return new BossFireResistanceAction(botAI, "ragnaros"); }
+    static Action* ragnaros_position(PlayerbotAI* botAI) { return new McRagnarosPositionAction(botAI); }
+    static Action* ragnaros_melee_step_out(PlayerbotAI* botAI) { return new McRagnarosMeleeStepOutAction(botAI); }
+    static Action* ragnaros_sons_target(PlayerbotAI* botAI) { return new McRagnarosSonsTargetAction(botAI); }
 };
 
 #endif

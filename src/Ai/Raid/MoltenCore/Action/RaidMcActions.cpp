@@ -1,5 +1,9 @@
 #include "RaidMcActions.h"
 
+#include <cmath>
+#include <limits>
+#include <vector>
+
 #include "Playerbots.h"
 #include "RtiTargetValue.h"
 #include "RaidMcHelpers.h"
@@ -16,8 +20,72 @@ static const Position CORE_RAGER_TANK_POSITION{846.6453, -1019.0639, -198.9819};
 
 static constexpr float GOLEMAGGS_TRUST_DISTANCE = 30.0f;
 static constexpr float CORE_RAGER_STEP_DISTANCE = 5.0f;
+static constexpr float RAGNAROS_MELEE_STEP_OUT_DISTANCE = 22.0f;
+static constexpr float PI = 3.14159265358979323846f;
+static constexpr float RAGNAROS_RANGED_RING_RADIUS = 34.0f;
+static constexpr float RAGNAROS_HEALER_RING_RADIUS = 30.0f;
+static constexpr float RAGNAROS_RING_SPACING = 8.0f;
+static constexpr float RAGNAROS_RING_HEIGHT_TOLERANCE = 18.0f;
+static constexpr float RAGNAROS_RING_MOVE_TOLERANCE = 1.8f;
 
 using namespace MoltenCoreHelpers;
+
+namespace
+{
+bool IsSafeRagnarosAnchor(Player* bot, float x, float y, float bossZ, float& zOut)
+{
+    Map* map = bot->GetMap();
+    if (!map)
+    {
+        return false;
+    }
+
+    float const ground = map->GetHeight(x, y, bot->GetPositionZ() + 20.0f);
+    float const water = map->GetWaterLevel(x, y);
+    float const z = std::max(ground, water);
+    if (!std::isfinite(z))
+    {
+        return false;
+    }
+
+    // Ragnaros room has lava; reject anchors in liquid.
+    if (map->IsInWater(bot->GetPhaseMask(), x, y, z, bot->GetCollisionHeight()))
+    {
+        return false;
+    }
+
+    if (std::fabs(z - bossZ) > RAGNAROS_RING_HEIGHT_TOLERANCE)
+    {
+        return false;
+    }
+
+    zOut = z;
+    return true;
+}
+
+std::vector<Position> BuildRagnarosRingAnchors(Player* bot, Unit* ragnaros, float radius)
+{
+    std::vector<Position> anchors;
+    if (!bot || !ragnaros)
+    {
+        return anchors;
+    }
+
+    float const step = RAGNAROS_RING_SPACING / radius;  // ~8y spacing along arc
+    for (float angle = 0.0f; angle < (2.0f * PI); angle += step)
+    {
+        float const testX = ragnaros->GetPositionX() + std::cos(angle) * radius;
+        float const testY = ragnaros->GetPositionY() + std::sin(angle) * radius;
+        float testZ = 0.0f;
+        if (IsSafeRagnarosAnchor(bot, testX, testY, ragnaros->GetPositionZ(), testZ))
+        {
+            anchors.emplace_back(testX, testY, testZ, 0.0f);
+        }
+    }
+
+    return anchors;
+}
+}
 
 bool McMoveFromGroupAction::Execute(Event /*event*/)
 {
@@ -211,4 +279,142 @@ bool McGolemaggAssistTankAttackCoreRagerAction::Execute(Event event)
     }
 
     return false;
+}
+
+bool McRagnarosPositionAction::Execute(Event /*event*/)
+{
+    Unit* ragnaros = AI_VALUE2(Unit*, "find target", "ragnaros");
+    if (!ragnaros || !ragnaros->IsAlive() || ragnaros->HasAura(SPELL_RAGSUBMERGE))
+    {
+        return false;
+    }
+
+    float targetX = ragnaros->GetPositionX();
+    float targetY = ragnaros->GetPositionY();
+    float targetZ = ragnaros->GetPositionZ();
+    float const facing = ragnaros->GetOrientation();
+    uint32 const slot = botAI->GetGroupSlotIndex(bot);
+
+    float angleOffset = 0.0f;
+    float distance = 0.0f;
+
+    if (botAI->IsMainTank(bot))
+    {
+        angleOffset = 0.0f;
+        distance = 7.0f;
+    }
+    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    {
+        angleOffset = PI / 8.0f;
+        distance = 10.0f;
+    }
+    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    {
+        // Fixed ring anchors with ~8y spacing around Ragnaros; only safe non-lava points are used.
+        float const radius = botAI->IsHeal(bot) ? RAGNAROS_HEALER_RING_RADIUS : RAGNAROS_RANGED_RING_RADIUS;
+        std::vector<Position> anchors = BuildRagnarosRingAnchors(bot, ragnaros, radius);
+        if (!anchors.empty())
+        {
+            Position const& anchor = anchors[slot % anchors.size()];
+            targetX = anchor.GetPositionX();
+            targetY = anchor.GetPositionY();
+            targetZ = anchor.GetPositionZ();
+
+            if (bot->GetExactDist2d(targetX, targetY) <= RAGNAROS_RING_MOVE_TOLERANCE)
+            {
+                return false;
+            }
+
+            if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false,
+                       MovementPriority::MOVEMENT_COMBAT))
+            {
+                return true;
+            }
+
+            return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+        }
+
+        // Fallback if no valid ring anchor could be found.
+        float spread = ((slot % 8) - 3.5f) * 0.18f;
+        angleOffset = PI + spread;
+        distance = radius;
+    }
+    else
+    {
+        float spread = ((slot % 5) - 2.0f) * 0.10f;
+        angleOffset = PI + spread;
+        distance = 7.5f;
+    }
+
+    float angle = facing + angleOffset;
+    targetX += std::cos(angle) * distance;
+    targetY += std::sin(angle) * distance;
+
+    if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+    {
+        return true;
+    }
+
+    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool McRagnarosMeleeStepOutAction::Execute(Event /*event*/)
+{
+    Unit* ragnaros = AI_VALUE2(Unit*, "find target", "ragnaros");
+    if (!ragnaros || !ragnaros->IsAlive() || ragnaros->HasAura(SPELL_RAGSUBMERGE))
+    {
+        return false;
+    }
+
+    float const currentDistance = bot->GetDistance2d(ragnaros);
+    float const distToTravel = RAGNAROS_MELEE_STEP_OUT_DISTANCE - currentDistance;
+    if (distToTravel <= 0.0f)
+    {
+        return false;
+    }
+
+    return MoveAway(ragnaros, distToTravel, true);
+}
+
+bool McRagnarosSonsTargetAction::Execute(Event /*event*/)
+{
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
+
+    Unit* best = nullptr;
+    float bestDist = std::numeric_limits<float>::max();
+
+    auto consider = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_SON_OF_FLAME)
+            {
+                continue;
+            }
+
+            float const dist = bot->GetExactDist2d(unit);
+            if (!best || dist < bestDist)
+            {
+                best = unit;
+                bestDist = dist;
+            }
+        }
+    };
+
+    consider(attackers);
+    consider(nearby);
+
+    if (!best)
+    {
+        return false;
+    }
+
+    if (AI_VALUE(Unit*, "current target") == best)
+    {
+        return false;
+    }
+
+    return Attack(best, false);
 }

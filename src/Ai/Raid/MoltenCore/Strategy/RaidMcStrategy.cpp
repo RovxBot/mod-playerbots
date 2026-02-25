@@ -71,6 +71,15 @@ void RaidMcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(
         new TriggerNode("mc ragnaros fire resistance",
                         { NextAction("mc ragnaros fire resistance", ACTION_RAID) }));
+    triggers.push_back(
+        new TriggerNode("mc ragnaros positioning",
+                        { NextAction("mc ragnaros position", ACTION_RAID) }));
+    triggers.push_back(
+        new TriggerNode("mc ragnaros wrath window",
+                        { NextAction("mc ragnaros melee step out", ACTION_RAID + 1) }));
+    triggers.push_back(
+        new TriggerNode("mc ragnaros sons",
+                        { NextAction("mc ragnaros sons target", ACTION_RAID + 1) }));
 }
 
 void RaidMcStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)

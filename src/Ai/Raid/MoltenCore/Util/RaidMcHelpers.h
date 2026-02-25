@@ -7,6 +7,10 @@ enum MoltenCoreNPCs
 {
     // Golemagg
     NPC_CORE_RAGER = 11672,
+
+    // Ragnaros
+    NPC_RAGNAROS = 11502,
+    NPC_SON_OF_FLAME = 12143,
 };
 enum MoltenCoreSpells
 {
@@ -16,6 +20,11 @@ enum MoltenCoreSpells
 
     // Golemagg
     SPELL_GOLEMAGGS_TRUST = 20553,
+
+    // Ragnaros
+    SPELL_WRATH_OF_RAGNAROS = 20566,
+    SPELL_HAND_OF_RAGNAROS = 19780,
+    SPELL_RAGSUBMERGE = 21107,
 };
 }
 

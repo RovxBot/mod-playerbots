@@ -64,4 +64,28 @@ public:
     bool Execute(Event event) override;
 };
 
+class McRagnarosPositionAction : public MovementAction
+{
+public:
+    McRagnarosPositionAction(PlayerbotAI* botAI, std::string const name = "mc ragnaros position")
+        : MovementAction(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
+class McRagnarosMeleeStepOutAction : public MovementAction
+{
+public:
+    McRagnarosMeleeStepOutAction(PlayerbotAI* botAI, std::string const name = "mc ragnaros melee step out")
+        : MovementAction(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
+class McRagnarosSonsTargetAction : public AttackAction
+{
+public:
+    McRagnarosSonsTargetAction(PlayerbotAI* botAI, std::string const name = "mc ragnaros sons target")
+        : AttackAction(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
 #endif
