@@ -4,6 +4,24 @@
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
+#include "Timer.h"
+
+void BwlEncounterTargetingMultiplier::RefreshStateCache() const
+{
+    uint32 const cacheTick = getMSTime() / 100;
+    if (cacheMSTime == cacheTick)
+    {
+        return;
+    }
+
+    cacheMSTime = cacheTick;
+    cacheNefarianP1 = helper.IsNefarianPhaseOneActive();
+    cacheNefarianP2 = helper.IsNefarianPhaseTwoActive();
+    cacheAnyBossEncounter = helper.IsAnyBwlBossEncounterActive();
+    cacheDangerousTrashEncounter = helper.IsDangerousTrashEncounterActive();
+    cacheSeetherEnraged = helper.HasEnragedDeathTalonSeetherNearbyOrAttacking();
+    cacheDeathTalonUndetected = helper.HasUndetectedDeathTalonNearbyOrAttacking();
+}
 
 float BwlEncounterTargetingMultiplier::GetValue(Action* action)
 {
@@ -12,9 +30,11 @@ float BwlEncounterTargetingMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
+    RefreshStateCache();
+
     std::string const actionName = action->getName();
 
-    if (helper.IsNefarianPhaseOneActive())
+    if (cacheNefarianP1)
     {
         if (actionName == "bwl nefarian phase two choose target" || actionName == "bwl nefarian phase two position")
         {
@@ -22,7 +42,7 @@ float BwlEncounterTargetingMultiplier::GetValue(Action* action)
         }
     }
 
-    if (helper.IsNefarianPhaseTwoActive())
+    if (cacheNefarianP2)
     {
         if (actionName == "bwl nefarian phase one choose target" || actionName == "bwl nefarian phase one tunnel position")
         {
@@ -30,7 +50,7 @@ float BwlEncounterTargetingMultiplier::GetValue(Action* action)
         }
     }
 
-    if (helper.IsAnyBwlBossEncounterActive() || helper.IsDangerousTrashEncounterActive())
+    if (cacheAnyBossEncounter || cacheDangerousTrashEncounter)
     {
         if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
             dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
@@ -39,17 +59,30 @@ float BwlEncounterTargetingMultiplier::GetValue(Action* action)
         }
     }
 
-    if (helper.HasEnragedDeathTalonSeetherNearbyOrAttacking() && actionName == "bwl trash tranq seether")
+    if (cacheSeetherEnraged && actionName == "bwl trash tranq seether")
     {
         return 1.5f;
     }
 
-    if (helper.HasUndetectedDeathTalonNearbyOrAttacking() && actionName == "bwl trash detect magic")
+    if (cacheDeathTalonUndetected && actionName == "bwl trash detect magic")
     {
         return 1.4f;
     }
 
     return 1.0f;
+}
+
+void BwlEncounterPositioningMultiplier::RefreshStateCache() const
+{
+    uint32 const cacheTick = getMSTime() / 100;
+    if (cacheMSTime == cacheTick)
+    {
+        return;
+    }
+
+    cacheMSTime = cacheTick;
+    cacheAnyBossEncounter = helper.IsAnyBwlBossEncounterActive();
+    cacheChromaggusTimeLapseCast = helper.IsChromaggusCastingTimeLapse();
 }
 
 float BwlEncounterPositioningMultiplier::GetValue(Action* action)
@@ -59,7 +92,9 @@ float BwlEncounterPositioningMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    if (helper.IsAnyBwlBossEncounterActive())
+    RefreshStateCache();
+
+    if (cacheAnyBossEncounter)
     {
         if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action))
         {
@@ -67,7 +102,7 @@ float BwlEncounterPositioningMultiplier::GetValue(Action* action)
         }
     }
 
-    if (helper.IsChromaggusCastingTimeLapse() && dynamic_cast<FleeAction*>(action))
+    if (cacheChromaggusTimeLapseCast && dynamic_cast<FleeAction*>(action))
     {
         return 0.0f;
     }
