@@ -23,20 +23,14 @@ Aura* GetFlameBuffetAura(PlayerbotAI* botAI, Unit* unit)
     return aura;
 }
 
-Aura* GetFlamegorFrenzyAura(PlayerbotAI* botAI, Unit* unit)
+Aura* GetFlamegorFrenzyAura(Unit* unit)
 {
-    if (!botAI || !unit)
+    if (!unit)
     {
         return nullptr;
     }
 
-    Aura* aura = unit->GetAura(BwlSpellIds::FlamegorFrenzy);
-    if (aura)
-    {
-        return aura;
-    }
-
-    return botAI->GetAura("frenzy", unit, false, true);
+    return unit->GetAura(BwlSpellIds::FlamegorFrenzy);
 }
 }  // namespace
 
@@ -229,5 +223,5 @@ bool BwlFlamegorFrenzyTrigger::IsActive()
         return false;
     }
 
-    return GetFlamegorFrenzyAura(botAI, flamegor) != nullptr;
+    return GetFlamegorFrenzyAura(flamegor) != nullptr;
 }

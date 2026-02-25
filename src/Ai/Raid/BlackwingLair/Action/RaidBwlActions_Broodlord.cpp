@@ -127,10 +127,6 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
             {
                 blastWaveCasting = true;
             }
-            else if (spellInfo->SpellName[LOCALE_enUS])
-            {
-                blastWaveCasting = botAI->EqualLowercaseName(spellInfo->SpellName[LOCALE_enUS], "blast wave");
-            }
         }
     }
 
