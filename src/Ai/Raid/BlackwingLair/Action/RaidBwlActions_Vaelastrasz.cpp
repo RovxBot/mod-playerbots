@@ -30,7 +30,7 @@ bool BwlVaelastraszPositionAction::Execute(Event /*event*/)
     }
 
     // Burning Adrenaline movement-out is handled by higher-priority generic move-from-group.
-    if (botAI->HasAura(BwlSpellIds::BurningAdrenaline, bot) || botAI->HasAura(BwlSpellIds::BurningAdrenalineAlt, bot) ||
+    if (BwlSpellIds::HasAnyAura(botAI, bot, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}) ||
         botAI->HasAura("burning adrenaline", bot))
     {
         return false;

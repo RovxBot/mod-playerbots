@@ -1,5 +1,10 @@
 #include "RaidBwlActions.h"
 
+#include <algorithm>
+#include <cctype>
+#include <limits>
+#include <string>
+
 #include "SharedDefines.h"
 
 bool BwlRazorgoreChooseTargetAction::Execute(Event /*event*/)
@@ -8,11 +13,79 @@ bool BwlRazorgoreChooseTargetAction::Execute(Event /*event*/)
     GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
     Unit* target = nullptr;
     Unit* razorgore = nullptr;
+    int bestPriority = std::numeric_limits<int>::max();
+    float bestDistance = std::numeric_limits<float>::max();
 
-    std::vector<Unit*> mages;
-    std::vector<Unit*> legionnaires;
-    std::vector<Unit*> dragonkin;
-    std::vector<Unit*> otherBlackwing;
+    auto toLower = [](std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return value;
+    };
+
+    auto classifyPriority = [&](Unit* unit) -> int
+    {
+        if (!unit || !unit->IsAlive())
+        {
+            return std::numeric_limits<int>::max();
+        }
+
+        switch (unit->GetEntry())
+        {
+            case BwlCreatureIds::GrethokTheController:
+                return 0;
+            case BwlCreatureIds::BlackwingMage:
+                return 10;
+            case BwlCreatureIds::BlackwingLegionnaire:
+                return 20;
+            case BwlCreatureIds::DeathTalonDragonspawn:
+            case BwlCreatureIds::DeathTalonWyrmguard:
+                return 30;
+            case BwlCreatureIds::BlackwingTaskmaster:
+            case BwlCreatureIds::BlackwingWarlock:
+            case BwlCreatureIds::BlackwingSpellbinder:
+            case BwlCreatureIds::DeathTalonOverseer:
+            case BwlCreatureIds::DeathTalonFlamescale:
+            case BwlCreatureIds::DeathTalonSeether:
+            case BwlCreatureIds::DeathTalonCaptain:
+            case BwlCreatureIds::DeathTalonHatcher:
+            case BwlCreatureIds::BlackwingTechnician:
+                return 40;
+            default:
+                break;
+        }
+
+        // Fallback for custom creature data.
+        std::string const name = toLower(unit->GetName());
+        if (name.find("grethok the controller") != std::string::npos)
+            return 0;
+        if (name.find("blackwing mage") != std::string::npos)
+            return 10;
+        if (name.find("blackwing legionnaire") != std::string::npos)
+            return 20;
+        if (name.find("death talon dragonspawn") != std::string::npos || name.find("death talon wyrmguard") != std::string::npos)
+            return 30;
+        if (name.find("blackwing") != std::string::npos || name.find("death talon") != std::string::npos)
+            return 40;
+
+        return std::numeric_limits<int>::max();
+    };
+
+    auto consider = [&](Unit* unit)
+    {
+        int const priority = classifyPriority(unit);
+        if (priority == std::numeric_limits<int>::max())
+        {
+            return;
+        }
+
+        float const distance = bot->GetExactDist2d(unit);
+        if (!target || priority < bestPriority || (priority == bestPriority && distance < bestDistance))
+        {
+            target = unit;
+            bestPriority = priority;
+            bestDistance = distance;
+        }
+    };
 
     auto evaluate = [&](GuidVector const& units)
     {
@@ -24,72 +97,22 @@ bool BwlRazorgoreChooseTargetAction::Execute(Event /*event*/)
                 continue;
             }
 
-            std::string name = unit->GetName();
-            if (botAI->EqualLowercaseName(name, "razorgore the untamed"))
+            if (unit->GetEntry() == BwlCreatureIds::RazorgoreTheUntamed || botAI->EqualLowercaseName(unit->GetName(), "razorgore the untamed"))
             {
                 razorgore = unit;
                 continue;
             }
 
-            // Pre-fight controller should still be burned down fast.
-            if (botAI->EqualLowercaseName(name, "grethok the controller"))
-            {
-                target = unit;
-                return;
-            }
-
-            if (botAI->EqualLowercaseName(name, "blackwing mage"))
-            {
-                mages.push_back(unit);
-                continue;
-            }
-
-            if (botAI->EqualLowercaseName(name, "blackwing legionnaire"))
-            {
-                legionnaires.push_back(unit);
-                continue;
-            }
-
-            if (botAI->EqualLowercaseName(name, "death talon dragonspawn") ||
-                botAI->EqualLowercaseName(name, "death talon wyrmguard"))
-            {
-                dragonkin.push_back(unit);
-                continue;
-            }
-
-            if (name.find("Blackwing") != std::string::npos || name.find("Death Talon") != std::string::npos)
-            {
-                otherBlackwing.push_back(unit);
-            }
+            consider(unit);
         }
     };
 
     evaluate(attackers);
-    if (!target)
-    {
-        evaluate(nearby);
-    }
+    evaluate(nearby);
 
     if (!razorgore)
     {
         razorgore = AI_VALUE2(Unit*, "find target", "razorgore the untamed");
-    }
-
-    if (!target && !mages.empty())
-    {
-        target = mages.front();
-    }
-    if (!target && !legionnaires.empty())
-    {
-        target = legionnaires.front();
-    }
-    if (!target && !dragonkin.empty())
-    {
-        target = dragonkin.front();
-    }
-    if (!target && !otherBlackwing.empty())
-    {
-        target = otherBlackwing.front();
     }
 
     // During egg phase players use the orb and Razorgore is normally not attackable.

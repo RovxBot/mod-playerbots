@@ -127,7 +127,7 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
 
     float targetX = nefarian->GetPositionX();
     float targetY = nefarian->GetPositionY();
-    float targetZ = bot->GetPositionZ();
+    float targetZ = nefarian->GetPositionZ();
     float const facing = nefarian->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
@@ -184,6 +184,12 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
     float angle = facing + angleOffset;
     targetX += std::cos(angle) * distance;
     targetY += std::sin(angle) * distance;
+
+    // Avoid movement churn from tiny facing updates/fear recovery jitter.
+    if (bot->GetDistance2d(targetX, targetY) <= 1.5f && std::fabs(bot->GetPositionZ() - targetZ) <= 2.0f)
+    {
+        return false;
+    }
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
