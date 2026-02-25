@@ -17,11 +17,13 @@ namespace BwlSpellIds
     static constexpr uint32 ShadowOfEbonroc = 23340;
     static constexpr uint32 FlamegorFrenzy = 23342;
     static constexpr uint32 BroodlordBlastWave = 23331;
+    static constexpr uint32 DeathTalonSeetherEnrage = 22428;
     static constexpr uint32 ChromaggusIncinerate = 23308;
     static constexpr uint32 ChromaggusFrostBurn = 23187;
     static constexpr uint32 ChromaggusTimeLapse = 23310;
     static constexpr uint32 ChromaggusCorrosiveAcid = 23313;
     static constexpr uint32 ChromaggusIgniteFlesh = 23315;
+    static constexpr uint32 ChromaggusFrenzy = 23128;
 
     inline bool HasAnyAura(PlayerbotAI* botAI, Unit* unit, std::initializer_list<uint32> spellIds)
     {

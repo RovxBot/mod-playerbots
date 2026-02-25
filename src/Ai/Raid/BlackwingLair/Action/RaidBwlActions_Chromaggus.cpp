@@ -89,7 +89,7 @@ bool BwlChromaggusTranqAction::isUseful()
         return false;
     }
 
-    return botAI->HasAura("frenzy", chromaggus);
+    return BwlSpellIds::GetAnyAura(chromaggus, {BwlSpellIds::ChromaggusFrenzy}) != nullptr;
 }
 
 bool BwlChromaggusTranqAction::Execute(Event /*event*/)

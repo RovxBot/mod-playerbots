@@ -1,9 +1,5 @@
 #include "RaidBwlTriggers.h"
 
-#include <string>
-#include <algorithm>
-#include <cctype>
-
 #include "RaidBwlSpellIds.h"
 #include "Spell.h"
 #include "SharedDefines.h"
@@ -16,12 +12,6 @@ enum class ChromaggusBreathCast
     OtherBreath,
     TimeLapse
 };
-
-bool ContainsToken(std::string value, char const* token)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value.find(token) != std::string::npos;
-}
 
 ChromaggusBreathCast GetChromaggusBreathCast(PlayerbotAI* botAI, Unit* chromaggus)
 {
@@ -49,28 +39,6 @@ ChromaggusBreathCast GetChromaggusBreathCast(PlayerbotAI* botAI, Unit* chromaggu
     if (BwlSpellIds::MatchesAnySpellId(
             spellInfo, {BwlSpellIds::ChromaggusIncinerate, BwlSpellIds::ChromaggusFrostBurn, BwlSpellIds::ChromaggusCorrosiveAcid,
                         BwlSpellIds::ChromaggusIgniteFlesh}))
-    {
-        return ChromaggusBreathCast::OtherBreath;
-    }
-
-    if (!spellInfo->SpellName[LOCALE_enUS])
-    {
-        return ChromaggusBreathCast::None;
-    }
-
-    std::string name = spellInfo->SpellName[LOCALE_enUS];
-    if (name.empty())
-    {
-        return ChromaggusBreathCast::None;
-    }
-
-    if (ContainsToken(name, "time lapse") || ContainsToken(name, "time warp"))
-    {
-        return ChromaggusBreathCast::TimeLapse;
-    }
-
-    if (ContainsToken(name, "breath") || ContainsToken(name, "incinerate") || ContainsToken(name, "frost burn") ||
-        ContainsToken(name, "ignite flesh") || ContainsToken(name, "corrosive acid"))
     {
         return ChromaggusBreathCast::OtherBreath;
     }
@@ -127,7 +95,7 @@ bool BwlChromaggusFrenzyTrigger::IsActive()
         return false;
     }
 
-    return botAI->HasAura("frenzy", chromaggus);
+    return BwlSpellIds::GetAnyAura(chromaggus, {BwlSpellIds::ChromaggusFrenzy}) != nullptr;
 }
 
 bool BwlChromaggusBreathLosTrigger::IsActive()
@@ -178,8 +146,7 @@ bool BwlChromaggusMainTankTimeLapseTrigger::IsActive()
         return false;
     }
 
-    if (BwlSpellIds::HasAnyAura(botAI, mainTank, {BwlSpellIds::ChromaggusTimeLapse}) ||
-        botAI->GetAura("time lapse", mainTank, false, true) || botAI->GetAura("time warp", mainTank, false, true))
+    if (BwlSpellIds::HasAnyAura(botAI, mainTank, {BwlSpellIds::ChromaggusTimeLapse}))
     {
         return true;
     }

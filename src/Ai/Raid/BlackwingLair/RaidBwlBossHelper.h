@@ -246,7 +246,7 @@ public:
             return false;
         }
 
-        return botAI->GetAura("enrage", seether, false, true) || botAI->GetAura("frenzy", seether, false, true);
+        return BwlSpellIds::GetAnyAura(seether, {BwlSpellIds::DeathTalonSeetherEnrage}) != nullptr;
     }
 
     bool HasEnragedDeathTalonSeetherInUnits(GuidVector const& units) const
@@ -460,18 +460,7 @@ public:
         }
 
         SpellInfo const* spellInfo = spell->GetSpellInfo();
-        if (BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::ChromaggusTimeLapse}))
-        {
-            return true;
-        }
-
-        if (!spellInfo->SpellName[LOCALE_enUS])
-        {
-            return false;
-        }
-
-        std::string const spellName = ToLower(spellInfo->SpellName[LOCALE_enUS]);
-        return spellName.find("time lapse") != std::string::npos || spellName.find("time warp") != std::string::npos;
+        return BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::ChromaggusTimeLapse});
     }
 
 private:

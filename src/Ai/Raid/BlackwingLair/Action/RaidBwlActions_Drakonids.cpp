@@ -228,7 +228,7 @@ bool BwlFlamegorTranqAction::isUseful()
         return true;
     }
 
-    return botAI->HasAura("frenzy", flamegor);
+    return false;
 }
 
 bool BwlFlamegorTranqAction::Execute(Event /*event*/)
