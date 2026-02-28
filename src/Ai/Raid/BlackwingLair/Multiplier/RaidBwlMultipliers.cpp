@@ -82,6 +82,7 @@ void BwlEncounterPositioningMultiplier::RefreshStateCache() const
 
     cacheMSTime = cacheTick;
     cacheAnyBossEncounter = helper.IsAnyBwlBossEncounterActive();
+    cacheDangerousTrashEncounter = helper.IsDangerousTrashEncounterActive();
     cacheChromaggusTimeLapseCast = helper.IsChromaggusCastingTimeLapse();
 }
 
@@ -94,7 +95,7 @@ float BwlEncounterPositioningMultiplier::GetValue(Action* action)
 
     RefreshStateCache();
 
-    if (cacheAnyBossEncounter)
+    if (cacheAnyBossEncounter || cacheDangerousTrashEncounter)
     {
         if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action))
         {

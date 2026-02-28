@@ -35,6 +35,7 @@ private:
     BwlBossHelper helper;
     mutable uint32 cacheMSTime = 0;
     mutable bool cacheAnyBossEncounter = false;
+    mutable bool cacheDangerousTrashEncounter = false;
     mutable bool cacheChromaggusTimeLapseCast = false;
 };
 

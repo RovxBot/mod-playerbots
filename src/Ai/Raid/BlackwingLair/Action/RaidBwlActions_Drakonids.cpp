@@ -1,9 +1,76 @@
 #include "RaidBwlActions.h"
 
 #include <cmath>
+#include <unordered_map>
 
 #include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
+#include "Timer.h"
+
+namespace
+{
+struct DrakePositionState
+{
+    float lastFacing = 0.0f;
+    uint32 lastFacingChangeMs = 0;
+    uint32 lastRepositionMs = 0;
+    bool initialized = false;
+};
+
+std::unordered_map<uint32, DrakePositionState> sDrakePositionStates;
+
+bool ShouldDelayDrakeReposition(Player* bot, Unit* drake, bool isTankRole)
+{
+    if (!bot || !drake || isTankRole)
+    {
+        return false;
+    }
+
+    uint32 const nowMs = getMSTime();
+    uint32 const botKey = bot->GetGUID().GetCounter();
+    DrakePositionState& state = sDrakePositionStates[botKey];
+
+    float const facing = drake->GetOrientation();
+    if (!state.initialized)
+    {
+        state.initialized = true;
+        state.lastFacing = facing;
+        state.lastFacingChangeMs = nowMs;
+        return false;
+    }
+
+    float const deltaFacing = std::fabs(std::remainder(facing - state.lastFacing, static_cast<float>(2.0 * M_PI)));
+    if (deltaFacing >= 0.30f)
+    {
+        state.lastFacing = facing;
+        state.lastFacingChangeMs = nowMs;
+    }
+
+    // Let the drake settle after spin/threat flips to prevent raid-wide reposition ping-pong.
+    if (nowMs - state.lastFacingChangeMs < 1200)
+    {
+        return true;
+    }
+
+    // Also rate-limit non-tank repositions to avoid micro-adjust storms.
+    if (nowMs - state.lastRepositionMs < 900)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void MarkDrakeReposition(Player* bot, bool isTankRole)
+{
+    if (!bot || isTankRole)
+    {
+        return;
+    }
+
+    sDrakePositionStates[bot->GetGUID().GetCounter()].lastRepositionMs = getMSTime();
+}
+}  // namespace
 
 bool BwlFiremawChooseTargetAction::Execute(Event /*event*/)
 {
@@ -38,12 +105,21 @@ bool BwlFiremawPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    if (ShouldDelayDrakeReposition(bot, firemaw, isTankRole))
+    {
+        return false;
+    }
+
+    if (isMainTank)
     {
         angleOffset = 0.0f;
         distance = 6.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 8.0f;
@@ -68,10 +144,17 @@ bool BwlFiremawPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
+        MarkDrakeReposition(bot, isTankRole);
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
+    {
+        MarkDrakeReposition(bot, isTankRole);
+        return true;
+    }
+
+    return false;
 }
 
 bool BwlEbonrocChooseTargetAction::Execute(Event /*event*/)
@@ -107,12 +190,21 @@ bool BwlEbonrocPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    if (ShouldDelayDrakeReposition(bot, ebonroc, isTankRole))
+    {
+        return false;
+    }
+
+    if (isMainTank)
     {
         angleOffset = 0.0f;
         distance = 6.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 8.0f;
@@ -136,10 +228,17 @@ bool BwlEbonrocPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
+        MarkDrakeReposition(bot, isTankRole);
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
+    {
+        MarkDrakeReposition(bot, isTankRole);
+        return true;
+    }
+
+    return false;
 }
 
 bool BwlFlamegorChooseTargetAction::Execute(Event /*event*/)
@@ -175,12 +274,21 @@ bool BwlFlamegorPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    if (ShouldDelayDrakeReposition(bot, flamegor, isTankRole))
+    {
+        return false;
+    }
+
+    if (isMainTank)
     {
         angleOffset = 0.0f;
         distance = 6.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 8.0f;
@@ -204,10 +312,17 @@ bool BwlFlamegorPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
+        MarkDrakeReposition(bot, isTankRole);
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
+    {
+        MarkDrakeReposition(bot, isTankRole);
+        return true;
+    }
+
+    return false;
 }
 
 bool BwlFlamegorTranqAction::isUseful()

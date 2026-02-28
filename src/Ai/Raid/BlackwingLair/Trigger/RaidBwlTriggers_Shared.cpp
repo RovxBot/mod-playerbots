@@ -18,6 +18,17 @@ bool BwlTrashDangerousEncounterTrigger::IsActive()
     return helper.IsDangerousTrashEncounterActive();
 }
 
+bool BwlTrashSafePositioningTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || !helper.IsDangerousTrashEncounterActive())
+    {
+        return false;
+    }
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->IsAlive() && helper.IsDangerousTrash(target);
+}
+
 bool BwlDeathTalonSeetherEnrageTrigger::IsActive()
 {
     if (!helper.IsInBwl() || !bot->IsInCombat() || bot->getClass() != CLASS_HUNTER)
