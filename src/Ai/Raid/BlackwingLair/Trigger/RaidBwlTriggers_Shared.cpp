@@ -94,6 +94,16 @@ bool BwlWyrmguardControlTrigger::IsActive()
     return false;
 }
 
+bool BwlDisableHunterPetGrowlTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || bot->getClass() != CLASS_HUNTER || !bot->GetPet())
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool BwlDeathTalonSeetherEnrageTrigger::IsActive()
 {
     if (!helper.IsInBwl() || !bot->IsInCombat() || bot->getClass() != CLASS_HUNTER)

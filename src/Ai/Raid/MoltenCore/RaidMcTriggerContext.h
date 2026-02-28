@@ -26,6 +26,10 @@ public:
         creators["mc golemagg is assist tank"] = &RaidMcTriggerContext::golemagg_is_assist_tank;
         creators["mc majordomo shadow resistance"] = &RaidMcTriggerContext::majordomo_shadow_resistance;
         creators["mc ragnaros fire resistance"] = &RaidMcTriggerContext::ragnaros_fire_resistance;
+        creators["mc ragnaros positioning"] = &RaidMcTriggerContext::ragnaros_positioning;
+        creators["mc ragnaros wrath window"] = &RaidMcTriggerContext::ragnaros_wrath_window;
+        creators["mc ragnaros sons"] = &RaidMcTriggerContext::ragnaros_sons;
+        creators["mc disable hunter pet growl"] = &RaidMcTriggerContext::disable_hunter_pet_growl;
     }
 
 private:
@@ -44,6 +48,10 @@ private:
     static Trigger* golemagg_is_assist_tank(PlayerbotAI* botAI) { return new McGolemaggIsAssistTankTrigger(botAI); }
     static Trigger* majordomo_shadow_resistance(PlayerbotAI* botAI) { return new BossShadowResistanceTrigger(botAI, "majordomo executus"); }
     static Trigger* ragnaros_fire_resistance(PlayerbotAI* botAI) { return new BossFireResistanceTrigger(botAI, "ragnaros"); }
+    static Trigger* ragnaros_positioning(PlayerbotAI* botAI) { return new McRagnarosPositioningTrigger(botAI); }
+    static Trigger* ragnaros_wrath_window(PlayerbotAI* botAI) { return new McRagnarosWrathWindowTrigger(botAI); }
+    static Trigger* ragnaros_sons(PlayerbotAI* botAI) { return new McRagnarosSonsTrigger(botAI); }
+    static Trigger* disable_hunter_pet_growl(PlayerbotAI* botAI) { return new McDisableHunterPetGrowlTrigger(botAI); }
 };
 
 #endif

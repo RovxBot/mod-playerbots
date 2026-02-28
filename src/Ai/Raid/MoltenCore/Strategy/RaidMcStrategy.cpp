@@ -5,6 +5,10 @@
 
 void RaidMcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(
+        new TriggerNode("mc disable hunter pet growl",
+                        { NextAction("mc disable hunter pet growl", ACTION_RAID + 2) }));
+
     // Lucifron
     triggers.push_back(
         new TriggerNode("mc lucifron shadow resistance",

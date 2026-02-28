@@ -183,6 +183,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlDisableHunterPetGrowlAction : public Action
+{
+public:
+    BwlDisableHunterPetGrowlAction(PlayerbotAI* botAI) : Action(botAI, "bwl disable hunter pet growl") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTrashTranqSeetherAction : public Action
 {
 public:

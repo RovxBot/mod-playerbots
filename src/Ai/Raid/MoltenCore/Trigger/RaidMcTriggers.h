@@ -47,4 +47,32 @@ public:
     bool IsActive() override;
 };
 
+class McRagnarosPositioningTrigger : public Trigger
+{
+public:
+    McRagnarosPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "mc ragnaros positioning") {}
+    bool IsActive() override;
+};
+
+class McRagnarosWrathWindowTrigger : public Trigger
+{
+public:
+    McRagnarosWrathWindowTrigger(PlayerbotAI* botAI) : Trigger(botAI, "mc ragnaros wrath window") {}
+    bool IsActive() override;
+};
+
+class McRagnarosSonsTrigger : public Trigger
+{
+public:
+    McRagnarosSonsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "mc ragnaros sons") {}
+    bool IsActive() override;
+};
+
+class McDisableHunterPetGrowlTrigger : public Trigger
+{
+public:
+    McDisableHunterPetGrowlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "mc disable hunter pet growl", 5) {}
+    bool IsActive() override;
+};
+
 #endif
