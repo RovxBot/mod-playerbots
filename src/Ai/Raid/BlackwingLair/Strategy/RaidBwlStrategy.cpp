@@ -26,6 +26,9 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl death talon detect magic",
         { NextAction("bwl trash detect magic", ACTION_RAID + 3) }));
 
+    triggers.push_back(new TriggerNode("bwl polymorph mind controlled target",
+        { NextAction("bwl polymorph mind controlled target", ACTION_EMERGENCY + 8) }));
+
     triggers.push_back(new TriggerNode("bwl razorgore encounter",
         { NextAction("bwl razorgore choose target", ACTION_RAID + 1) }));
 
@@ -93,7 +96,7 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("bwl chromaggus los hide", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode("bwl chromaggus main tank time lapse",
-        { NextAction("taunt spell", ACTION_EMERGENCY + 6), NextAction("bwl chromaggus choose target", ACTION_EMERGENCY + 5) }));
+        { NextAction("bwl chromaggus choose target", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode("bwl nefarian phase one",
         { NextAction("bwl nefarian phase one choose target", ACTION_RAID + 1) }));

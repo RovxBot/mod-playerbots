@@ -206,6 +206,13 @@ public:
     bool isUseful() override;
 };
 
+class BwlPolymorphMindControlledTargetAction : public Action
+{
+public:
+    BwlPolymorphMindControlledTargetAction(PlayerbotAI* botAI) : Action(botAI, "bwl polymorph mind controlled target") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTurnOffSuppressionDeviceAction : public Action
 {
 public:

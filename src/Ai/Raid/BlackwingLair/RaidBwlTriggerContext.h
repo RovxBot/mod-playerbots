@@ -45,6 +45,7 @@ public:
         creators["bwl disable hunter pet growl"] = &RaidBwlTriggerContext::bwl_disable_hunter_pet_growl;
         creators["bwl death talon seether enrage"] = &RaidBwlTriggerContext::bwl_death_talon_seether_enrage;
         creators["bwl death talon detect magic"] = &RaidBwlTriggerContext::bwl_death_talon_detect_magic;
+        creators["bwl polymorph mind controlled target"] = &RaidBwlTriggerContext::bwl_polymorph_mind_controlled_target;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
         creators["bwl affliction bronze"] = &RaidBwlTriggerContext::bwl_affliction_bronze;
     }
@@ -105,6 +106,10 @@ private:
     static Trigger* bwl_disable_hunter_pet_growl(PlayerbotAI* ai) { return new BwlDisableHunterPetGrowlTrigger(ai); }
     static Trigger* bwl_death_talon_seether_enrage(PlayerbotAI* ai) { return new BwlDeathTalonSeetherEnrageTrigger(ai); }
     static Trigger* bwl_death_talon_detect_magic(PlayerbotAI* ai) { return new BwlDeathTalonDetectMagicTrigger(ai); }
+    static Trigger* bwl_polymorph_mind_controlled_target(PlayerbotAI* ai)
+    {
+        return new BwlPolymorphMindControlledTargetTrigger(ai);
+    }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
     static Trigger* bwl_affliction_bronze(PlayerbotAI* ai) { return new BwlAfflictionBronzeTrigger(ai); }
 };

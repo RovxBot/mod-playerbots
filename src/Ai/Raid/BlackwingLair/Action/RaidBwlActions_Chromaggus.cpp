@@ -34,6 +34,16 @@ bool BwlChromaggusPositionAction::Execute(Event /*event*/)
     float targetZ = bot->GetPositionZ();
     float const facing = chromaggus->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    // If Chromaggus snaps to a non-tank, don't let that bot run around trying to
+    // maintain formation. Planting avoids spinning the boss through the raid.
+    if (!isTankRole && chromaggus->GetVictim() == bot)
+    {
+        return false;
+    }
 
     // Hold a doorway-safe lane:
     // tanks stay on the dragon, melee on rear flank, ranged/healers deeper
@@ -41,12 +51,12 @@ bool BwlChromaggusPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    if (isMainTank)
     {
         angleOffset = 0.0f;
         distance = 6.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 8.0f;
