@@ -176,6 +176,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlWyrmguardControlAction : public Action
+{
+public:
+    BwlWyrmguardControlAction(PlayerbotAI* botAI) : Action(botAI, "bwl wyrmguard control") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTrashTranqSeetherAction : public Action
 {
 public:

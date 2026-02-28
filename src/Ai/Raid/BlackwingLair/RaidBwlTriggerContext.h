@@ -41,6 +41,7 @@ public:
         creators["bwl nefarian phase two positioning"] = &RaidBwlTriggerContext::bwl_nefarian_phase_two_positioning;
         creators["bwl trash dangerous encounter"] = &RaidBwlTriggerContext::bwl_trash_dangerous_encounter;
         creators["bwl trash safe positioning"] = &RaidBwlTriggerContext::bwl_trash_safe_positioning;
+        creators["bwl wyrmguard control"] = &RaidBwlTriggerContext::bwl_wyrmguard_control;
         creators["bwl death talon seether enrage"] = &RaidBwlTriggerContext::bwl_death_talon_seether_enrage;
         creators["bwl death talon detect magic"] = &RaidBwlTriggerContext::bwl_death_talon_detect_magic;
         creators["bwl suppression device"] = &RaidBwlTriggerContext::bwl_suppression_device;
@@ -99,6 +100,7 @@ private:
     }
     static Trigger* bwl_trash_dangerous_encounter(PlayerbotAI* ai) { return new BwlTrashDangerousEncounterTrigger(ai); }
     static Trigger* bwl_trash_safe_positioning(PlayerbotAI* ai) { return new BwlTrashSafePositioningTrigger(ai); }
+    static Trigger* bwl_wyrmguard_control(PlayerbotAI* ai) { return new BwlWyrmguardControlTrigger(ai); }
     static Trigger* bwl_death_talon_seether_enrage(PlayerbotAI* ai) { return new BwlDeathTalonSeetherEnrageTrigger(ai); }
     static Trigger* bwl_death_talon_detect_magic(PlayerbotAI* ai) { return new BwlDeathTalonDetectMagicTrigger(ai); }
     static Trigger* bwl_suppression_device(PlayerbotAI* ai) { return new BwlSuppressionDeviceTrigger(ai); }
