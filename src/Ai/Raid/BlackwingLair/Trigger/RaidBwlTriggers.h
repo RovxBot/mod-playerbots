@@ -356,6 +356,16 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlWyrmguardControlTrigger : public Trigger
+{
+public:
+    BwlWyrmguardControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl wyrmguard control"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 class BwlDeathTalonSeetherEnrageTrigger : public Trigger
 {
 public:

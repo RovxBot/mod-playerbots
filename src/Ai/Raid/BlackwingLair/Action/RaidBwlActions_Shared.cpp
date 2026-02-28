@@ -117,6 +117,103 @@ bool HasMatchingWyrmguardVulnerability(Player* bot, Unit* unit)
 
     return false;
 }
+
+bool IsWyrmguardThreateningRaid(PlayerbotAI* botAI, Player* bot, Unit* unit)
+{
+    if (!botAI || !bot || !IsDeathTalonWyrmguard(unit))
+    {
+        return false;
+    }
+
+    Unit* victim = unit->GetVictim();
+    if (!victim || victim == bot)
+    {
+        return false;
+    }
+
+    Player* victimPlayer = victim->ToPlayer();
+    if (victimPlayer && botAI->IsTank(victimPlayer))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool IsPositionRiskyPull(PlayerbotAI* botAI, Unit* currentTarget, float x, float y)
+{
+    if (!botAI)
+    {
+        return false;
+    }
+
+    GuidVector nearby;
+    if (AiObjectContext* ctx = botAI->GetAiObjectContext())
+    {
+        nearby = ctx->GetValue<GuidVector>("nearest npcs")->Get();
+    }
+    for (ObjectGuid const& guid : nearby)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit == currentTarget)
+        {
+            continue;
+        }
+
+        // Respect packs that are not yet in combat; avoid pathing close enough to body-pull.
+        if (unit->IsInCombat())
+        {
+            continue;
+        }
+
+        if (unit->GetDistance2d(x, y) < 12.0f)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool GetRaidCenter(PlayerbotAI* botAI, Player* bot, float& outX, float& outY)
+{
+    if (!botAI || !bot)
+    {
+        return false;
+    }
+
+    GuidVector nearbyPlayers;
+    if (AiObjectContext* ctx = botAI->GetAiObjectContext())
+    {
+        nearbyPlayers = ctx->GetValue<GuidVector>("nearest friendly players")->Get();
+    }
+    float sumX = bot->GetPositionX();
+    float sumY = bot->GetPositionY();
+    uint32 count = 1;
+
+    for (ObjectGuid const& guid : nearbyPlayers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || player == bot || !player->IsAlive() || !player->IsInWorld())
+        {
+            continue;
+        }
+
+        if (bot->GetDistance2d(player) > 45.0f)
+        {
+            continue;
+        }
+
+        sumX += player->GetPositionX();
+        sumY += player->GetPositionY();
+        ++count;
+    }
+
+    outX = sumX / count;
+    outY = sumY / count;
+    return true;
+}
 }  // namespace
 
 bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
@@ -146,6 +243,8 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
 
     bool const isCaster = botAI->IsCaster(bot);
     bool const isPhysical = !isCaster;
+    bool const isTank = botAI->IsTank(bot);
+    uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
@@ -175,7 +274,7 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
                 // Strongly prefer Wyrmguards we are naturally effective against after Detect Magic reveals vulnerability.
                 adjustedPriority -= 20;
             }
-            else if (botAI->IsTank(bot) && helper.IsDeathTalonCaptain(unit))
+            else if (isTank && helper.IsDeathTalonCaptain(unit))
             {
                 // Captain Aura of Flames reflects punishing fire damage.
                 // If tank is low, avoid direct focus while aura is active.
@@ -189,6 +288,27 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
             {
                 // Keep tanks/melee on physical-friendly threats first where possible.
                 adjustedPriority += 6;
+            }
+
+            // Tanks: peel Wyrmguards from non-tanks, but do not exceed two active attackers.
+            if (isTank && IsDeathTalonWyrmguard(unit))
+            {
+                if (IsWyrmguardThreateningRaid(botAI, bot, unit))
+                {
+                    if (myAttackers >= 2)
+                    {
+                        validForRole = false;
+                        adjustedPriority += 1000;
+                    }
+                    else
+                    {
+                        adjustedPriority -= 30;
+                    }
+                }
+                else if (unit->GetVictim() == bot)
+                {
+                    adjustedPriority -= 10;
+                }
             }
 
             if (priority < fallbackPriority)
@@ -257,45 +377,116 @@ bool BwlTrashSafePositionAction::Execute(Event /*event*/)
     float const facing = target->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
-    float angleOffset = 0.0f;
+    float angle = facing;
     float distance = 0.0f;
 
     if (botAI->IsMainTank(bot))
     {
-        // MT holds in front, but not too deep to reduce extra frontal clipping from nearby mobs.
-        angleOffset = 0.0f;
-        distance = 5.0f;
+        // MT should drag Wyrmguards away from raid center to keep frontal cleave off the group.
+        float raidX = 0.0f;
+        float raidY = 0.0f;
+        if (GetRaidCenter(botAI, bot, raidX, raidY))
+        {
+            angle = std::atan2(targetY - raidY, targetX - raidX);
+        }
+        distance = 7.0f;
     }
     else if (botAI->IsAssistTankOfIndex(bot, 0))
     {
-        // OT anchors on side so only one tank is exposed to the frontal arc.
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 7.5f;
+        float raidX = 0.0f;
+        float raidY = 0.0f;
+        float awayAngle = facing;
+        if (GetRaidCenter(botAI, bot, raidX, raidY))
+        {
+            awayAngle = std::atan2(targetY - raidY, targetX - raidX);
+        }
+        angle = awayAngle + static_cast<float>(M_PI / 5.0f);
+        distance = 8.0f;
     }
     else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
-        float spread = ((slot % 6) - 2.5f) * 0.12f;
-        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
-        distance = botAI->IsHeal(bot) ? 18.0f : 22.0f;
+        // Casters/healers stay at range and behind the mob, never in front.
+        float spread = ((slot % 6) - 2.5f) * 0.10f;
+        angle = facing + static_cast<float>(M_PI) + spread;
+        distance = botAI->IsHeal(bot) ? 16.0f : 19.0f;
     }
     else
     {
-        // Melee DPS stays behind-side on dangerous trash to avoid frontal cleave/parry-haste risk.
-        float spread = ((slot % 4) - 1.5f) * 0.20f;
-        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
+        // Melee DPS anchors behind with slight spread; never take a frontal lane.
+        float spread = ((slot % 4) - 1.5f) * 0.16f;
+        angle = facing + static_cast<float>(M_PI) + spread;
         distance = 6.0f;
     }
 
-    float angle = facing + angleOffset;
-    targetX += std::cos(angle) * distance;
-    targetY += std::sin(angle) * distance;
+    // Prevent pathing into nearby unengaged packs while trying to maintain ideal range.
+    float chosenX = targetX + std::cos(angle) * distance;
+    float chosenY = targetY + std::sin(angle) * distance;
+    while (distance > 7.0f && IsPositionRiskyPull(botAI, target, chosenX, chosenY))
+    {
+        distance -= 2.0f;
+        chosenX = targetX + std::cos(angle) * distance;
+        chosenY = targetY + std::sin(angle) * distance;
+    }
 
-    if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+    if (IsPositionRiskyPull(botAI, target, chosenX, chosenY))
+    {
+        return false;
+    }
+
+    if (MoveTo(bot->GetMapId(), chosenX, chosenY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    return MoveInside(bot->GetMapId(), chosenX, chosenY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool BwlWyrmguardControlAction::Execute(Event /*event*/)
+{
+    BwlBossHelper helper(botAI);
+    if (!helper.IsDangerousTrashEncounterActive() || !botAI->IsTank(bot))
+    {
+        return false;
+    }
+
+    if (AI_VALUE(uint8, "my attacker count") >= 2)
+    {
+        return false;
+    }
+
+    Unit* peelTarget = nullptr;
+    auto findPeelTarget = [&](GuidVector const& units)
+    {
+        for (ObjectGuid const& guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (IsWyrmguardThreateningRaid(botAI, bot, unit))
+            {
+                peelTarget = unit;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    if (!findPeelTarget(attackers))
+    {
+        GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
+        findPeelTarget(nearby);
+    }
+
+    if (!peelTarget)
+    {
+        return false;
+    }
+
+    if (AI_VALUE(Unit*, "current target") != peelTarget)
+    {
+        Attack(peelTarget, false);
+    }
+
+    return botAI->DoSpecificAction("taunt spell", Event(), true);
 }
 
 bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)
