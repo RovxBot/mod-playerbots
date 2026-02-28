@@ -169,6 +169,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class BwlTrashSafePositionAction : public MovementAction
+{
+public:
+    BwlTrashSafePositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "bwl trash safe position") {}
+    bool Execute(Event event) override;
+};
+
 class BwlTrashTranqSeetherAction : public Action
 {
 public:

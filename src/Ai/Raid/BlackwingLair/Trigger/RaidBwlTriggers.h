@@ -346,6 +346,16 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlTrashSafePositioningTrigger : public Trigger
+{
+public:
+    BwlTrashSafePositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "bwl trash safe positioning"), helper(botAI) {}
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 class BwlDeathTalonSeetherEnrageTrigger : public Trigger
 {
 public:

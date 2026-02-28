@@ -1,8 +1,123 @@
 #include "RaidBwlActions.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <limits>
+#include <string>
+#include <vector>
 
+#include "AiFactory.h"
 #include "SharedDefines.h"
+
+namespace
+{
+std::string ToLower(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+bool IsDeathTalonWyrmguard(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+    {
+        return false;
+    }
+
+    if (unit->GetTypeId() == TYPEID_UNIT && unit->GetEntry() == BwlCreatureIds::DeathTalonWyrmguard)
+    {
+        return true;
+    }
+
+    return ToLower(unit->GetName()).find("death talon wyrmguard") != std::string::npos;
+}
+
+std::vector<std::string> GetPreferredCasterSchools(Player* bot)
+{
+    std::vector<std::string> schools;
+    if (!bot)
+    {
+        return schools;
+    }
+
+    int const tab = AiFactory::GetPlayerSpecTab(bot);
+
+    switch (bot->getClass())
+    {
+        case CLASS_MAGE:
+            if (tab == MAGE_TAB_FIRE)
+                schools = {"fire"};
+            else if (tab == MAGE_TAB_FROST)
+                schools = {"frost"};
+            else
+                schools = {"arcane"};
+            break;
+        case CLASS_WARLOCK:
+            if (tab == WARLOCK_TAB_DESTRUCTION)
+                schools = {"fire", "shadow"};
+            else
+                schools = {"shadow", "fire"};
+            break;
+        case CLASS_PRIEST:
+            schools = (tab == PRIEST_TAB_SHADOW) ? std::vector<std::string>{"shadow"} : std::vector<std::string>{"holy"};
+            break;
+        case CLASS_SHAMAN:
+            schools = {"nature", "frost", "fire"};
+            break;
+        case CLASS_DRUID:
+            schools = {"nature", "arcane"};
+            break;
+        case CLASS_PALADIN:
+            schools = {"holy"};
+            break;
+        default:
+            break;
+    }
+
+    return schools;
+}
+
+bool HasMatchingWyrmguardVulnerability(Player* bot, Unit* unit)
+{
+    if (!bot || !IsDeathTalonWyrmguard(unit))
+    {
+        return false;
+    }
+
+    std::vector<std::string> const schools = GetPreferredCasterSchools(bot);
+    if (schools.empty())
+    {
+        return false;
+    }
+
+    Unit::AuraApplicationMap const& auraMap = unit->GetAppliedAuras();
+    for (Unit::AuraApplicationMap::const_iterator it = auraMap.begin(); it != auraMap.end(); ++it)
+    {
+        Aura* aura = it->second ? it->second->GetBase() : nullptr;
+        if (!aura || !aura->GetSpellInfo() || !aura->GetSpellInfo()->SpellName[0])
+        {
+            continue;
+        }
+
+        std::string const auraName = ToLower(aura->GetSpellInfo()->SpellName[0]);
+        if (auraName.find("vulnerability") == std::string::npos && auraName.find("vulnerable") == std::string::npos)
+        {
+            continue;
+        }
+
+        for (std::vector<std::string>::const_iterator schoolIt = schools.begin(); schoolIt != schools.end(); ++schoolIt)
+        {
+            if (!schoolIt->empty() && auraName.find(*schoolIt) != std::string::npos)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+}  // namespace
 
 bool BwlWarnOnyxiaScaleCloakAction::Execute(Event /*event*/)
 {
@@ -54,6 +169,11 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
             {
                 validForRole = false;
                 adjustedPriority += 1000;
+            }
+            else if (isCaster && HasMatchingWyrmguardVulnerability(bot, unit))
+            {
+                // Strongly prefer Wyrmguards we are naturally effective against after Detect Magic reveals vulnerability.
+                adjustedPriority -= 20;
             }
             else if (botAI->IsTank(bot) && helper.IsDeathTalonCaptain(unit))
             {
@@ -115,6 +235,67 @@ bool BwlTrashTranqSeetherAction::isUseful()
     }
     BwlBossHelper helper(botAI);
     return helper.HasEnragedDeathTalonSeetherNearbyOrAttacking();
+}
+
+bool BwlTrashSafePositionAction::Execute(Event /*event*/)
+{
+    BwlBossHelper helper(botAI);
+    if (!helper.IsDangerousTrashEncounterActive())
+    {
+        return false;
+    }
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive() || !helper.IsDangerousTrash(target))
+    {
+        return false;
+    }
+
+    float targetX = target->GetPositionX();
+    float targetY = target->GetPositionY();
+    float targetZ = bot->GetPositionZ();
+    float const facing = target->GetOrientation();
+    uint32 const slot = botAI->GetGroupSlotIndex(bot);
+
+    float angleOffset = 0.0f;
+    float distance = 0.0f;
+
+    if (botAI->IsMainTank(bot))
+    {
+        // MT holds in front, but not too deep to reduce extra frontal clipping from nearby mobs.
+        angleOffset = 0.0f;
+        distance = 5.0f;
+    }
+    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    {
+        // OT anchors on side so only one tank is exposed to the frontal arc.
+        angleOffset = static_cast<float>(M_PI / 2.0f);
+        distance = 7.5f;
+    }
+    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    {
+        float spread = ((slot % 6) - 2.5f) * 0.12f;
+        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
+        distance = botAI->IsHeal(bot) ? 18.0f : 22.0f;
+    }
+    else
+    {
+        // Melee DPS stays behind-side on dangerous trash to avoid frontal cleave/parry-haste risk.
+        float spread = ((slot % 4) - 1.5f) * 0.20f;
+        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
+        distance = 6.0f;
+    }
+
+    float angle = facing + angleOffset;
+    targetX += std::cos(angle) * distance;
+    targetY += std::sin(angle) * distance;
+
+    if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+    {
+        return true;
+    }
+
+    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)

@@ -11,6 +11,9 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("bwl trash dangerous encounter",
         { NextAction("bwl trash choose target", ACTION_RAID + 2) }));
 
+    triggers.push_back(new TriggerNode("bwl trash safe positioning",
+        { NextAction("bwl trash safe position", ACTION_RAID + 3) }));
+
     triggers.push_back(new TriggerNode("bwl death talon seether enrage",
         { NextAction("bwl trash tranq seether", ACTION_EMERGENCY + 7) }));
 
