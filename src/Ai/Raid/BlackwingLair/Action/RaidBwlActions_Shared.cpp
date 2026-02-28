@@ -8,6 +8,9 @@
 #include <vector>
 
 #include "AiFactory.h"
+#include "Pet.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "SharedDefines.h"
 
 namespace
@@ -487,6 +490,58 @@ bool BwlWyrmguardControlAction::Execute(Event /*event*/)
     }
 
     return botAI->DoSpecificAction("taunt spell", Event(), true);
+}
+
+bool BwlDisableHunterPetGrowlAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_HUNTER || bot->GetMapId() != 469)
+    {
+        return false;
+    }
+
+    Pet* pet = bot->GetPet();
+    if (!pet)
+    {
+        return false;
+    }
+
+    bool changed = false;
+    for (PetSpellMap::const_iterator itr = pet->m_spells.begin(); itr != pet->m_spells.end(); ++itr)
+    {
+        if (itr->second.state == PETSPELL_REMOVED)
+        {
+            continue;
+        }
+
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(itr->first);
+        if (!info || !info->IsAutocastable() || !info->SpellName[0])
+        {
+            continue;
+        }
+
+        bool isAuto = false;
+        for (unsigned int autospell : pet->m_autospells)
+        {
+            if (autospell == info->Id)
+            {
+                isAuto = true;
+                break;
+            }
+        }
+
+        if (!strcmpi(info->SpellName[0], "growl") && isAuto)
+        {
+            pet->ToggleAutocast(info, false);
+            changed = true;
+        }
+        else if (!strcmpi(info->SpellName[0], "cower") && !isAuto)
+        {
+            pet->ToggleAutocast(info, true);
+            changed = true;
+        }
+    }
+
+    return changed;
 }
 
 bool BwlTrashTranqSeetherAction::Execute(Event /*event*/)

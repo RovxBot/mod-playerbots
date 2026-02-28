@@ -118,3 +118,8 @@ bool McRagnarosSonsTrigger::IsActive()
 
     return false;
 }
+
+bool McDisableHunterPetGrowlTrigger::IsActive()
+{
+    return bot->GetMapId() == 409 && bot->getClass() == CLASS_HUNTER && bot->GetPet();
+}

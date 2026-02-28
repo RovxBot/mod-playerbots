@@ -366,6 +366,19 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlDisableHunterPetGrowlTrigger : public Trigger
+{
+public:
+    BwlDisableHunterPetGrowlTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl disable hunter pet growl", 5), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 class BwlDeathTalonSeetherEnrageTrigger : public Trigger
 {
 public:

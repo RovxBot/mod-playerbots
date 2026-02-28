@@ -88,4 +88,12 @@ public:
     bool Execute(Event event) override;
 };
 
+class McDisableHunterPetGrowlAction : public Action
+{
+public:
+    McDisableHunterPetGrowlAction(PlayerbotAI* botAI, std::string const name = "mc disable hunter pet growl")
+        : Action(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
 #endif

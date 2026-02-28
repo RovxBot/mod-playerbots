@@ -68,4 +68,11 @@ public:
     bool IsActive() override;
 };
 
+class McDisableHunterPetGrowlTrigger : public Trigger
+{
+public:
+    McDisableHunterPetGrowlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "mc disable hunter pet growl", 5) {}
+    bool IsActive() override;
+};
+
 #endif

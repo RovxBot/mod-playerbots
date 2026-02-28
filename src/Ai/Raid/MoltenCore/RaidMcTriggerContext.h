@@ -29,6 +29,7 @@ public:
         creators["mc ragnaros positioning"] = &RaidMcTriggerContext::ragnaros_positioning;
         creators["mc ragnaros wrath window"] = &RaidMcTriggerContext::ragnaros_wrath_window;
         creators["mc ragnaros sons"] = &RaidMcTriggerContext::ragnaros_sons;
+        creators["mc disable hunter pet growl"] = &RaidMcTriggerContext::disable_hunter_pet_growl;
     }
 
 private:
@@ -50,6 +51,7 @@ private:
     static Trigger* ragnaros_positioning(PlayerbotAI* botAI) { return new McRagnarosPositioningTrigger(botAI); }
     static Trigger* ragnaros_wrath_window(PlayerbotAI* botAI) { return new McRagnarosWrathWindowTrigger(botAI); }
     static Trigger* ragnaros_sons(PlayerbotAI* botAI) { return new McRagnarosSonsTrigger(botAI); }
+    static Trigger* disable_hunter_pet_growl(PlayerbotAI* botAI) { return new McDisableHunterPetGrowlTrigger(botAI); }
 };
 
 #endif

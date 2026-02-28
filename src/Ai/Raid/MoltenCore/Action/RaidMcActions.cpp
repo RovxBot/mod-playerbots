@@ -5,8 +5,11 @@
 #include <vector>
 
 #include "Playerbots.h"
+#include "Pet.h"
 #include "RtiTargetValue.h"
 #include "RaidMcHelpers.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 
 static constexpr float LIVING_BOMB_DISTANCE = 20.0f;
 static constexpr float INFERNO_DISTANCE = 20.0f;
@@ -417,4 +420,56 @@ bool McRagnarosSonsTargetAction::Execute(Event /*event*/)
     }
 
     return Attack(best, false);
+}
+
+bool McDisableHunterPetGrowlAction::Execute(Event /*event*/)
+{
+    if (bot->GetMapId() != 409 || bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+
+    Pet* pet = bot->GetPet();
+    if (!pet)
+    {
+        return false;
+    }
+
+    bool changed = false;
+    for (PetSpellMap::const_iterator itr = pet->m_spells.begin(); itr != pet->m_spells.end(); ++itr)
+    {
+        if (itr->second.state == PETSPELL_REMOVED)
+        {
+            continue;
+        }
+
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(itr->first);
+        if (!info || !info->IsAutocastable() || !info->SpellName[0])
+        {
+            continue;
+        }
+
+        bool isAuto = false;
+        for (unsigned int autospell : pet->m_autospells)
+        {
+            if (autospell == info->Id)
+            {
+                isAuto = true;
+                break;
+            }
+        }
+
+        if (!strcmpi(info->SpellName[0], "growl") && isAuto)
+        {
+            pet->ToggleAutocast(info, false);
+            changed = true;
+        }
+        else if (!strcmpi(info->SpellName[0], "cower") && !isAuto)
+        {
+            pet->ToggleAutocast(info, true);
+            changed = true;
+        }
+    }
+
+    return changed;
 }

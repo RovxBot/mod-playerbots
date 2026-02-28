@@ -34,6 +34,7 @@ public:
         creators["bwl trash choose target"] = &RaidBwlActionContext::bwl_trash_choose_target;
         creators["bwl trash safe position"] = &RaidBwlActionContext::bwl_trash_safe_position;
         creators["bwl wyrmguard control"] = &RaidBwlActionContext::bwl_wyrmguard_control;
+        creators["bwl disable hunter pet growl"] = &RaidBwlActionContext::bwl_disable_hunter_pet_growl;
         creators["bwl trash tranq seether"] = &RaidBwlActionContext::bwl_trash_tranq_seether;
         creators["bwl trash detect magic"] = &RaidBwlActionContext::bwl_trash_detect_magic;
         creators["bwl turn off suppression device"] = &RaidBwlActionContext::bwl_turn_off_suppression_device;
@@ -74,6 +75,7 @@ private:
     static Action* bwl_trash_choose_target(PlayerbotAI* botAI) { return new BwlTrashChooseTargetAction(botAI); }
     static Action* bwl_trash_safe_position(PlayerbotAI* botAI) { return new BwlTrashSafePositionAction(botAI); }
     static Action* bwl_wyrmguard_control(PlayerbotAI* botAI) { return new BwlWyrmguardControlAction(botAI); }
+    static Action* bwl_disable_hunter_pet_growl(PlayerbotAI* botAI) { return new BwlDisableHunterPetGrowlAction(botAI); }
     static Action* bwl_trash_tranq_seether(PlayerbotAI* botAI) { return new BwlTrashTranqSeetherAction(botAI); }
     static Action* bwl_trash_detect_magic(PlayerbotAI* botAI) { return new BwlTrashDetectMagicAction(botAI); }
     static Action* bwl_turn_off_suppression_device(PlayerbotAI* botAI) { return new BwlTurnOffSuppressionDeviceAction(botAI); }

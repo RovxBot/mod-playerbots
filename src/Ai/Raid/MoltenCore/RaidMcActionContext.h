@@ -29,6 +29,7 @@ public:
         creators["mc ragnaros position"] = &RaidMcActionContext::ragnaros_position;
         creators["mc ragnaros melee step out"] = &RaidMcActionContext::ragnaros_melee_step_out;
         creators["mc ragnaros sons target"] = &RaidMcActionContext::ragnaros_sons_target;
+        creators["mc disable hunter pet growl"] = &RaidMcActionContext::disable_hunter_pet_growl;
     }
 
 private:
@@ -50,6 +51,7 @@ private:
     static Action* ragnaros_position(PlayerbotAI* botAI) { return new McRagnarosPositionAction(botAI); }
     static Action* ragnaros_melee_step_out(PlayerbotAI* botAI) { return new McRagnarosMeleeStepOutAction(botAI); }
     static Action* ragnaros_sons_target(PlayerbotAI* botAI) { return new McRagnarosSonsTargetAction(botAI); }
+    static Action* disable_hunter_pet_growl(PlayerbotAI* botAI) { return new McDisableHunterPetGrowlAction(botAI); }
 };
 
 #endif
