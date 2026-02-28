@@ -5,36 +5,8 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 
-namespace
-{
-bool ShouldHandleSuppressionDevice(PlayerbotAI* botAI, Player* bot)
-{
-    if (!botAI || !bot)
-    {
-        return false;
-    }
-
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTank(bot))
-    {
-        return true;
-    }
-
-    if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
-    {
-        return false;
-    }
-
-    return (botAI->GetGroupSlotIndex(bot) % 3) == 0;
-}
-}  // namespace
-
 bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 {
-    if (!ShouldHandleSuppressionDevice(botAI, bot))
-    {
-        return false;
-    }
-
     bool usedAny = false;
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
@@ -48,7 +20,7 @@ bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
         {
             continue;
         }
-        go->Use(bot);
+        go->SetGoState(GO_STATE_ACTIVE);
         usedAny = true;
     }
     return usedAny;
@@ -56,11 +28,6 @@ bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 
 bool BwlTurnOffSuppressionDeviceAction::isUseful()
 {
-    if (!ShouldHandleSuppressionDevice(botAI, bot))
-    {
-        return false;
-    }
-
     GuidVector gos = AI_VALUE(GuidVector, "nearest game objects");
     for (GuidVector::iterator i = gos.begin(); i != gos.end(); i++)
     {
