@@ -123,3 +123,29 @@ bool BwlDeathTalonDetectMagicTrigger::IsActive()
 
     return helper.HasUndetectedDeathTalonNearbyOrAttacking();
 }
+
+bool BwlPolymorphMindControlledTargetTrigger::IsActive()
+{
+    if (!helper.IsInBwl() || !bot->IsInCombat() || bot->getClass() != CLASS_MAGE)
+    {
+        return false;
+    }
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const& guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || player == bot)
+        {
+            continue;
+        }
+
+        if (player->IsCharmed() && !player->IsPolymorphed())
+        {
+            return true;
+        }
+    }
+
+    return false;
+}

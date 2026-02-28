@@ -178,6 +178,23 @@ bool IsPositionRiskyPull(PlayerbotAI* botAI, Unit* currentTarget, float x, float
     return false;
 }
 
+bool IsMindControlledHostilePlayer(Unit* unit, Player* bot)
+{
+    Player* player = unit ? unit->ToPlayer() : nullptr;
+    if (!player || !player->IsAlive() || player == bot)
+    {
+        return false;
+    }
+
+    // Charmed players become hostile; sheep them to neutralize raid damage quickly.
+    if (!player->IsCharmed())
+    {
+        return false;
+    }
+
+    return !player->IsPolymorphed();
+}
+
 bool GetRaidCenter(PlayerbotAI* botAI, Player* bot, float& outX, float& outY)
 {
     if (!botAI || !bot)
@@ -644,4 +661,39 @@ bool BwlTrashDetectMagicAction::Execute(Event /*event*/)
     }
 
     return botAI->CastSpell("detect magic", target);
+}
+
+bool BwlPolymorphMindControlledTargetAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_MAGE || bot->GetMapId() != 469)
+    {
+        return false;
+    }
+
+    Unit* target = nullptr;
+    float bestDist = std::numeric_limits<float>::max();
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+
+    for (ObjectGuid const& guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsMindControlledHostilePlayer(unit, bot))
+        {
+            continue;
+        }
+
+        float const dist = bot->GetExactDist2d(unit);
+        if (!target || dist < bestDist)
+        {
+            target = unit;
+            bestDist = dist;
+        }
+    }
+
+    if (!target)
+    {
+        return false;
+    }
+
+    return botAI->CastSpell("polymorph", target);
 }

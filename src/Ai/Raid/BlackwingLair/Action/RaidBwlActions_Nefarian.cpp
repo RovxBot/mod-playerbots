@@ -1,5 +1,9 @@
 #include "RaidBwlActions.h"
 #include <cmath>
+#include <limits>
+#include <unordered_map>
+
+#include "Timer.h"
 
 namespace
 {
@@ -7,29 +11,113 @@ namespace
 constexpr float NefarianP1FallbackAnchorX = -7588.27f;
 constexpr float NefarianP1FallbackAnchorY = -1261.92f;
 constexpr float NefarianP1FallbackAnchorZ = 482.03f;
-constexpr float NefarianP1FallbackFacing = 1.20f;
+
+// Fixed tunnel lane anchors for P1 setup. These avoid orbiting around
+// Victor's runtime orientation and keep the raid near actual add spawns.
+constexpr float NefarianP1LeftTunnelX = -7614.35f;
+constexpr float NefarianP1LeftTunnelY = -1251.58f;
+constexpr float NefarianP1RightTunnelX = -7562.19f;
+constexpr float NefarianP1RightTunnelY = -1272.26f;
+
+struct NefarianP2PositionState
+{
+    float lastFacing = 0.0f;
+    uint32 lastFacingChangeMs = 0;
+    uint32 lastRepositionMs = 0;
+    bool initialized = false;
+};
+
+std::unordered_map<uint32, NefarianP2PositionState> sNefarianP2PositionStates;
+
+bool ShouldDelayNefarianP2Reposition(Player* bot, Unit* nefarian, bool isTankRole)
+{
+    if (!bot || !nefarian || isTankRole)
+    {
+        return false;
+    }
+
+    uint32 const nowMs = getMSTime();
+    uint32 const botKey = bot->GetGUID().GetCounter();
+    NefarianP2PositionState& state = sNefarianP2PositionStates[botKey];
+
+    float const facing = nefarian->GetOrientation();
+    if (!state.initialized)
+    {
+        state.initialized = true;
+        state.lastFacing = facing;
+        state.lastFacingChangeMs = nowMs;
+        return false;
+    }
+
+    float const deltaFacing = std::fabs(std::remainder(facing - state.lastFacing, static_cast<float>(2.0 * M_PI)));
+    if (deltaFacing >= 0.30f)
+    {
+        state.lastFacing = facing;
+        state.lastFacingChangeMs = nowMs;
+    }
+
+    // Let Nefarian settle after spin/threat flips to prevent raid-wide reposition ping-pong.
+    if (nowMs - state.lastFacingChangeMs < 1200)
+    {
+        return true;
+    }
+
+    // Also rate-limit non-tank repositions to avoid micro-adjust storms.
+    if (nowMs - state.lastRepositionMs < 900)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void MarkNefarianP2Reposition(Player* bot, bool isTankRole)
+{
+    if (!bot || isTankRole)
+    {
+        return;
+    }
+
+    sNefarianP2PositionStates[bot->GetGUID().GetCounter()].lastRepositionMs = getMSTime();
+}
 }  // namespace
 
 bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 {
     BwlBossHelper helper(botAI);
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
     Unit* target = nullptr;
+    float bestDist = std::numeric_limits<float>::max();
 
-    for (ObjectGuid const guid : attackers)
+    auto evaluate = [&](GuidVector const& units)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        for (ObjectGuid const guid : units)
         {
-            continue;
-        }
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive() || !helper.IsNefarianPhaseOneAdd(unit))
+            {
+                continue;
+            }
 
-        if (helper.IsNefarianPhaseOneAdd(unit))
-        {
-            target = unit;
-            break;
+            // Prefer adds attacking us/raid first, then nearest fallback.
+            bool const isThreateningRaid = unit->GetVictim() != nullptr;
+            float scoreDist = bot->GetExactDist2d(unit);
+            if (isThreateningRaid)
+            {
+                scoreDist -= 15.0f;
+            }
+
+            if (!target || scoreDist < bestDist)
+            {
+                target = unit;
+                bestDist = scoreDist;
+            }
         }
-    }
+    };
+
+    evaluate(attackers);
+    evaluate(nearby);
 
     // Fallback in case attackers list is stale.
     if (!target)
@@ -52,46 +140,44 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 {
-    Unit* anchor = AI_VALUE2(Unit*, "find target", "lord victor nefarius");
-    float targetX = NefarianP1FallbackAnchorX;
-    float targetY = NefarianP1FallbackAnchorY;
+    uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    bool const leftTunnel = (slot % 2 == 0);
+    float targetX = leftTunnel ? NefarianP1LeftTunnelX : NefarianP1RightTunnelX;
+    float targetY = leftTunnel ? NefarianP1LeftTunnelY : NefarianP1RightTunnelY;
     float targetZ = NefarianP1FallbackAnchorZ;
-    float facing = NefarianP1FallbackFacing;
 
-    if (anchor && anchor->IsAlive())
+    // Build a local lane basis from tunnel -> room center.
+    float toCenterX = NefarianP1FallbackAnchorX - targetX;
+    float toCenterY = NefarianP1FallbackAnchorY - targetY;
+    float len = std::sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
+    if (len > 0.001f)
     {
-        targetX = anchor->GetPositionX();
-        targetY = anchor->GetPositionY();
-        targetZ = anchor->GetPositionZ();
-        facing = anchor->GetOrientation();
+        toCenterX /= len;
+        toCenterY /= len;
     }
 
-    uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    // Perpendicular axis for lane spread.
+    float sideX = -toCenterY;
+    float sideY = toCenterX;
 
-    // Two tunnel split:
-    // left lane handles one drakonid stream, right lane handles the other.
-    bool const leftTunnel = (slot % 2 == 0);
-
-    float angleOffset = leftTunnel ? static_cast<float>(M_PI / 2.0f) : static_cast<float>(-M_PI / 2.0f);
-    float distance = 0.0f;
-
+    // Tanks step slightly forward to meet adds; others hold a bit behind.
+    float forwardOffset = 0.0f;
     if (botAI->IsMainTank(bot) || botAI->IsAssistTank(bot))
     {
-        distance = 24.0f;
+        forwardOffset = 4.0f;
     }
     else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
-        distance = botAI->IsHeal(bot) ? 28.0f : 31.0f;
+        forwardOffset = -1.5f;
     }
     else
     {
-        distance = 22.0f;
+        forwardOffset = 1.5f;
     }
 
-    float spread = ((slot % 5) - 2.0f) * 0.09f;
-    float angle = facing + angleOffset + spread;
-    targetX += std::cos(angle) * distance;
-    targetY += std::sin(angle) * distance;
+    float sideSpread = ((slot % 5) - 2.0f) * 1.2f;
+    targetX += toCenterX * forwardOffset + sideX * sideSpread;
+    targetY += toCenterY * forwardOffset + sideY * sideSpread;
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
@@ -130,6 +216,14 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
     float targetZ = nefarian->GetPositionZ();
     float const facing = nefarian->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    if (ShouldDelayNefarianP2Reposition(bot, nefarian, isTankRole))
+    {
+        return false;
+    }
 
     // P2 dragon setup:
     // MT in front, OT off-angle for recovery, raid stacked to side/rear
@@ -137,12 +231,12 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    if (isMainTank)
     {
         angleOffset = 0.0f;
         distance = 7.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 10.0f;
@@ -193,8 +287,15 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
+        MarkNefarianP2Reposition(bot, isTankRole);
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
+    {
+        MarkNefarianP2Reposition(bot, isTankRole);
+        return true;
+    }
+
+    return false;
 }

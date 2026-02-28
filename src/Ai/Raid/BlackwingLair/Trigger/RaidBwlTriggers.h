@@ -402,4 +402,17 @@ private:
     BwlBossHelper helper;
 };
 
+class BwlPolymorphMindControlledTargetTrigger : public Trigger
+{
+public:
+    BwlPolymorphMindControlledTargetTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "bwl polymorph mind controlled target"), helper(botAI)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    BwlBossHelper helper;
+};
+
 #endif
