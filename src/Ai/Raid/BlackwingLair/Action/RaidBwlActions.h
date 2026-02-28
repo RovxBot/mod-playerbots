@@ -176,10 +176,10 @@ public:
     bool Execute(Event event) override;
 };
 
-class BwlWyrmguardControlAction : public Action
+class BwlWyrmguardControlAction : public AttackAction
 {
 public:
-    BwlWyrmguardControlAction(PlayerbotAI* botAI) : Action(botAI, "bwl wyrmguard control") {}
+    BwlWyrmguardControlAction(PlayerbotAI* botAI) : AttackAction(botAI, "bwl wyrmguard control") {}
     bool Execute(Event event) override;
 };
 
