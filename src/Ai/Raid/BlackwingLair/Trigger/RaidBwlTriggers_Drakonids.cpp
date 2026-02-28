@@ -36,7 +36,7 @@ Aura* GetFlamegorFrenzyAura(Unit* unit)
 
 bool BwlFiremawEncounterTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -51,7 +51,7 @@ bool BwlFiremawEncounterTrigger::IsActive()
 
 bool BwlFiremawPositioningTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -73,7 +73,7 @@ bool BwlFiremawPositioningTrigger::IsActive()
 
 bool BwlFiremawHighFlameBuffetTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -90,7 +90,7 @@ bool BwlFiremawHighFlameBuffetTrigger::IsActive()
 
 bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() || !botAI->IsAssistTankOfIndex(bot, 0))
     {
         return false;
     }
@@ -119,7 +119,7 @@ bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
 
 bool BwlEbonrocEncounterTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -134,7 +134,7 @@ bool BwlEbonrocEncounterTrigger::IsActive()
 
 bool BwlEbonrocPositioningTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -149,7 +149,7 @@ bool BwlEbonrocPositioningTrigger::IsActive()
 
 bool BwlEbonrocMainTankShadowTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTank(bot))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() || !botAI->IsAssistTank(bot))
     {
         return false;
     }
@@ -177,7 +177,7 @@ bool BwlEbonrocMainTankShadowTrigger::IsActive()
 
 bool BwlFlamegorEncounterTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -192,7 +192,7 @@ bool BwlFlamegorEncounterTrigger::IsActive()
 
 bool BwlFlamegorPositioningTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
@@ -207,7 +207,7 @@ bool BwlFlamegorPositioningTrigger::IsActive()
 
 bool BwlFlamegorFrenzyTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat())
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive())
     {
         return false;
     }
