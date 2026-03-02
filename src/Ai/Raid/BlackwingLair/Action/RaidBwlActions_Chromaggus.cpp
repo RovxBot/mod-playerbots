@@ -5,6 +5,15 @@
 
 #include "SharedDefines.h"
 
+namespace
+{
+// GPS-verified fixed tank spot for Chromaggus.
+// Any bot that has aggro must run here so the boss doesn't spin through the raid.
+constexpr float ChromaggusTankSpotX = -7448.44f;
+constexpr float ChromaggusTankSpotY = -1057.89f;
+constexpr float ChromaggusTankSpotZ = 476.55f;
+}  // namespace
+
 bool BwlChromaggusChooseTargetAction::Execute(Event /*event*/)
 {
     Unit* chromaggus = AI_VALUE2(Unit*, "find target", "chromaggus");
@@ -37,31 +46,35 @@ bool BwlChromaggusPositionAction::Execute(Event /*event*/)
     bool const isMainTank = botAI->IsMainTank(bot);
     bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
     bool const isTankRole = isMainTank || isAssistTank;
+    bool const hasAggro = chromaggus->GetVictim() == bot;
 
-    // If Chromaggus snaps to a non-tank, don't let that bot run around trying to
-    // maintain formation. Planting avoids spinning the boss through the raid.
-    if (!isTankRole && chromaggus->GetVictim() == bot)
+    // Anyone with aggro (tank or not) must go to the fixed tank spot
+    // so the boss stays in position and doesn't spin through the raid.
+    if (isTankRole || hasAggro)
     {
-        return false;
+        float const dist = bot->GetDistance2d(ChromaggusTankSpotX, ChromaggusTankSpotY);
+        if (dist <= 3.0f && std::fabs(bot->GetPositionZ() - ChromaggusTankSpotZ) <= 2.0f)
+        {
+            return false;
+        }
+
+        if (MoveTo(bot->GetMapId(), ChromaggusTankSpotX, ChromaggusTankSpotY, ChromaggusTankSpotZ,
+                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+        {
+            return true;
+        }
+
+        return MoveInside(bot->GetMapId(), ChromaggusTankSpotX, ChromaggusTankSpotY, ChromaggusTankSpotZ,
+                          2.0f, MovementPriority::MOVEMENT_COMBAT);
     }
 
     // Hold a doorway-safe lane:
-    // tanks stay on the dragon, melee on rear flank, ranged/healers deeper
+    // melee on rear flank, ranged/healers deeper
     // to keep line-of-sight control for breath windows.
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (isMainTank)
-    {
-        angleOffset = 0.0f;
-        distance = 6.0f;
-    }
-    else if (isAssistTank)
-    {
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 8.0f;
-    }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.10f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
