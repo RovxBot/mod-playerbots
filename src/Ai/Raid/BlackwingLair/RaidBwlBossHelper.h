@@ -48,14 +48,17 @@ public:
             return false;
         }
 
-        if (IsCreatureEntry(unit, BwlCreatureIds::ChromaticDrakonid))
+        if (IsAnyCreatureEntry(unit, {BwlCreatureIds::ChromaticDrakonid, BwlCreatureIds::BlueDrakonid,
+                                      BwlCreatureIds::GreenDrakonid, BwlCreatureIds::BronzeDrakonid,
+                                      BwlCreatureIds::RedDrakonid, BwlCreatureIds::BlackDrakonid,
+                                      BwlCreatureIds::BoneConstruct}))
         {
             return true;
         }
 
         // Fallback to name for custom creature data.
         std::string const name = ToLower(unit->GetName());
-        return name.find("chromatic drakonid") != std::string::npos;
+        return name.find("drakonid") != std::string::npos || name.find("bone construct") != std::string::npos;
     }
 
     bool HasNefarianPhaseOneAddsInUnits(GuidVector const& units) const
