@@ -70,6 +70,10 @@ void MarkDrakeReposition(Player* bot, bool isTankRole)
 
     sDrakePositionStates[bot->GetGUID().GetCounter()].lastRepositionMs = getMSTime();
 }
+// GPS-verified fixed tank spot for Flamegor.
+constexpr float FlamegorTankSpotX = -7409.91f;
+constexpr float FlamegorTankSpotY = -1036.22f;
+constexpr float FlamegorTankSpotZ = 477.17f;
 }  // namespace
 
 bool BwlFiremawChooseTargetAction::Execute(Event /*event*/)
@@ -271,29 +275,40 @@ bool BwlFlamegorPositionAction::Execute(Event /*event*/)
     float const facing = flamegor->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
-    float angleOffset = 0.0f;
-    float distance = 0.0f;
-
     bool const isMainTank = botAI->IsMainTank(bot);
     bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
     bool const isTankRole = isMainTank || isAssistTank;
+    bool const hasAggro = flamegor->GetVictim() == bot;
+
+    // Anyone with aggro (tank or not) must go to the fixed tank spot
+    // so the boss stays in position and doesn't spin through the raid.
+    if (isTankRole || hasAggro)
+    {
+        float const dist = bot->GetDistance2d(FlamegorTankSpotX, FlamegorTankSpotY);
+        if (dist <= 3.0f && std::fabs(bot->GetPositionZ() - FlamegorTankSpotZ) <= 2.0f)
+        {
+            return false;
+        }
+
+        if (MoveTo(bot->GetMapId(), FlamegorTankSpotX, FlamegorTankSpotY, FlamegorTankSpotZ,
+                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+        {
+            return true;
+        }
+
+        return MoveInside(bot->GetMapId(), FlamegorTankSpotX, FlamegorTankSpotY, FlamegorTankSpotZ,
+                          2.0f, MovementPriority::MOVEMENT_COMBAT);
+    }
 
     if (ShouldDelayDrakeReposition(bot, flamegor, isTankRole))
     {
         return false;
     }
 
-    if (isMainTank)
-    {
-        angleOffset = 0.0f;
-        distance = 6.0f;
-    }
-    else if (isAssistTank)
-    {
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 8.0f;
-    }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    float angleOffset = 0.0f;
+    float distance = 0.0f;
+
+    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.12f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
