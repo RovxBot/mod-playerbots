@@ -102,7 +102,7 @@ void RaidBwlStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("bwl nefarian phase one choose target", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode("bwl nefarian phase one tunnel positioning",
-        { NextAction("bwl nefarian phase one tunnel position", ACTION_RAID + 1) }));
+        { NextAction("bwl nefarian phase one tunnel position", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode("bwl nefarian phase two",
         { NextAction("bwl nefarian phase two choose target", ACTION_RAID + 1) }));

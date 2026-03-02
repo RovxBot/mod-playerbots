@@ -114,6 +114,12 @@ namespace BwlCreatureIds
     static constexpr uint32 DeathTalonHatcher = 12468;
 
     static constexpr uint32 ChromaticDrakonid = 14302;
+    static constexpr uint32 BlueDrakonid = 14261;
+    static constexpr uint32 GreenDrakonid = 14262;
+    static constexpr uint32 BronzeDrakonid = 14263;
+    static constexpr uint32 RedDrakonid = 14264;
+    static constexpr uint32 BlackDrakonid = 14265;
+    static constexpr uint32 BoneConstruct = 14605;
     static constexpr uint32 CorruptedRedWhelp = 14022;
     static constexpr uint32 CorruptedGreenWhelp = 14023;
     static constexpr uint32 CorruptedBlueWhelp = 14024;

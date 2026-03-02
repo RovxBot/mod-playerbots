@@ -7,17 +7,24 @@
 
 namespace
 {
-// Stable Nefarian balcony anchor used when Victor is temporarily unavailable in target cache.
-constexpr float NefarianP1FallbackAnchorX = -7588.27f;
-constexpr float NefarianP1FallbackAnchorY = -1261.92f;
-constexpr float NefarianP1FallbackAnchorZ = 482.03f;
+// Stable Nefarian balcony/throne anchor (GPS verified).
+constexpr float NefarianThroneX = -7585.87f;
+constexpr float NefarianThroneY = -1260.17f;
+constexpr float NefarianThroneZ = 481.03f;
 
-// Fixed tunnel lane anchors for P1 setup. These avoid orbiting around
-// Victor's runtime orientation and keep the raid near actual add spawns.
-constexpr float NefarianP1LeftTunnelX = -7614.35f;
-constexpr float NefarianP1LeftTunnelY = -1251.58f;
-constexpr float NefarianP1RightTunnelX = -7562.19f;
-constexpr float NefarianP1RightTunnelY = -1272.26f;
+// Room center between the two tunnels, used for lane basis vectors.
+constexpr float NefarianP1RoomCenterX = -7551.94f;
+constexpr float NefarianP1RoomCenterY = -1179.33f;
+
+// Fixed tunnel lane anchors for P1 setup (GPS verified).
+// North tunnel (closer to room entrance).
+constexpr float NefarianP1NorthTunnelX = -7514.37f;
+constexpr float NefarianP1NorthTunnelY = -1153.18f;
+// South tunnel (closer to Victor's balcony).
+constexpr float NefarianP1SouthTunnelX = -7589.51f;
+constexpr float NefarianP1SouthTunnelY = -1205.47f;
+// Tunnel openings are at room floor level, not on the balcony.
+constexpr float NefarianP1TunnelZ = 476.80f;
 
 struct NefarianP2PositionState
 {
@@ -119,10 +126,34 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
     evaluate(attackers);
     evaluate(nearby);
 
-    // Fallback in case attackers list is stale.
+    // Fallback: search by name for common drakonid variants.
     if (!target)
     {
         target = AI_VALUE2(Unit*, "find target", "chromatic drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "bronze drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "red drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "blue drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "green drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "black drakonid");
+    }
+    if (!target)
+    {
+        target = AI_VALUE2(Unit*, "find target", "bone construct");
     }
 
     if (!target)
@@ -141,14 +172,14 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 {
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
-    bool const leftTunnel = (slot % 2 == 0);
-    float targetX = leftTunnel ? NefarianP1LeftTunnelX : NefarianP1RightTunnelX;
-    float targetY = leftTunnel ? NefarianP1LeftTunnelY : NefarianP1RightTunnelY;
-    float targetZ = NefarianP1FallbackAnchorZ;
+    bool const northTunnel = (slot % 2 == 0);
+    float targetX = northTunnel ? NefarianP1NorthTunnelX : NefarianP1SouthTunnelX;
+    float targetY = northTunnel ? NefarianP1NorthTunnelY : NefarianP1SouthTunnelY;
+    float targetZ = NefarianP1TunnelZ;
 
     // Build a local lane basis from tunnel -> room center.
-    float toCenterX = NefarianP1FallbackAnchorX - targetX;
-    float toCenterY = NefarianP1FallbackAnchorY - targetY;
+    float toCenterX = NefarianP1RoomCenterX - targetX;
+    float toCenterY = NefarianP1RoomCenterY - targetY;
     float len = std::sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
     if (len > 0.001f)
     {
@@ -178,6 +209,12 @@ bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
     float sideSpread = ((slot % 5) - 2.0f) * 1.2f;
     targetX += toCenterX * forwardOffset + sideX * sideSpread;
     targetY += toCenterY * forwardOffset + sideY * sideSpread;
+
+    // Avoid constant micro-movement when already roughly in position.
+    if (bot->GetDistance2d(targetX, targetY) <= 3.0f && std::fabs(bot->GetPositionZ() - targetZ) <= 2.0f)
+    {
+        return false;
+    }
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {

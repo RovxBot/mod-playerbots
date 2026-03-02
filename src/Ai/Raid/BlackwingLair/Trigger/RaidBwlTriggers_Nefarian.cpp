@@ -17,30 +17,10 @@ bool BwlNefarianPhaseOneTunnelPositioningTrigger::IsActive()
         return false;
     }
 
-    if (!helper.IsNefarianPhaseOneActive())
-    {
-        return false;
-    }
-
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (helper.HasNefarianPhaseOneAddsInUnits(attackers))
-    {
-        return false;
-    }
-
-    GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
-    if (helper.HasNefarianPhaseOneAddsInUnits(nearby))
-    {
-        return false;
-    }
-
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
-    if (helper.IsNefarianPhaseOneAdd(currentTarget))
-    {
-        return false;
-    }
-
-    return true;
+    // Stay at tunnel positions throughout all of P1.
+    // Adds spawn from the tunnels so the raid should hold these positions
+    // for every wave, not just before the first wave arrives.
+    return helper.IsNefarianPhaseOneActive();
 }
 
 bool BwlNefarianPhaseTwoTrigger::IsActive()
