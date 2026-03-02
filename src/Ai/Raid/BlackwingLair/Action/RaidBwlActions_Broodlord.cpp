@@ -5,6 +5,14 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 
+namespace
+{
+// GPS-verified fixed tank spot for Broodlord Lashlayer.
+constexpr float BroodlordTankSpotX = -7573.97f;
+constexpr float BroodlordTankSpotY = -1034.39f;
+constexpr float BroodlordTankSpotZ = 449.34f;
+}  // namespace
+
 bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 {
     bool usedAny = false;
@@ -68,6 +76,31 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
         return false;
     }
 
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    // Tanks and any bot that has boss aggro go to the fixed tank spot.
+    bool const hasAggro = broodlord->GetVictim() == bot;
+    if (isTankRole || hasAggro)
+    {
+        float const dist = bot->GetDistance(BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ);
+        if (dist < 3.0f)
+        {
+            return false;
+        }
+
+        if (MoveTo(bot->GetMapId(), BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ,
+                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+        {
+            return true;
+        }
+
+        return MoveInside(bot->GetMapId(), BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ,
+                          2.0f, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // Non-tanks position relative to boss facing.
     float targetX = broodlord->GetPositionX();
     float targetY = broodlord->GetPositionY();
     float targetZ = bot->GetPositionZ();
@@ -97,17 +130,7 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
         }
     }
 
-    if (botAI->IsMainTank(bot))
-    {
-        angleOffset = 0.0f;
-        distance = 5.0f;
-    }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
-    {
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 7.0f;
-    }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.15f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
