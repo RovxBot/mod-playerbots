@@ -70,6 +70,16 @@ void MarkDrakeReposition(Player* bot, bool isTankRole)
 
     sDrakePositionStates[bot->GetGUID().GetCounter()].lastRepositionMs = getMSTime();
 }
+// GPS-verified fixed tank spot for Firemaw.
+constexpr float FiremawTankSpotX = -7568.07f;
+constexpr float FiremawTankSpotY = -1026.28f;
+constexpr float FiremawTankSpotZ = 449.14f;
+
+// GPS-verified fixed tank spot for Ebonroc.
+constexpr float EbonrocTankSpotX = -7426.53f;
+constexpr float EbonrocTankSpotY = -966.60f;
+constexpr float EbonrocTankSpotZ = 464.90f;
+
 // GPS-verified fixed tank spot for Flamegor.
 constexpr float FlamegorTankSpotX = -7409.91f;
 constexpr float FlamegorTankSpotY = -1036.22f;
@@ -100,37 +110,47 @@ bool BwlFiremawPositionAction::Execute(Event /*event*/)
         return false;
     }
 
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    // Tanks and any bot that has boss aggro go to the fixed tank spot.
+    bool const hasAggro = firemaw->GetVictim() == bot;
+    if (isTankRole || hasAggro)
+    {
+        float const dist = bot->GetDistance(FiremawTankSpotX, FiremawTankSpotY, FiremawTankSpotZ);
+        if (dist < 3.0f)
+        {
+            return false;
+        }
+
+        if (MoveTo(bot->GetMapId(), FiremawTankSpotX, FiremawTankSpotY, FiremawTankSpotZ,
+                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+        {
+            return true;
+        }
+
+        return MoveInside(bot->GetMapId(), FiremawTankSpotX, FiremawTankSpotY, FiremawTankSpotZ,
+                          2.0f, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // Non-tanks position relative to boss facing.
     float targetX = firemaw->GetPositionX();
     float targetY = firemaw->GetPositionY();
     float targetZ = bot->GetPositionZ();
     float const facing = firemaw->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
-    float angleOffset = 0.0f;
-    float distance = 0.0f;
-
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
-
-    if (ShouldDelayDrakeReposition(bot, firemaw, isTankRole))
+    if (ShouldDelayDrakeReposition(bot, firemaw, false))
     {
         return false;
     }
 
-    if (isMainTank)
+    float angleOffset = 0.0f;
+    float distance = 0.0f;
+
+    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
-        angleOffset = 0.0f;
-        distance = 6.0f;
-    }
-    else if (isAssistTank)
-    {
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 8.0f;
-    }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
-    {
-        // Hold in a safe lane that can LoS quickly behind nearby pillars/corners.
         float spread = ((slot % 6) - 2.5f) * 0.12f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
         distance = botAI->IsHeal(bot) ? 20.0f : 24.0f;
@@ -148,13 +168,13 @@ bool BwlFiremawPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
-        MarkDrakeReposition(bot, isTankRole);
+        MarkDrakeReposition(bot, false);
         return true;
     }
 
     if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
     {
-        MarkDrakeReposition(bot, isTankRole);
+        MarkDrakeReposition(bot, false);
         return true;
     }
 
@@ -185,35 +205,46 @@ bool BwlEbonrocPositionAction::Execute(Event /*event*/)
         return false;
     }
 
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isTankRole = isMainTank || isAssistTank;
+
+    // Tanks and any bot that has boss aggro go to the fixed tank spot.
+    bool const hasAggro = ebonroc->GetVictim() == bot;
+    if (isTankRole || hasAggro)
+    {
+        float const dist = bot->GetDistance(EbonrocTankSpotX, EbonrocTankSpotY, EbonrocTankSpotZ);
+        if (dist < 3.0f)
+        {
+            return false;
+        }
+
+        if (MoveTo(bot->GetMapId(), EbonrocTankSpotX, EbonrocTankSpotY, EbonrocTankSpotZ,
+                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+        {
+            return true;
+        }
+
+        return MoveInside(bot->GetMapId(), EbonrocTankSpotX, EbonrocTankSpotY, EbonrocTankSpotZ,
+                          2.0f, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // Non-tanks position relative to boss facing.
     float targetX = ebonroc->GetPositionX();
     float targetY = ebonroc->GetPositionY();
     float targetZ = bot->GetPositionZ();
     float const facing = ebonroc->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
-    float angleOffset = 0.0f;
-    float distance = 0.0f;
-
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
-
-    if (ShouldDelayDrakeReposition(bot, ebonroc, isTankRole))
+    if (ShouldDelayDrakeReposition(bot, ebonroc, false))
     {
         return false;
     }
 
-    if (isMainTank)
-    {
-        angleOffset = 0.0f;
-        distance = 6.0f;
-    }
-    else if (isAssistTank)
-    {
-        angleOffset = static_cast<float>(M_PI / 2.0f);
-        distance = 8.0f;
-    }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    float angleOffset = 0.0f;
+    float distance = 0.0f;
+
+    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.12f;
         angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
@@ -232,13 +263,13 @@ bool BwlEbonrocPositionAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
-        MarkDrakeReposition(bot, isTankRole);
+        MarkDrakeReposition(bot, false);
         return true;
     }
 
     if (MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT))
     {
-        MarkDrakeReposition(bot, isTankRole);
+        MarkDrakeReposition(bot, false);
         return true;
     }
 
