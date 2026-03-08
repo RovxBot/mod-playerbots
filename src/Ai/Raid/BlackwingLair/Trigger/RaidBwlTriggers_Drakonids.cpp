@@ -2,9 +2,20 @@
 
 #include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
+#include "Timer.h"
+
+#include <unordered_map>
 
 namespace
 {
+struct FiremawBuffetLosState
+{
+    uint8 lastObservedStacks = 0;
+    uint32 lastLosAttemptMs = 0;
+};
+
+std::unordered_map<uint32, FiremawBuffetLosState> sFiremawBuffetLosStates;
+
 Aura* GetFlameBuffetAura(PlayerbotAI* botAI, Unit* unit)
 {
     if (!botAI || !unit)
@@ -62,12 +73,6 @@ bool BwlFiremawPositioningTrigger::IsActive()
         return false;
     }
 
-    Aura* selfBuffet = GetFlameBuffetAura(botAI, bot);
-    if (selfBuffet && selfBuffet->GetStackAmount() >= 6)
-    {
-        return false;
-    }
-
     return true;
 }
 
@@ -84,8 +89,35 @@ bool BwlFiremawHighFlameBuffetTrigger::IsActive()
         return false;
     }
 
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0) || firemaw->GetVictim() == bot)
+    {
+        return false;
+    }
+
+    uint32 const botKey = bot->GetGUID().GetCounter();
+    FiremawBuffetLosState& state = sFiremawBuffetLosStates[botKey];
     Aura* selfBuffet = GetFlameBuffetAura(botAI, bot);
-    return selfBuffet && selfBuffet->GetStackAmount() >= 6;
+    uint8 const stacks = selfBuffet ? selfBuffet->GetStackAmount() : 0;
+    uint32 const nowMs = getMSTime();
+
+    if (stacks < 6)
+    {
+        state.lastObservedStacks = stacks;
+        return false;
+    }
+
+    // Fire once when we newly cross into the hide threshold, then wait for the next Buffet cycle.
+    bool const crossedThresholdNow = state.lastObservedStacks < 6;
+    bool const cycleReady = nowMs - state.lastLosAttemptMs >= 6000;
+    state.lastObservedStacks = stacks;
+
+    if (!crossedThresholdNow && !cycleReady)
+    {
+        return false;
+    }
+
+    state.lastLosAttemptMs = nowMs;
+    return true;
 }
 
 bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
