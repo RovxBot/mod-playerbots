@@ -296,6 +296,57 @@ public:
         return HasUndetectedDeathTalonInUnits(attackers) || HasUndetectedDeathTalonInUnits(nearby);
     }
 
+    bool HasDeathTalonInUnits(GuidVector const& units) const
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (IsDeathTalonMob(unit))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasUncontrolledDeathTalonInUnits(GuidVector const& units) const
+    {
+        for (ObjectGuid const guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsDeathTalonMob(unit) || !unit->IsInCombat())
+            {
+                continue;
+            }
+
+            Unit* victim = unit->GetVictim();
+            Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+            if (!victimPlayer || !botAI->IsTank(victimPlayer))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsDeathTalonPullUnstable() const
+    {
+        if (!IsInBwlCombat())
+        {
+            return false;
+        }
+
+        GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+        GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
+        bool const hasDeathTalons = HasDeathTalonInUnits(attackers) || HasDeathTalonInUnits(nearby);
+        if (!hasDeathTalons)
+        {
+            return false;
+        }
+
+        return HasUncontrolledDeathTalonInUnits(attackers) || HasUncontrolledDeathTalonInUnits(nearby);
+    }
+
     int GetTrashPriority(Unit* unit) const
     {
         if (!unit || !unit->IsAlive())

@@ -21,6 +21,7 @@ private:
     mutable bool cacheDangerousTrashEncounter = false;
     mutable bool cacheSeetherEnraged = false;
     mutable bool cacheDeathTalonUndetected = false;
+    mutable bool cacheDeathTalonPullUnstable = false;
 };
 
 class BwlEncounterPositioningMultiplier : public Multiplier

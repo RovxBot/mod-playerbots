@@ -2,6 +2,7 @@
 
 #include "ChooseTargetActions.h"
 #include "FollowActions.h"
+#include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Timer.h"
@@ -21,6 +22,7 @@ void BwlEncounterTargetingMultiplier::RefreshStateCache() const
     cacheDangerousTrashEncounter = helper.IsDangerousTrashEncounterActive();
     cacheSeetherEnraged = helper.HasEnragedDeathTalonSeetherNearbyOrAttacking();
     cacheDeathTalonUndetected = helper.HasUndetectedDeathTalonNearbyOrAttacking();
+    cacheDeathTalonPullUnstable = helper.IsDeathTalonPullUnstable();
 }
 
 float BwlEncounterTargetingMultiplier::GetValue(Action* action)
@@ -54,6 +56,15 @@ float BwlEncounterTargetingMultiplier::GetValue(Action* action)
     {
         if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
             dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+        {
+            return 0.0f;
+        }
+    }
+
+    if (cacheDeathTalonPullUnstable && !botAI->IsTank(bot))
+    {
+        if (action->getThreatType() == Action::ActionThreatType::Aoe || dynamic_cast<DpsAoeAction*>(action) ||
+            dynamic_cast<PetAttackAction*>(action))
         {
             return 0.0f;
         }

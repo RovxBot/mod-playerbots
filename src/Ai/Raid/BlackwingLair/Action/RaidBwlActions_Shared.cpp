@@ -266,7 +266,75 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
     bool const isTank = botAI->IsTank(bot);
     uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTankPlayer = mainTank ? mainTank->ToPlayer() : nullptr;
     bool const shouldWaitForTankPickup = !isTank && myAttackers == 0 && mainTank && mainTank != bot && mainTank->IsAlive();
+    bool const isDeathTalonPullUnstable = helper.IsDeathTalonPullUnstable();
+
+    auto getPrimaryDeathTalonFocusTarget = [&]() -> Unit*
+    {
+        Unit* chosen = nullptr;
+        int chosenScore = std::numeric_limits<int>::max();
+
+        auto evaluateUnits = [&](GuidVector const& units)
+        {
+            for (ObjectGuid const guid : units)
+            {
+                Unit* unit = botAI->GetUnit(guid);
+                if (!helper.IsDeathTalonMob(unit))
+                {
+                    continue;
+                }
+
+                Unit* victim = unit->GetVictim();
+                Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+                if (!victimPlayer || !botAI->IsTank(victimPlayer))
+                {
+                    continue;
+                }
+
+                int score = helper.GetTrashPriority(unit);
+                if (victimPlayer == mainTankPlayer)
+                {
+                    score -= 50;
+                }
+                else
+                {
+                    score += 25;
+                }
+
+                if (AI_VALUE(Unit*, "current target") == unit)
+                {
+                    score -= 5;
+                }
+
+                if (score < chosenScore)
+                {
+                    chosen = unit;
+                    chosenScore = score;
+                }
+            }
+        };
+
+        evaluateUnits(AI_VALUE(GuidVector, "attackers"));
+        evaluateUnits(AI_VALUE(GuidVector, "nearest npcs"));
+        return chosen;
+    };
+
+    if (!isTank && myAttackers == 0 && isDeathTalonPullUnstable)
+    {
+        Unit* primaryTarget = getPrimaryDeathTalonFocusTarget();
+        if (!primaryTarget)
+        {
+            return false;
+        }
+
+        if (AI_VALUE(Unit*, "current target") == primaryTarget)
+        {
+            return false;
+        }
+
+        return Attack(primaryTarget, false);
+    }
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
