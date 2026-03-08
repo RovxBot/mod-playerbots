@@ -152,7 +152,8 @@ bool BwlFiremawPositionAction::Execute(Event /*event*/)
     if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
         float spread = ((slot % 6) - 2.5f) * 0.12f;
-        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
+        // Firemaw raid stack belongs on the doorway/LoS side, not the side that opens into the next room.
+        angleOffset = static_cast<float>(M_PI / 2.0f) + spread;
         distance = botAI->IsHeal(bot) ? 20.0f : 24.0f;
     }
     else
