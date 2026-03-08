@@ -265,6 +265,8 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
     bool const isPhysical = !isCaster;
     bool const isTank = botAI->IsTank(bot);
     uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    bool const shouldWaitForTankPickup = !isTank && myAttackers == 0 && mainTank && mainTank != bot && mainTank->IsAlive();
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     GuidVector nearby = AI_VALUE(GuidVector, "nearest npcs");
@@ -283,6 +285,17 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
             // Second pass: role-aware validity for "melee-only/caster-only" style trash handling.
             bool validForRole = true;
             int adjustedPriority = priority;
+            Unit* victim = unit ? unit->GetVictim() : nullptr;
+
+            if (shouldWaitForTankPickup)
+            {
+                bool const tankControlsTarget = victim && victim->ToPlayer() && botAI->IsTank(victim->ToPlayer());
+                if (!tankControlsTarget)
+                {
+                    validForRole = false;
+                    adjustedPriority += 1000;
+                }
+            }
 
             if (isCaster && helper.IsMagicImmuneTrash(unit))
             {
@@ -359,6 +372,12 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (shouldWaitForTankPickup && (!bestTarget->GetVictim() || !bestTarget->GetVictim()->ToPlayer() ||
+        !botAI->IsTank(bestTarget->GetVictim()->ToPlayer())))
+    {
+        return false;
+    }
+
     if (AI_VALUE(Unit*, "current target") == bestTarget)
     {
         return false;
@@ -396,39 +415,80 @@ bool BwlTrashSafePositionAction::Execute(Event /*event*/)
     float targetZ = bot->GetPositionZ();
     float const facing = target->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isRangedOrHealer = botAI->IsRanged(bot) || botAI->IsHeal(bot);
+    bool const isNonTank = !isMainTank && !isAssistTank;
+    uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    float raidX = 0.0f;
+    float raidY = 0.0f;
+    bool const hasRaidCenter = GetRaidCenter(botAI, bot, raidX, raidY);
+    Unit* victim = target->GetVictim();
+    bool const tankControlsTarget = victim && victim->ToPlayer() && botAI->IsTank(victim->ToPlayer());
+
+    // On the pull, non-tanks should not start orbiting dangerous trash before a tank
+    // has actually established control. Holding still is safer than pathing into cleaves
+    // or nearby packs during the opener.
+    if (isNonTank && myAttackers == 0 && mainTank && mainTank != bot && mainTank->IsAlive() && !tankControlsTarget)
+    {
+        return false;
+    }
+
+    auto isCurrentPositionAcceptable = [&]() -> bool
+    {
+        if (IsPositionRiskyPull(botAI, target, bot->GetPositionX(), bot->GetPositionY()))
+        {
+            return false;
+        }
+
+        float const distToTarget = bot->GetDistance2d(target);
+        if (isRangedOrHealer)
+        {
+            return distToTarget >= 8.0f && distToTarget <= 15.0f;
+        }
+
+        if (isNonTank)
+        {
+            return distToTarget <= 9.0f;
+        }
+
+        return false;
+    };
+
+    if (isCurrentPositionAcceptable())
+    {
+        return false;
+    }
 
     float angle = facing;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    if (isMainTank)
     {
         // MT should drag Wyrmguards away from raid center to keep frontal cleave off the group.
-        float raidX = 0.0f;
-        float raidY = 0.0f;
-        if (GetRaidCenter(botAI, bot, raidX, raidY))
+        if (hasRaidCenter)
         {
             angle = std::atan2(targetY - raidY, targetX - raidX);
         }
         distance = 7.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (isAssistTank)
     {
-        float raidX = 0.0f;
-        float raidY = 0.0f;
         float awayAngle = facing;
-        if (GetRaidCenter(botAI, bot, raidX, raidY))
+        if (hasRaidCenter)
         {
             awayAngle = std::atan2(targetY - raidY, targetX - raidX);
         }
         angle = awayAngle + static_cast<float>(M_PI / 5.0f);
         distance = 8.0f;
     }
-    else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    else if (isRangedOrHealer)
     {
-        // Casters/healers stay at range and behind the mob, never in front.
-        float spread = ((slot % 6) - 2.5f) * 0.10f;
+        // Casters/healers hold a short backline pocket instead of kiting deep into hallways.
+        float spread = ((slot % 6) - 2.5f) * 0.08f;
         angle = facing + static_cast<float>(M_PI) + spread;
-        distance = botAI->IsHeal(bot) ? 16.0f : 19.0f;
+        distance = botAI->IsHeal(bot) ? 10.0f : 12.0f;
     }
     else
     {
@@ -446,6 +506,18 @@ bool BwlTrashSafePositionAction::Execute(Event /*event*/)
         distance -= 2.0f;
         chosenX = targetX + std::cos(angle) * distance;
         chosenY = targetY + std::sin(angle) * distance;
+    }
+
+    if (isNonTank && bot->GetDistance2d(chosenX, chosenY) > 6.0f)
+    {
+        return false;
+    }
+
+    if (isNonTank && IsPositionRiskyPull(botAI, target, chosenX, chosenY))
+    {
+        // For trash packs, holding a merely imperfect position is safer than
+        // trying to path through hallways and body-pulling another pack.
+        return false;
     }
 
     if (IsPositionRiskyPull(botAI, target, chosenX, chosenY))
