@@ -485,9 +485,11 @@ bool BwlTrashSafePositionAction::Execute(Event /*event*/)
     }
     else if (isRangedOrHealer)
     {
-        // Casters/healers hold a short backline pocket instead of kiting deep into hallways.
-        float spread = ((slot % 6) - 2.5f) * 0.08f;
-        angle = facing + static_cast<float>(M_PI) + spread;
+        // Casters/healers only need safe range on Death Talon trash; forcing a rear arc
+        // makes them path around the pack and body-pull. Let them hold either side/front
+        // as long as they stay at a short controlled range.
+        float spread = ((slot % 6) - 2.5f) * 0.18f;
+        angle = facing + spread;
         distance = botAI->IsHeal(bot) ? 10.0f : 12.0f;
     }
     else
