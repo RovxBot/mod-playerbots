@@ -1,8 +1,11 @@
 #ifndef _PLAYERBOT_RAIDAQ40BOSSHELPER_H
 #define _PLAYERBOT_RAIDAQ40BOSSHELPER_H
 
+#include <algorithm>
+#include <array>
 #include <initializer_list>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 #include "ObjectGuid.h"
@@ -28,6 +31,11 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     if (!group)
         return 0;
 
+    uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
+    static std::unordered_map<uint32, std::array<uint64, 2>> sTwinWarlockAssignmentsByInstance;
+    if (!player->IsInCombat())
+        sTwinWarlockAssignmentsByInstance.erase(instanceId);
+
     std::vector<Player*> warlocks;
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -52,9 +60,46 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
         return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
     });
 
-    for (uint32 ordinal = 0; ordinal < warlocks.size(); ++ordinal)
+    auto& assignedWarlocks = sTwinWarlockAssignmentsByInstance[instanceId];
+    auto findAliveAssignedWarlock = [&](uint64 guid) -> Player*
     {
-        if (warlocks[ordinal]->GetGUID() == player->GetGUID())
+        if (!guid)
+            return nullptr;
+
+        for (Player* warlock : warlocks)
+        {
+            if (warlock->GetGUID().GetRawValue() == guid)
+                return warlock;
+        }
+
+        return nullptr;
+    };
+
+    for (uint32 slot = 0; slot < assignedWarlocks.size(); ++slot)
+    {
+        if (!findAliveAssignedWarlock(assignedWarlocks[slot]))
+            assignedWarlocks[slot] = 0;
+    }
+
+    for (Player* warlock : warlocks)
+    {
+        uint64 const guid = warlock->GetGUID().GetRawValue();
+        if (assignedWarlocks[0] == guid || assignedWarlocks[1] == guid)
+            continue;
+
+        for (uint32 slot = 0; slot < assignedWarlocks.size(); ++slot)
+        {
+            if (!assignedWarlocks[slot])
+            {
+                assignedWarlocks[slot] = guid;
+                break;
+            }
+        }
+    }
+
+    for (uint32 ordinal = 0; ordinal < assignedWarlocks.size(); ++ordinal)
+    {
+        if (assignedWarlocks[ordinal] == player->GetGUID().GetRawValue())
             return ordinal;
     }
 

@@ -281,7 +281,7 @@ bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
 bool Aq40CthunInterruptEyeAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    std::vector<Unit*> eyes = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "eye tentacle" });
+    std::vector<Unit*> eyes = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "eye tentacle", "giant eye tentacle" });
     for (Unit* eye : eyes)
     {
         if (!eye || !eye->GetCurrentSpell(CURRENT_GENERIC_SPELL))
