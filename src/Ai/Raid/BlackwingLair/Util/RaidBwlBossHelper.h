@@ -26,6 +26,21 @@ public:
     bool IsInBwlCombat() const { return IsInBwl() && bot->IsInCombat(); }
     bool HasBronzeAffliction() const { return botAI->HasAura(BwlSpellIds::AfflictionBronze, bot); }
     bool HasHourglassSand() const { return bot->HasItemCount(BwlItems::HourglassSand, 1, false); }
+    bool HasBurningAdrenaline(Unit* unit) const
+    {
+        if (!unit)
+        {
+            return false;
+        }
+
+        if (BwlSpellIds::HasAnyAura(botAI, unit, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}))
+        {
+            return true;
+        }
+
+        // Fallback for custom spell data.
+        return botAI->HasAura("burning adrenaline", unit);
+    }
 
     Unit* FindAliveTarget(char const* targetName) const
     {

@@ -2,13 +2,13 @@
 
 #include <cmath>
 
-#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 
 bool BwlVaelastraszChooseTargetAction::Execute(Event /*event*/)
 {
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    BwlBossHelper helper(botAI);
+    Unit* vael = helper.FindAliveTarget("vaelastrasz the corrupt");
+    if (!vael)
     {
         return false;
     }
@@ -24,15 +24,14 @@ bool BwlVaelastraszChooseTargetAction::Execute(Event /*event*/)
 bool BwlVaelastraszPositionAction::Execute(Event /*event*/)
 {
     BwlBossHelper helper(botAI);
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    Unit* vael = helper.FindAliveTarget("vaelastrasz the corrupt");
+    if (!vael)
     {
         return false;
     }
 
     // Burning Adrenaline movement-out is handled by higher-priority generic move-from-group.
-    if (BwlSpellIds::HasAnyAura(botAI, bot, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}) ||
-        botAI->HasAura("burning adrenaline", bot))
+    if (helper.HasBurningAdrenaline(bot))
     {
         return false;
     }
