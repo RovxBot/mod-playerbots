@@ -3,7 +3,7 @@
 
 #include "AiObjectContext.h"
 #include "NamedObjectContext.h"
-#include "RaidAq40Triggers.h"
+#include "Trigger/RaidAq40Triggers.h"
 
 class RaidAq40TriggerContext : public NamedObjectContext<Trigger>
 {

@@ -1,6 +1,6 @@
 #include "RaidAq40Strategy.h"
 
-#include "RaidAq40Multipliers.h"
+#include "Multiplier/RaidAq40Multipliers.h"
 
 void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {

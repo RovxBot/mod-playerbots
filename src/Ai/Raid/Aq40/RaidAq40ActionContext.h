@@ -3,7 +3,7 @@
 
 #include "Action.h"
 #include "NamedObjectContext.h"
-#include "RaidAq40Actions.h"
+#include "Action/RaidAq40Actions.h"
 
 class RaidAq40ActionContext : public NamedObjectContext<Action>
 {
