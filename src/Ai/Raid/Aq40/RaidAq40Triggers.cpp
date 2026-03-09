@@ -5,39 +5,6 @@
 #include "ObjectGuid.h"
 #include "RaidAq40SpellIds.h"
 
-namespace
-{
-bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
-{
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        for (char const* name : names)
-        {
-            if (botAI->EqualLowercaseName(unit->GetName(), name))
-                return true;
-        }
-    }
-
-    return false;
-}
-
-bool IsAq40BossEncounterActive(PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    return IsAnyNamedUnit(botAI, attackers, { "the prophet skeram", "battleguard sartura", "sartura's royal guard",
-                                               "lord kri", "princess yauj", "vem", "yauj brood",
-                                               "fankriss the unyielding", "spawn of fankriss", "princess huhuran",
-                                               "emperor vek'nilash", "emperor vek'lor", "ouro", "dirt mound",
-                                               "viscidus", "glob of viscidus", "toxic slime", "c'thun",
-                                               "eye of c'thun", "eye tentacle", "claw tentacle",
-                                               "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
-}
-
-}  // namespace
-
 bool Aq40EngageTrigger::IsActive()
 {
     if (!Aq40BossHelper::IsInAq40(bot))
@@ -58,7 +25,7 @@ bool Aq40SkeramActiveTrigger::IsActive()
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (unit && botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram"))
+        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
             return true;
     }
 
@@ -128,7 +95,7 @@ bool Aq40SkeramSplitTrigger::IsActive()
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (unit && botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram"))
+        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
             ++skeramCount;
     }
 
@@ -144,7 +111,7 @@ bool Aq40SkeramExecutePhaseTrigger::IsActive()
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (unit && botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram") && unit->GetHealthPct() <= 25.0f)
+        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }) && unit->GetHealthPct() <= 25.0f)
             return true;
     }
 
@@ -210,7 +177,7 @@ bool Aq40BugTrioActiveTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" });
 }
 
 bool Aq40BugTrioHealCastTrigger::IsActive()
@@ -295,15 +262,10 @@ bool Aq40TrashActiveTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    if (attackers.empty() || IsAq40BossEncounterActive(botAI, attackers))
+    if (attackers.empty() || Aq40BossHelper::IsBossEncounterActive(botAI, attackers))
         return false;
 
-    return IsAnyNamedUnit(botAI, attackers,
-                          { "anubisath warder", "anubisath defender", "obsidian eradicator", "obsidian nullifier",
-                              "vekniss stinger", "qiraji slayer", "qiraji champion", "qiraji mindslayer",
-                              "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
-                              "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
-                              "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+    return Aq40BossHelper::IsTrashEncounterActive(botAI, attackers);
 }
 
 bool Aq40TrashDangerousAoeTrigger::IsActive()
@@ -372,7 +334,7 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
         if (unit->GetHealthPct() <= 32.0f)
             return true;
 
-        if (botAI->HasAura("frenzy", unit) || botAI->HasAura("berserk", unit))
+        if (Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::HuhuranFrenzy }))
             return true;
     }
 
@@ -497,7 +459,7 @@ bool Aq40OuroActiveTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
 }
 
 bool Aq40OuroScarabsTrigger::IsActive()
@@ -506,7 +468,7 @@ bool Aq40OuroScarabsTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers, { "qiraji scarab", "scarab" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "qiraji scarab", "scarab" });
 }
 
 bool Aq40OuroSweepTrigger::IsActive()
@@ -553,7 +515,7 @@ bool Aq40ViscidusActiveTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers, { "viscidus", "glob of viscidus", "toxic slime" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "viscidus", "glob of viscidus", "toxic slime" });
 }
 
 bool Aq40ViscidusFrozenTrigger::IsActive()
@@ -582,7 +544,7 @@ bool Aq40ViscidusGlobTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers, { "glob of viscidus" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "glob of viscidus" });
 }
 
 bool Aq40CthunActiveTrigger::IsActive()
@@ -591,9 +553,9 @@ bool Aq40CthunActiveTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers,
-                          { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
-                            "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+                                           { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
+                                             "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
 
 bool Aq40CthunPhase2Trigger::IsActive()
@@ -602,8 +564,8 @@ bool Aq40CthunPhase2Trigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers,
-                          { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+                                           { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
 
 bool Aq40CthunAddsPresentTrigger::IsActive()
@@ -612,9 +574,9 @@ bool Aq40CthunAddsPresentTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return IsAnyNamedUnit(botAI, attackers,
-                          { "eye tentacle", "claw tentacle", "giant eye tentacle", "giant claw tentacle",
-                            "flesh tentacle" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+                                           { "eye tentacle", "claw tentacle", "giant eye tentacle", "giant claw tentacle",
+                                             "flesh tentacle" });
 }
 
 bool Aq40CthunDarkGlareTrigger::IsActive()

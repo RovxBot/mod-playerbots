@@ -25,6 +25,7 @@ static constexpr uint32 Aq40WarderFear = 26070;
 static constexpr uint32 Aq40WarderRoots = 26071;
 static constexpr uint32 Aq40WarderSilence = 26069;
 static constexpr uint32 Aq40NullifierNullify = 26552;
+static constexpr uint32 HuhuranFrenzy = 26051;
 static constexpr uint32 TwinArcaneBurst = 568;
 static constexpr uint32 OuroSweep = 26103;
 static constexpr uint32 OuroSandBlast = 26102;

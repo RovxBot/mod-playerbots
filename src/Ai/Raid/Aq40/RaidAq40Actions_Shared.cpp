@@ -11,43 +11,13 @@ namespace Aq40BossActions
 {
 Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
 {
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        for (char const* name : names)
-        {
-            if (botAI->EqualLowercaseName(unit->GetName(), name))
-                return unit;
-        }
-    }
-
-    return nullptr;
+    return Aq40BossHelper::FindUnitByAnyName(botAI, attackers, names);
 }
 
 std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& attackers,
                                       std::initializer_list<char const*> names)
 {
-    std::vector<Unit*> found;
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        for (char const* name : names)
-        {
-            if (botAI->EqualLowercaseName(unit->GetName(), name))
-            {
-                found.push_back(unit);
-                break;
-            }
-        }
-    }
-
-    return found;
+    return Aq40BossHelper::FindUnitsByAnyName(botAI, attackers, names);
 }
 
 Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
@@ -70,17 +40,7 @@ Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
     for (std::initializer_list<char const*> names : priority)
     {
-        std::vector<Unit*> matches = FindUnitsByAnyName(botAI, attackers, names);
-        Unit* chosen = nullptr;
-        for (Unit* unit : matches)
-        {
-            if (!unit)
-                continue;
-
-            if (!chosen || unit->GetHealthPct() < chosen->GetHealthPct())
-                chosen = unit;
-        }
-
+        Unit* chosen = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, names);
         if (chosen)
             return chosen;
     }
@@ -111,12 +71,7 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
         std::vector<Unit*> fankrissSpawns = Aq40BossActions::FindFankrissSpawns(botAI, attackers);
         if (!fankrissSpawns.empty())
         {
-            target = fankrissSpawns.front();
-            for (Unit* spawn : fankrissSpawns)
-            {
-                if (spawn && target && spawn->GetHealthPct() < target->GetHealthPct())
-                    target = spawn;
-            }
+            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, { "spawn of fankriss" });
         }
         else
         {
@@ -128,12 +83,7 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
         std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
         if (!sarturaGuards.empty())
         {
-            target = sarturaGuards.front();
-            for (Unit* guard : sarturaGuards)
-            {
-                if (guard && target && guard->GetHealthPct() < target->GetHealthPct())
-                    target = guard;
-            }
+            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, { "sartura's royal guard" });
         }
         else
         {

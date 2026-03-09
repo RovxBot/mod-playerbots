@@ -14,41 +14,6 @@ float Aq40GenericMultiplier::GetValue(Action* /*action*/)
 
 namespace
 {
-bool IsAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
-{
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        for (char const* name : names)
-        {
-            if (botAI->EqualLowercaseName(unit->GetName(), name))
-                return true;
-        }
-    }
-
-    return false;
-}
-
-Unit* FindNamedUnit(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
-{
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        for (char const* name : names)
-        {
-            if (botAI->EqualLowercaseName(unit->GetName(), name))
-                return unit;
-        }
-    }
-
-    return nullptr;
-}
 }  // namespace
 
 float Aq40BugTrioMultiplier::GetValue(Action* action)
@@ -57,10 +22,10 @@ float Aq40BugTrioMultiplier::GetValue(Action* action)
         return 1.0f;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    if (!IsAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" }))
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" }))
         return 1.0f;
 
-    Unit* kri = FindNamedUnit(botAI, attackers, { "lord kri" });
+    Unit* kri = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "lord kri" });
     if (!kri)
         return 1.0f;
 
@@ -88,7 +53,7 @@ float Aq40OuroMultiplier::GetValue(Action* action)
         return 1.0f;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    Unit* ouro = FindNamedUnit(botAI, attackers, { "ouro" });
+    Unit* ouro = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "ouro" });
     if (!ouro)
         return 1.0f;
 
@@ -112,7 +77,7 @@ float Aq40ViscidusMultiplier::GetValue(Action* action)
         return 1.0f;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    Unit* viscidus = FindNamedUnit(botAI, attackers, { "viscidus" });
+    Unit* viscidus = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "viscidus" });
     if (!viscidus)
         return 1.0f;
 
