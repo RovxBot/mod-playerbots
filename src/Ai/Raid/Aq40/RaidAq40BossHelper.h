@@ -8,6 +8,7 @@
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "SharedDefines.h"
 
 namespace Aq40BossHelper
 {
@@ -27,20 +28,7 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     if (!group)
         return 0;
 
-    auto isPreferredTwinWarlockTank = [](Player* member) -> bool
-    {
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
-            return false;
-
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        return memberAI &&
-               (memberAI->HasStrategy("tank", BOT_STATE_COMBAT) ||
-                memberAI->HasStrategy("tank", BOT_STATE_NON_COMBAT));
-    };
-
-    bool const playerPreferred = isPreferredTwinWarlockTank(player);
-    uint32 ordinal = 0;
-    uint32 preferredCount = 0;
+    std::vector<Player*> warlocks;
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -48,33 +36,26 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
         if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
             continue;
 
-        if (!isPreferredTwinWarlockTank(member))
-            continue;
-
-        if (member->GetGUID() == player->GetGUID())
-            return ordinal;
-
-        ++ordinal;
-        ++preferredCount;
+        warlocks.push_back(member);
     }
 
-    if (playerPreferred || preferredCount >= 2)
+    if (warlocks.empty())
         return std::numeric_limits<uint32>::max();
 
-    ordinal = preferredCount;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    std::sort(warlocks.begin(), warlocks.end(), [](Player* left, Player* right)
     {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
-            continue;
+        int32 const leftShadowRes = left->GetResistance(SPELL_SCHOOL_SHADOW);
+        int32 const rightShadowRes = right->GetResistance(SPELL_SCHOOL_SHADOW);
+        if (leftShadowRes != rightShadowRes)
+            return leftShadowRes > rightShadowRes;
 
-        if (isPreferredTwinWarlockTank(member))
-            continue;
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
 
-        if (member->GetGUID() == player->GetGUID())
+    for (uint32 ordinal = 0; ordinal < warlocks.size(); ++ordinal)
+    {
+        if (warlocks[ordinal]->GetGUID() == player->GetGUID())
             return ordinal;
-
-        ++ordinal;
     }
 
     return std::numeric_limits<uint32>::max();
