@@ -13,7 +13,6 @@ namespace BwlSpellIds
     static constexpr uint32 HourglassSandCure = 23645;
     static constexpr uint32 BurningAdrenaline = 18173;
     static constexpr uint32 BurningAdrenalineAlt = 23620;
-    static constexpr uint32 EssenceOfTheRed = 23513;
     static constexpr uint32 ShadowOfEbonroc = 23340;
     static constexpr uint32 FlamegorFrenzy = 23342;
     static constexpr uint32 BroodlordBlastWave = 23331;

@@ -1,26 +1,5 @@
 #include "RaidBwlTriggers.h"
 
-#include "RaidBwlSpellIds.h"
-
-namespace
-{
-bool HasBurningAdrenaline(PlayerbotAI* botAI, Unit* unit)
-{
-    if (!botAI || !unit)
-    {
-        return false;
-    }
-
-    if (BwlSpellIds::HasAnyAura(botAI, unit, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}))
-    {
-        return true;
-    }
-
-    // Fallback for custom spell data.
-    return botAI->HasAura("burning adrenaline", unit);
-}
-}  // namespace
-
 bool BwlVaelastraszEncounterTrigger::IsActive()
 {
     if (!helper.IsInBwl() || !bot->IsInCombat())
@@ -28,12 +7,7 @@ bool BwlVaelastraszEncounterTrigger::IsActive()
         return false;
     }
 
-    if (Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt"))
-    {
-        return vael->IsAlive();
-    }
-
-    return false;
+    return helper.FindAliveTarget("vaelastrasz the corrupt") != nullptr;
 }
 
 bool BwlVaelastraszBurningAdrenalineSelfTrigger::IsActive()
@@ -43,40 +17,39 @@ bool BwlVaelastraszBurningAdrenalineSelfTrigger::IsActive()
         return false;
     }
 
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    if (!helper.FindAliveTarget("vaelastrasz the corrupt"))
     {
         return false;
     }
 
-    return HasBurningAdrenaline(botAI, bot);
+    return helper.HasBurningAdrenaline(bot);
 }
 
 bool BwlVaelastraszMainTankBurningAdrenalineTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!helper.IsInBwl() || !bot->IsInCombat() ||
+        (!helper.IsEncounterBackupTank(bot, 0) && !helper.IsEncounterBackupTank(bot, 1)))
     {
         return false;
     }
 
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    if (!helper.FindAliveTarget("vaelastrasz the corrupt"))
     {
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;
     }
 
-    if (HasBurningAdrenaline(botAI, bot))
+    if (helper.HasBurningAdrenaline(bot))
     {
         return false;
     }
 
-    return HasBurningAdrenaline(botAI, mainTank);
+    return helper.HasBurningAdrenaline(mainTank);
 }
 
 bool BwlVaelastraszPositioningTrigger::IsActive()
@@ -86,14 +59,13 @@ bool BwlVaelastraszPositioningTrigger::IsActive()
         return false;
     }
 
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    if (!helper.FindAliveTarget("vaelastrasz the corrupt"))
     {
         return false;
     }
 
     // BA bots should run out; movement handled by dedicated trigger/action.
-    if (HasBurningAdrenaline(botAI, bot))
+    if (helper.HasBurningAdrenaline(bot))
     {
         return false;
     }

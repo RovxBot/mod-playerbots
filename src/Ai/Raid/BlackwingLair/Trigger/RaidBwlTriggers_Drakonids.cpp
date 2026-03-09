@@ -1,6 +1,6 @@
 #include "RaidBwlTriggers.h"
 
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 
@@ -89,7 +89,7 @@ bool BwlFiremawHighFlameBuffetTrigger::IsActive()
         return false;
     }
 
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0) || firemaw->GetVictim() == bot)
+    if (helper.IsEncounterTank(bot) || firemaw->GetVictim() == bot)
     {
         return false;
     }
@@ -122,7 +122,7 @@ bool BwlFiremawHighFlameBuffetTrigger::IsActive()
 
 bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() || !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() || !helper.IsEncounterBackupTank(bot, 0))
     {
         return false;
     }
@@ -133,7 +133,7 @@ bool BwlFiremawMainTankHighFlameBuffetTrigger::IsActive()
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;
@@ -181,7 +181,8 @@ bool BwlEbonrocPositioningTrigger::IsActive()
 
 bool BwlEbonrocMainTankShadowTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() || !botAI->IsAssistTank(bot))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsDangerousTrashEncounterActive() ||
+        !helper.IsEncounterBackupTank(bot, 0))
     {
         return false;
     }
@@ -192,7 +193,7 @@ bool BwlEbonrocMainTankShadowTrigger::IsActive()
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;

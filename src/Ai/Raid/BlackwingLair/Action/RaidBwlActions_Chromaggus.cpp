@@ -12,6 +12,21 @@ namespace
 constexpr float ChromaggusTankSpotX = -7448.44f;
 constexpr float ChromaggusTankSpotY = -1057.89f;
 constexpr float ChromaggusTankSpotZ = 476.55f;
+
+struct ChromaggusLosAnchor
+{
+    float x;
+    float y;
+    float z;
+};
+
+constexpr ChromaggusLosAnchor ChromaggusLosAnchors[] = {
+    {-7466.0f, -1080.5f, 476.5f},
+    {-7457.0f, -1087.0f, 476.5f},
+    {-7447.0f, -1091.0f, 476.5f},
+    {-7437.0f, -1087.0f, 476.5f},
+    {-7428.0f, -1080.5f, 476.5f},
+};
 }  // namespace
 
 bool BwlChromaggusChooseTargetAction::Execute(Event /*event*/)
@@ -32,6 +47,7 @@ bool BwlChromaggusChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlChromaggusPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* chromaggus = AI_VALUE2(Unit*, "find target", "chromaggus");
     if (!chromaggus || !chromaggus->IsAlive())
     {
@@ -43,9 +59,9 @@ bool BwlChromaggusPositionAction::Execute(Event /*event*/)
     float targetZ = bot->GetPositionZ();
     float const facing = chromaggus->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
     bool const hasAggro = chromaggus->GetVictim() == bot;
 
     // Anyone with aggro (tank or not) must go to the fixed tank spot
@@ -141,34 +157,22 @@ bool BwlChromaggusLosHideAction::Execute(Event /*event*/)
 
     float const botX = bot->GetPositionX();
     float const botY = bot->GetPositionY();
-    float const botZ = bot->GetPositionZ();
-    float const twoPi = static_cast<float>(2.0 * M_PI);
-    float const radii[] = {6.0f, 10.0f, 14.0f, 18.0f, 22.0f, 26.0f};
-
-    for (float radius : radii)
+    for (ChromaggusLosAnchor const& anchor : ChromaggusLosAnchors)
     {
-        for (uint32 i = 0; i < 16; ++i)
+        if (chromaggus->IsWithinLOS(anchor.x, anchor.y, anchor.z))
         {
-            float angle = (static_cast<float>(i) / 16.0f) * twoPi;
-            float testX = botX + std::cos(angle) * radius;
-            float testY = botY + std::sin(angle) * radius;
-            float testZ = botZ;
+            continue;
+        }
 
-            if (chromaggus->IsWithinLOS(testX, testY, testZ))
-            {
-                continue;
-            }
-
-            float dx = testX - botX;
-            float dy = testY - botY;
-            float distSq = dx * dx + dy * dy;
-            if (distSq < bestDistSq)
-            {
-                bestDistSq = distSq;
-                bestX = testX;
-                bestY = testY;
-                bestZ = testZ;
-            }
+        float dx = anchor.x - botX;
+        float dy = anchor.y - botY;
+        float distSq = dx * dx + dy * dy;
+        if (distSq < bestDistSq)
+        {
+            bestDistSq = distSq;
+            bestX = anchor.x;
+            bestY = anchor.y;
+            bestZ = anchor.z;
         }
     }
 
@@ -183,7 +187,7 @@ bool BwlChromaggusLosHideAction::Execute(Event /*event*/)
     float const fallbackAngle = chromaggus->GetOrientation() + static_cast<float>(M_PI);
     fallbackX += std::cos(fallbackAngle) * 26.0f;
     fallbackY += std::sin(fallbackAngle) * 26.0f;
-    return MoveTo(bot->GetMapId(), fallbackX, fallbackY, botZ, false, false, false, true, MovementPriority::MOVEMENT_FORCED);
+    return MoveTo(bot->GetMapId(), fallbackX, fallbackY, bot->GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool BwlUseHourglassSandAction::Execute(Event /*event*/)

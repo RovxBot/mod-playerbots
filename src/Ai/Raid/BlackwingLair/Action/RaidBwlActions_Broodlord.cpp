@@ -70,15 +70,16 @@ bool BwlBroodlordChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlBroodlordPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* broodlord = AI_VALUE2(Unit*, "find target", "broodlord lashlayer");
     if (!broodlord || !broodlord->IsAlive())
     {
         return false;
     }
 
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
 
     // Tanks and any bot that has boss aggro go to the fixed tank spot.
     bool const hasAggro = broodlord->GetVictim() == bot;

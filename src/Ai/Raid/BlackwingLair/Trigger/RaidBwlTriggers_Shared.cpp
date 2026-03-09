@@ -1,6 +1,6 @@
 #include "RaidBwlTriggers.h"
 
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 
 namespace

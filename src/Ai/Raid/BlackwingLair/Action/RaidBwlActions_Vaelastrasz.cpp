@@ -2,13 +2,13 @@
 
 #include <cmath>
 
-#include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 
 bool BwlVaelastraszChooseTargetAction::Execute(Event /*event*/)
 {
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    BwlBossHelper helper(botAI);
+    Unit* vael = helper.FindAliveTarget("vaelastrasz the corrupt");
+    if (!vael)
     {
         return false;
     }
@@ -23,15 +23,15 @@ bool BwlVaelastraszChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlVaelastraszPositionAction::Execute(Event /*event*/)
 {
-    Unit* vael = AI_VALUE2(Unit*, "find target", "vaelastrasz the corrupt");
-    if (!vael || !vael->IsAlive())
+    BwlBossHelper helper(botAI);
+    Unit* vael = helper.FindAliveTarget("vaelastrasz the corrupt");
+    if (!vael)
     {
         return false;
     }
 
     // Burning Adrenaline movement-out is handled by higher-priority generic move-from-group.
-    if (BwlSpellIds::HasAnyAura(botAI, bot, {BwlSpellIds::BurningAdrenaline, BwlSpellIds::BurningAdrenalineAlt}) ||
-        botAI->HasAura("burning adrenaline", bot))
+    if (helper.HasBurningAdrenaline(bot))
     {
         return false;
     }
@@ -49,15 +49,20 @@ bool BwlVaelastraszPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (botAI->IsMainTank(bot))
+    if (helper.IsEncounterPrimaryTank(bot))
     {
         angleOffset = 0.0f;
         distance = 6.0f;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
+    else if (helper.IsEncounterBackupTank(bot, 0))
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 8.0f;
+    }
+    else if (helper.IsEncounterBackupTank(bot, 1))
+    {
+        angleOffset = static_cast<float>(M_PI / 2.0f) + 0.35f;
+        distance = 9.0f;
     }
     else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {

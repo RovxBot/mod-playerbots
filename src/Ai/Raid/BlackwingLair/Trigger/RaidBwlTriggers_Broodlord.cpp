@@ -58,7 +58,7 @@ bool BwlBroodlordPositioningTrigger::IsActive()
 
 bool BwlBroodlordMainTankMortalStrikeTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || !helper.IsEncounterBackupTank(bot, 0))
     {
         return false;
     }
@@ -69,7 +69,7 @@ bool BwlBroodlordMainTankMortalStrikeTrigger::IsActive()
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;

@@ -2,7 +2,7 @@
 #define _PLAYERBOT_RAIDBWLMULTIPLIERS_H
 
 #include "Multiplier.h"
-#include "RaidBwlBossHelper.h"
+#include "Util/RaidBwlBossHelper.h"
 
 class BwlEncounterTargetingMultiplier : public Multiplier
 {

@@ -3,7 +3,7 @@
 
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBwlBossHelper.h"
+#include "Util/RaidBwlBossHelper.h"
 #include "Trigger.h"
 
 class BwlSuppressionDeviceTrigger : public Trigger

@@ -34,7 +34,22 @@ struct NefarianP2PositionState
     bool initialized = false;
 };
 
-std::unordered_map<uint32, NefarianP2PositionState> sNefarianP2PositionStates;
+std::unordered_map<uint64, NefarianP2PositionState> sNefarianP2PositionStates;
+
+uint64 GetNefarianP2BotKey(Player* bot)
+{
+    return bot ? bot->GetGUID().GetRawValue() : 0;
+}
+
+void ResetNefarianP2PositionState(Player* bot)
+{
+    if (!bot)
+    {
+        return;
+    }
+
+    sNefarianP2PositionStates.erase(GetNefarianP2BotKey(bot));
+}
 
 bool ShouldDelayNefarianP2Reposition(Player* bot, Unit* nefarian, bool isTankRole)
 {
@@ -44,7 +59,7 @@ bool ShouldDelayNefarianP2Reposition(Player* bot, Unit* nefarian, bool isTankRol
     }
 
     uint32 const nowMs = getMSTime();
-    uint32 const botKey = bot->GetGUID().GetCounter();
+    uint64 const botKey = GetNefarianP2BotKey(bot);
     NefarianP2PositionState& state = sNefarianP2PositionStates[botKey];
 
     float const facing = nefarian->GetOrientation();
@@ -85,7 +100,7 @@ void MarkNefarianP2Reposition(Player* bot, bool isTankRole)
         return;
     }
 
-    sNefarianP2PositionStates[bot->GetGUID().GetCounter()].lastRepositionMs = getMSTime();
+    sNefarianP2PositionStates[GetNefarianP2BotKey(bot)].lastRepositionMs = getMSTime();
 }
 }  // namespace
 
@@ -171,8 +186,9 @@ bool BwlNefarianPhaseOneChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
-    bool const northTunnel = (slot % 2 == 0);
+    bool const northTunnel = helper.UseNefarianNorthTunnel(bot);
     float targetX = northTunnel ? NefarianP1NorthTunnelX : NefarianP1SouthTunnelX;
     float targetY = northTunnel ? NefarianP1NorthTunnelY : NefarianP1SouthTunnelY;
     float targetZ = NefarianP1TunnelZ;
@@ -193,7 +209,7 @@ bool BwlNefarianPhaseOneTunnelPositionAction::Execute(Event /*event*/)
 
     // Tanks step slightly forward to meet adds; others hold a bit behind.
     float forwardOffset = 0.0f;
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTank(bot))
+    if (helper.IsEncounterTank(bot))
     {
         forwardOffset = 4.0f;
     }
@@ -242,9 +258,11 @@ bool BwlNefarianPhaseTwoChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* nefarian = AI_VALUE2(Unit*, "find target", "nefarian");
-    if (!nefarian || !nefarian->IsAlive())
+    if (!helper.IsNefarianPhaseTwoActive() || !nefarian || !nefarian->IsAlive())
     {
+        ResetNefarianP2PositionState(bot);
         return false;
     }
 
@@ -253,9 +271,9 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
     float targetZ = nefarian->GetPositionZ();
     float const facing = nefarian->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
 
     if (ShouldDelayNefarianP2Reposition(bot, nefarian, isTankRole))
     {
@@ -268,12 +286,12 @@ bool BwlNefarianPhaseTwoPositionAction::Execute(Event /*event*/)
     float angleOffset = 0.0f;
     float distance = 0.0f;
 
-    if (isMainTank)
+    if (isPrimaryTank)
     {
         angleOffset = 0.0f;
         distance = 7.0f;
     }
-    else if (isAssistTank)
+    else if (isBackupTank)
     {
         angleOffset = static_cast<float>(M_PI / 2.0f);
         distance = 10.0f;

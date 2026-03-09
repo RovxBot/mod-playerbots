@@ -3,7 +3,7 @@
 #include <cmath>
 #include <unordered_map>
 
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 
@@ -104,15 +104,16 @@ bool BwlFiremawChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlFiremawPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* firemaw = AI_VALUE2(Unit*, "find target", "firemaw");
     if (!firemaw || !firemaw->IsAlive())
     {
         return false;
     }
 
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
 
     // Tanks and any bot that has boss aggro go to the fixed tank spot.
     bool const hasAggro = firemaw->GetVictim() == bot;
@@ -200,15 +201,16 @@ bool BwlEbonrocChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlEbonrocPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* ebonroc = AI_VALUE2(Unit*, "find target", "ebonroc");
     if (!ebonroc || !ebonroc->IsAlive())
     {
         return false;
     }
 
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
 
     // Tanks and any bot that has boss aggro go to the fixed tank spot.
     bool const hasAggro = ebonroc->GetVictim() == bot;
@@ -295,6 +297,7 @@ bool BwlFlamegorChooseTargetAction::Execute(Event /*event*/)
 
 bool BwlFlamegorPositionAction::Execute(Event /*event*/)
 {
+    BwlBossHelper helper(botAI);
     Unit* flamegor = AI_VALUE2(Unit*, "find target", "flamegor");
     if (!flamegor || !flamegor->IsAlive())
     {
@@ -307,9 +310,9 @@ bool BwlFlamegorPositionAction::Execute(Event /*event*/)
     float const facing = flamegor->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
 
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    bool const isTankRole = isMainTank || isAssistTank;
+    bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
+    bool const isTankRole = isPrimaryTank || isBackupTank;
     bool const hasAggro = flamegor->GetVictim() == bot;
 
     // Anyone with aggro (tank or not) must go to the fixed tank spot
