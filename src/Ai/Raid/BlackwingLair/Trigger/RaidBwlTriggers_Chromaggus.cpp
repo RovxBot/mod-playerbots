@@ -100,7 +100,7 @@ bool BwlChromaggusFrenzyTrigger::IsActive()
 
 bool BwlChromaggusBreathLosTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || botAI->IsMainTank(bot))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || helper.IsEncounterPrimaryTank(bot))
     {
         return false;
     }
@@ -124,12 +124,12 @@ bool BwlChromaggusBreathLosTrigger::IsActive()
         return true;
     }
 
-    return botAI->IsAssistTank(bot) || botAI->IsHeal(bot);
+    return helper.IsEncounterBackupTank(bot, 0) || helper.IsEncounterBackupTank(bot, 1) || botAI->IsHeal(bot);
 }
 
 bool BwlChromaggusMainTankTimeLapseTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTank(bot))
+    if (!helper.IsInBwl() || !bot->IsInCombat() || !helper.IsEncounterBackupTank(bot, 0))
     {
         return false;
     }
@@ -140,7 +140,7 @@ bool BwlChromaggusMainTankTimeLapseTrigger::IsActive()
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;

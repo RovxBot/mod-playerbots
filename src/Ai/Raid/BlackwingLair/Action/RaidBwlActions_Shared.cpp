@@ -265,8 +265,8 @@ bool BwlTrashChooseTargetAction::Execute(Event /*event*/)
     bool const isPhysical = !isCaster;
     bool const isTank = botAI->IsTank(bot);
     uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
-    Player* mainTankPlayer = mainTank ? mainTank->ToPlayer() : nullptr;
+    Player* mainTankPlayer = helper.GetEncounterPrimaryTank();
+    Unit* mainTank = mainTankPlayer;
     bool const shouldWaitForTankPickup = !isTank && myAttackers == 0 && mainTank && mainTank != bot && mainTank->IsAlive();
     bool const isDeathTalonPullUnstable = helper.IsDeathTalonPullUnstable();
 
@@ -483,12 +483,12 @@ bool BwlTrashSafePositionAction::Execute(Event /*event*/)
     float targetZ = bot->GetPositionZ();
     float const facing = target->GetOrientation();
     uint32 const slot = botAI->GetGroupSlotIndex(bot);
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isMainTank = helper.IsEncounterPrimaryTank(bot);
+    bool const isAssistTank = helper.IsEncounterBackupTank(bot, 0);
     bool const isRangedOrHealer = botAI->IsRanged(bot) || botAI->IsHeal(bot);
     bool const isNonTank = !isMainTank && !isAssistTank;
     uint8 const myAttackers = AI_VALUE(uint8, "my attacker count");
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     float raidX = 0.0f;
     float raidY = 0.0f;
     bool const hasRaidCenter = GetRaidCenter(botAI, bot, raidX, raidY);

@@ -54,7 +54,8 @@ bool BwlVaelastraszBurningAdrenalineSelfTrigger::IsActive()
 
 bool BwlVaelastraszMainTankBurningAdrenalineTrigger::IsActive()
 {
-    if (!helper.IsInBwl() || !bot->IsInCombat() || !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!helper.IsInBwl() || !bot->IsInCombat() ||
+        (!helper.IsEncounterBackupTank(bot, 0) && !helper.IsEncounterBackupTank(bot, 1)))
     {
         return false;
     }
@@ -65,7 +66,7 @@ bool BwlVaelastraszMainTankBurningAdrenalineTrigger::IsActive()
         return false;
     }
 
-    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = helper.GetEncounterPrimaryTank();
     if (!mainTank || mainTank == bot)
     {
         return false;

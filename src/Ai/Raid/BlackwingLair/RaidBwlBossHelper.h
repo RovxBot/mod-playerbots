@@ -6,6 +6,8 @@
 #include <initializer_list>
 #include <limits>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "AiObject.h"
 #include "AiObjectContext.h"
@@ -95,6 +97,193 @@ public:
 
         GuidVector nearby = context->GetValue<GuidVector>("nearest npcs")->Get();
         return HasNefarianPhaseOneAddsInUnits(nearby);
+    }
+
+    Player* GetEncounterPrimaryTank() const
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return botAI->IsTank(bot) && bot->IsAlive() ? bot : nullptr;
+        }
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
+            {
+                continue;
+            }
+
+            if (PlayerbotAI::IsMainTank(member))
+            {
+                return member;
+            }
+        }
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && PlayerbotAI::IsTank(member))
+            {
+                return member;
+            }
+        }
+
+        return nullptr;
+    }
+
+    Player* GetEncounterBackupTank(uint8 index) const
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return nullptr;
+        }
+
+        Player* primaryTank = GetEncounterPrimaryTank();
+        std::vector<Player*> backups;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || member == primaryTank)
+            {
+                continue;
+            }
+
+            backups.push_back(member);
+        }
+
+        std::sort(backups.begin(), backups.end(), [](Player* left, Player* right)
+        {
+            auto getPriority = [](Player* member) -> uint32
+            {
+                if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+                {
+                    return 0;
+                }
+                if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
+                {
+                    return 1;
+                }
+                if (PlayerbotAI::IsAssistTank(member))
+                {
+                    return 2;
+                }
+                return 10;
+            };
+
+            uint32 const leftPriority = getPriority(left);
+            uint32 const rightPriority = getPriority(right);
+            if (leftPriority != rightPriority)
+            {
+                return leftPriority < rightPriority;
+            }
+
+            return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+        });
+
+        return index < backups.size() ? backups[index] : nullptr;
+    }
+
+    bool IsEncounterPrimaryTank(Player* player) const
+    {
+        return player && player == GetEncounterPrimaryTank();
+    }
+
+    bool IsEncounterBackupTank(Player* player, uint8 index = 0) const
+    {
+        return player && player == GetEncounterBackupTank(index);
+    }
+
+    bool IsEncounterTank(Player* player) const
+    {
+        return IsEncounterPrimaryTank(player) || IsEncounterBackupTank(player, 0) || IsEncounterBackupTank(player, 1);
+    }
+
+    bool UseNefarianNorthTunnel(Player* player) const
+    {
+        if (!player)
+        {
+            return false;
+        }
+
+        uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
+        static std::unordered_map<uint32, std::unordered_map<uint64, bool>> sTunnelAssignments;
+        if (!IsNefarianPhaseOneActive())
+        {
+            sTunnelAssignments.erase(instanceId);
+        }
+
+        std::unordered_map<uint64, bool>& assignments = sTunnelAssignments[instanceId];
+        uint64 const playerGuid = player->GetGUID().GetRawValue();
+        auto const existing = assignments.find(playerGuid);
+        if (existing != assignments.end())
+        {
+            return existing->second;
+        }
+
+        Group* group = player->GetGroup();
+        if (!group)
+        {
+            bool const north = (player->GetGUID().GetCounter() % 2) == 0;
+            assignments[playerGuid] = north;
+            return north;
+        }
+
+        std::vector<Player*> members;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive())
+            {
+                members.push_back(member);
+            }
+        }
+
+        auto getLanePriority = [this](Player* member) -> uint32
+        {
+            if (IsEncounterPrimaryTank(member))
+            {
+                return 0;
+            }
+            if (IsEncounterBackupTank(member, 0))
+            {
+                return 1;
+            }
+            if (IsEncounterBackupTank(member, 1))
+            {
+                return 2;
+            }
+            return 10 + member->GetGUID().GetCounter();
+        };
+
+        std::sort(members.begin(), members.end(), [&getLanePriority](Player* left, Player* right)
+        {
+            uint32 const leftPriority = getLanePriority(left);
+            uint32 const rightPriority = getLanePriority(right);
+            if (leftPriority != rightPriority)
+            {
+                return leftPriority < rightPriority;
+            }
+
+            return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+        });
+
+        uint32 laneIndex = 0;
+        for (Player* member : members)
+        {
+            uint64 const memberGuid = member->GetGUID().GetRawValue();
+            if (assignments.find(memberGuid) != assignments.end())
+            {
+                continue;
+            }
+
+            assignments[memberGuid] = (laneIndex % 2) == 0;
+            ++laneIndex;
+        }
+
+        return assignments[playerGuid];
     }
 
     bool IsBwlBoss(Unit* unit) const
