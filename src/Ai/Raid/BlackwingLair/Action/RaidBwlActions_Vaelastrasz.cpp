@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 
 bool BwlVaelastraszChooseTargetAction::Execute(Event /*event*/)

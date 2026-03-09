@@ -7,8 +7,8 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBwlBossHelper.h"
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlBossHelper.h"
+#include "Util/RaidBwlSpellIds.h"
 
 class BwlWarnOnyxiaScaleCloakAction : public Action
 {

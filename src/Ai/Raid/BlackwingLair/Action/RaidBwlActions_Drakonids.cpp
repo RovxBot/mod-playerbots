@@ -3,7 +3,7 @@
 #include <cmath>
 #include <unordered_map>
 
-#include "RaidBwlSpellIds.h"
+#include "Util/RaidBwlSpellIds.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 
