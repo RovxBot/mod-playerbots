@@ -7,7 +7,8 @@
 
 #include "GameObject.h"
 #include "ObjectGuid.h"
-#include "RaidAq40SpellIds.h"
+#include "../RaidAq40SpellIds.h"
+#include "../Util/RaidAq40Helpers.h"
 #include "Timer.h"
 
 namespace Aq40BossActions
@@ -60,47 +61,11 @@ Unit* FindHighestPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attacker
     return Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "claw tentacle" });
 }
 
-uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    static std::unordered_map<uint64, uint32> phase2StartByBossGuid;
-
-    Unit* cthunBody = FindCthunBody(botAI, attackers);
-    if (!cthunBody)
-        return 0;
-
-    bool inPhase2 = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
-    uint64 bodyGuid = cthunBody->GetGUID().GetRawValue();
-    if (!inPhase2)
-    {
-        phase2StartByBossGuid.erase(bodyGuid);
-        return 0;
-    }
-
-    uint32 now = getMSTime();
-    auto itr = phase2StartByBossGuid.find(bodyGuid);
-    if (itr == phase2StartByBossGuid.end())
-    {
-        phase2StartByBossGuid[bodyGuid] = now;
-        return 0;
-    }
-
-    return now - itr->second;
-}
-
 CthunExpectedGiantType GetExpectedGiantType(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    uint32 elapsed = GetCthunPhase2ElapsedMs(botAI, attackers);
+    uint32 elapsed = Aq40Helpers::GetCthunPhase2ElapsedMs(botAI, attackers);
     uint32 window = (elapsed / kCthunGiantWavePeriodMs) % 2;
     return window == 0 ? CthunExpectedGiantType::Claw : CthunExpectedGiantType::Eye;
-}
-
-bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    Unit* cthunBody = FindCthunBody(botAI, attackers);
-    if (!cthunBody)
-        return false;
-
-    return botAI->HasAura("weakened", cthunBody);
 }
 
 Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
@@ -154,38 +119,6 @@ uint32 GetRangedSpreadOrdinal(Player* bot, PlayerbotAI* botAI)
     return static_cast<uint32>(bot->GetGUID().GetCounter() % 12);
 }
 
-GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
-{
-    GuidVector nearbyGameObjects = AI_VALUE(GuidVector, "nearest game objects");
-    GameObject* candidate = nullptr;
-    float bestDistance = 999.0f;
-
-    for (ObjectGuid const guid : nearbyGameObjects)
-    {
-        GameObject* go = botAI->GetGameObject(guid);
-        if (!go)
-            continue;
-
-        std::string name = go->GetName();
-        std::transform(name.begin(), name.end(), name.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-        bool looksLikeExit = name.find("portal") != std::string::npos ||
-                             name.find("exit") != std::string::npos ||
-                             name.find("teleport") != std::string::npos;
-        if (!looksLikeExit)
-            continue;
-
-        float distance = bot->GetDistance2d(go);
-        if (distance < bestDistance)
-        {
-            bestDistance = distance;
-            candidate = go;
-        }
-    }
-
-    return candidate;
-}
 }  // namespace
 
 bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
@@ -196,8 +129,7 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 
     Unit* target = nullptr;
 
-    if (Aq40SpellIds::GetAnyAura(bot, { Aq40SpellIds::CthunDigestiveAcid }) ||
-        botAI->GetAura("digestive acid", bot, false, false))
+    if (Aq40Helpers::IsCthunInStomach(bot, botAI))
         target = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle" });
 
     if (!target)
@@ -207,7 +139,7 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
     {
         Unit* body = FindCthunBody(botAI, attackers);
         Unit* eye = FindCthunEye(botAI, attackers);
-        if (body && IsCthunVulnerableNow(botAI, attackers))
+        if (body && Aq40Helpers::IsCthunVulnerableNow(botAI, attackers))
             target = body;
         else
             target = eye ? eye : body;
@@ -301,7 +233,7 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
     if (acid->GetStackAmount() < exitStacks)
         return false;
 
-    GameObject* portal = FindLikelyStomachExitPortal(bot, botAI);
+    GameObject* portal = Aq40Helpers::FindLikelyStomachExitPortal(bot, botAI);
     if (portal)
     {
         return MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false, false,
@@ -332,7 +264,7 @@ bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
 bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (!IsCthunVulnerableNow(botAI, attackers))
+    if (!Aq40Helpers::IsCthunVulnerableNow(botAI, attackers))
         return false;
 
     // Keep eye-tentacle cleanup priority even inside weakened windows.

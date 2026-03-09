@@ -1,11 +1,13 @@
 #include "RaidAq40Multipliers.h"
 
 #include "Action.h"
+#include "ChooseTargetActions.h"
+#include "FollowActions.h"
 #include "MovementActions.h"
 #include "ObjectGuid.h"
 #include "Playerbots.h"
-#include "RaidAq40BossHelper.h"
-#include "RaidAq40SpellIds.h"
+#include "../RaidAq40BossHelper.h"
+#include "../RaidAq40SpellIds.h"
 
 float Aq40GenericMultiplier::GetValue(Action* /*action*/)
 {
@@ -71,6 +73,37 @@ float Aq40OuroMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
+float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
+{
+    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return 1.0f;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "emperor vek'nilash", "emperor vek'lor" }))
+        return 1.0f;
+
+    std::string const actionName = action->getName();
+    bool isTwinControlAction =
+        actionName == "aq40 twin emperors choose target" ||
+        actionName == "aq40 twin emperors hold split" ||
+        actionName == "aq40 twin emperors warlock tank" ||
+        actionName == "aq40 twin emperors avoid arcane burst" ||
+        actionName == "aq40 twin emperors enforce separation";
+
+    if (isTwinControlAction)
+        return 1.0f;
+
+    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<FollowAction*>(action) ||
+        dynamic_cast<FleeAction*>(action))
+        return 0.0f;
+
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+        return 0.0f;
+
+    return 1.0f;
+}
+
 float Aq40ViscidusMultiplier::GetValue(Action* action)
 {
     if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
@@ -99,6 +132,39 @@ float Aq40ViscidusMultiplier::GetValue(Action* action)
         if (actionName == "aq40 viscidus shatter")
             return 0.4f;
     }
+
+    return 1.0f;
+}
+
+float Aq40CthunMultiplier::GetValue(Action* action)
+{
+    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+        return 1.0f;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+                                         { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
+                                           "giant eye tentacle", "giant claw tentacle", "flesh tentacle" }))
+        return 1.0f;
+
+    std::string const actionName = action->getName();
+    bool isCthunControlAction =
+        actionName == "aq40 cthun choose target" ||
+        actionName == "aq40 cthun maintain spread" ||
+        actionName == "aq40 cthun avoid dark glare" ||
+        actionName == "aq40 cthun stomach dps" ||
+        actionName == "aq40 cthun stomach exit" ||
+        actionName == "aq40 cthun phase2 add priority" ||
+        actionName == "aq40 cthun vulnerable burst" ||
+        actionName == "aq40 cthun interrupt eye";
+
+    if (isCthunControlAction)
+        return 1.0f;
+
+    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<FollowAction*>(action) ||
+        dynamic_cast<FleeAction*>(action))
+        return 0.0f;
 
     return 1.0f;
 }

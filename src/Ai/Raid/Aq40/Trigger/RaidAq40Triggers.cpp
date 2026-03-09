@@ -3,7 +3,8 @@
 #include <initializer_list>
 
 #include "ObjectGuid.h"
-#include "RaidAq40SpellIds.h"
+#include "../RaidAq40SpellIds.h"
+#include "../Util/RaidAq40Helpers.h"
 
 bool Aq40EngageTrigger::IsActive()
 {
@@ -611,9 +612,7 @@ bool Aq40CthunDarkGlareTrigger::IsActive()
 
 bool Aq40CthunInStomachTrigger::IsActive()
 {
-    return Aq40SpellIds::GetAnyAura(bot, { Aq40SpellIds::CthunDigestiveAcid }) ||
-           botAI->GetAura("digestive acid", bot, false, false) ||
-           botAI->GetAura("digestive acid", bot, false, true, 1);
+    return Aq40Helpers::IsCthunInStomach(bot, botAI);
 }
 
 bool Aq40CthunVulnerableTrigger::IsActive()
@@ -622,17 +621,7 @@ bool Aq40CthunVulnerableTrigger::IsActive()
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        if (botAI->EqualLowercaseName(unit->GetName(), "c'thun") && botAI->HasAura("weakened", unit))
-            return true;
-    }
-
-    return false;
+    return Aq40Helpers::IsCthunVulnerableNow(botAI, attackers);
 }
 
 bool Aq40CthunEyeCastTrigger::IsActive()

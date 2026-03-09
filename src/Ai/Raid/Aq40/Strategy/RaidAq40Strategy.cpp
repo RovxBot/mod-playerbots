@@ -1,6 +1,6 @@
 #include "RaidAq40Strategy.h"
 
-#include "Multiplier/RaidAq40Multipliers.h"
+#include "../Multiplier/RaidAq40Multipliers.h"
 
 void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
@@ -146,5 +146,7 @@ void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new Aq40GenericMultiplier(botAI));
     multipliers.push_back(new Aq40BugTrioMultiplier(botAI));
     multipliers.push_back(new Aq40OuroMultiplier(botAI));
+    multipliers.push_back(new Aq40TwinEmperorsMultiplier(botAI));
     multipliers.push_back(new Aq40ViscidusMultiplier(botAI));
+    multipliers.push_back(new Aq40CthunMultiplier(botAI));
 }

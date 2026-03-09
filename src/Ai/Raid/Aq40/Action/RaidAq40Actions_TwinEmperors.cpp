@@ -2,7 +2,8 @@
 
 #include <cmath>
 
-#include "RaidAq40BossHelper.h"
+#include "../RaidAq40BossHelper.h"
+#include "../Util/RaidAq40Helpers.h"
 
 namespace Aq40BossActions
 {
@@ -17,100 +18,13 @@ Unit* FindTwinMutateBug(PlayerbotAI* botAI, GuidVector const& attackers)
 }
 }  // namespace Aq40BossActions
 
-namespace
-{
-struct TwinAssignments
-{
-    Unit* sideEmperor = nullptr;
-    Unit* oppositeEmperor = nullptr;
-    Unit* veklor = nullptr;
-    Unit* veknilash = nullptr;
-};
-
-bool IsTwinRoleMatch(Player* bot, PlayerbotAI* botAI, Player* member)
-{
-    if (!member || !member->IsAlive())
-        return false;
-
-    bool botIsWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool botIsMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
-    bool botIsHealer = botAI->IsHeal(bot);
-
-    if (botIsWarlockTank)
-        return Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
-    if (botIsMeleeTank)
-        return GET_PLAYERBOT_AI(member) && GET_PLAYERBOT_AI(member)->IsTank(member) && !GET_PLAYERBOT_AI(member)->IsRanged(member);
-    if (botIsHealer)
-        return GET_PLAYERBOT_AI(member) && GET_PLAYERBOT_AI(member)->IsHeal(member);
-
-    return true;
-}
-
-bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor)
-{
-    if (!unit || !sideEmperor)
-        return false;
-
-    if (!oppositeEmperor)
-        return true;
-
-    return unit->GetDistance2d(sideEmperor) <= unit->GetDistance2d(oppositeEmperor);
-}
-
-uint32 GetTwinSideIndex(Player* bot, PlayerbotAI* botAI)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return static_cast<uint32>(bot->GetGUID().GetCounter() % 2);
-
-    uint32 roleIndex = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive())
-            continue;
-
-        if (!IsTwinRoleMatch(bot, botAI, member))
-            continue;
-
-        if (member->GetGUID() == bot->GetGUID())
-            return roleIndex % 2;
-
-        ++roleIndex;
-    }
-
-    return static_cast<uint32>(bot->GetGUID().GetCounter() % 2);
-}
-
-TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    TwinAssignments result;
-    result.veklor = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "emperor vek'lor" });
-    result.veknilash = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "emperor vek'nilash" });
-    if (!result.veklor || !result.veknilash)
-        return result;
-
-    bool splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
-                    std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
-    float veklorAxis = splitByX ? result.veklor->GetPositionX() : result.veklor->GetPositionY();
-    float veknilashAxis = splitByX ? result.veknilash->GetPositionX() : result.veknilash->GetPositionY();
-    Unit* lowSide = veklorAxis < veknilashAxis ? result.veklor : result.veknilash;
-    Unit* highSide = lowSide == result.veklor ? result.veknilash : result.veklor;
-
-    uint32 sideIndex = GetTwinSideIndex(bot, botAI);
-    result.sideEmperor = sideIndex == 0 ? lowSide : highSide;
-    result.oppositeEmperor = result.sideEmperor == lowSide ? highSide : lowSide;
-    return result;
-}
-}  // namespace
-
 bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     if (attackers.empty())
         return false;
 
-    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
     Unit* sideBoss = assignment.sideEmperor;
     if (!sideBoss)
         sideBoss = Aq40BossActions::FindTwinEmperorsTarget(botAI, attackers);
@@ -140,7 +54,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     }
     else if (botAI->IsHeal(bot))
         return false;
-    else if (isMeleeDps && mutateBug && IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
+    else if (isMeleeDps && mutateBug &&
+             Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
         target = mutateBug;
     else if (botAI->IsRanged(bot))
         target = assignment.veklor;
@@ -156,7 +71,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
     if (!assignment.sideEmperor)
         return false;
 
@@ -205,7 +120,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
     if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
         return false;
 
@@ -249,7 +164,7 @@ bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
     if (!assignment.veklor)
         return false;
 
@@ -277,7 +192,7 @@ bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
 bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    TwinAssignments assignment = GetTwinAssignments(bot, botAI, attackers);
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
     if (!assignment.veklor || !assignment.veknilash)
         return false;
 
