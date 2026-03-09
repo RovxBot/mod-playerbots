@@ -160,18 +160,23 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (!assignment.sideEmperor)
         return false;
 
-    // Split only tanks/healers by side. Damage dealers stay on target logic.
     bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && !isWarlockTank)
+    bool isRangedDps = botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && !isWarlockTank && !isRangedDps)
         return false;
 
     Unit* sideBoss = assignment.sideEmperor;
+    if (isRangedDps && assignment.veklor)
+        sideBoss = assignment.veklor;
+
     float distance = bot->GetDistance2d(sideBoss);
     float desiredRange = 0.0f;
     if (botAI->IsHeal(bot))
         desiredRange = 20.0f;
     else if (isWarlockTank)
         desiredRange = 24.0f;
+    else if (isRangedDps)
+        desiredRange = 28.0f;
     else
         desiredRange = 4.0f;
 

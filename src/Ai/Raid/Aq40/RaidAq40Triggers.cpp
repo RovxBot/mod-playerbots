@@ -90,9 +90,6 @@ bool Aq40SkeramArcaneExplosionTrigger::IsActive()
         if (spell &&
             Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::SkeramArcaneExplosion }))
             return true;
-
-        if (spell)
-            return true;
     }
 
     return false;
@@ -692,7 +689,7 @@ bool Aq40CthunEyeCastTrigger::IsActive()
                              botAI->EqualLowercaseName(unit->GetName(), "giant eye tentacle");
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         bool eyeCast = spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::CthunMindFlay });
-        if (isEyeTentacle && (eyeCast || spell))
+        if (isEyeTentacle && eyeCast)
             return true;
     }
 
