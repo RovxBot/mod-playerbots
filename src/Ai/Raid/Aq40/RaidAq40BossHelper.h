@@ -27,11 +27,48 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     if (!group)
         return 0;
 
+    auto isPreferredTwinWarlockTank = [](Player* member) -> bool
+    {
+        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
+            return false;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        return memberAI &&
+               (memberAI->HasStrategy("tank", BOT_STATE_COMBAT) ||
+                memberAI->HasStrategy("tank", BOT_STATE_NON_COMBAT));
+    };
+
+    bool const playerPreferred = isPreferredTwinWarlockTank(player);
     uint32 ordinal = 0;
+    uint32 preferredCount = 0;
+
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
+            continue;
+
+        if (!isPreferredTwinWarlockTank(member))
+            continue;
+
+        if (member->GetGUID() == player->GetGUID())
+            return ordinal;
+
+        ++ordinal;
+        ++preferredCount;
+    }
+
+    if (playerPreferred || preferredCount >= 2)
+        return std::numeric_limits<uint32>::max();
+
+    ordinal = preferredCount;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
+            continue;
+
+        if (isPreferredTwinWarlockTank(member))
             continue;
 
         if (member->GetGUID() == player->GetGUID())

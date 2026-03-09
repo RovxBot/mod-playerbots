@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <vector>
 
@@ -17,7 +18,16 @@ namespace
 using TwinRoleAssignmentMap = std::unordered_map<uint64, uint32>;
 using TwinInstanceAssignments = std::unordered_map<int, TwinRoleAssignmentMap>;
 
+struct TwinTeleportState
+{
+    Position veklorPosition;
+    Position veknilashPosition;
+    uint32 lastTeleportMs = 0;
+    bool initialized = false;
+};
+
 TwinInstanceAssignments sTwinAssignments;
+std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
 std::unordered_map<uint64, uint32> sCthunPhase2StartByBossGuid;
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
@@ -25,20 +35,107 @@ Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* 
     return Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { name });
 }
 
+uint32 GetGroupMemberOrder(Player* bot, Player* member)
+{
+    if (!bot || !member)
+        return std::numeric_limits<uint32>::max();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return std::numeric_limits<uint32>::max();
+
+    uint32 order = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next(), ++order)
+    {
+        if (ref->GetSource() == member)
+            return order;
+    }
+
+    return std::numeric_limits<uint32>::max();
+}
+
+uint32 GetTwinRolePriority(Player* bot, Player* member, TwinRoleCohort cohort)
+{
+    switch (cohort)
+    {
+        case TwinRoleCohort::WarlockTank:
+            return Aq40BossHelper::GetAliveWarlockOrdinal(member);
+        case TwinRoleCohort::MeleeTank:
+            if (PlayerbotAI::IsMainTank(member))
+                return 0;
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+                return 1;
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
+                return 2;
+            return 10 + GetGroupMemberOrder(bot, member);
+        case TwinRoleCohort::Healer:
+        case TwinRoleCohort::Other:
+            return GetGroupMemberOrder(bot, member);
+    }
+
+    return std::numeric_limits<uint32>::max();
+}
+
+void UpdateTwinTeleportState(Player* bot, TwinAssignments const& assignments)
+{
+    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return;
+
+    TwinTeleportState& state = sTwinTeleportStates[bot->GetMap()->GetInstanceId()];
+    Position const veklorPosition = assignments.veklor->GetPosition();
+    Position const veknilashPosition = assignments.veknilash->GetPosition();
+    if (!state.initialized)
+    {
+        state.veklorPosition = veklorPosition;
+        state.veknilashPosition = veknilashPosition;
+        state.initialized = true;
+        return;
+    }
+
+    float const veklorMove = state.veklorPosition.GetExactDist2d(veklorPosition);
+    float const veknilashMove = state.veknilashPosition.GetExactDist2d(veknilashPosition);
+    if ((veklorMove > 18.0f && veknilashMove > 18.0f) || veklorMove > 35.0f || veknilashMove > 35.0f)
+        state.lastTeleportMs = getMSTime();
+
+    state.veklorPosition = veklorPosition;
+    state.veknilashPosition = veknilashPosition;
+}
+
+Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32 sideIndex)
+{
+    if (!bot)
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!IsTwinRoleMatch(cohort, member))
+            continue;
+
+        if (GetStableTwinRoleIndex(member, GET_PLAYERBOT_AI(member)) == sideIndex)
+            return member;
+    }
+
+    return nullptr;
+}
+
 bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
 {
     if (!member || !member->IsAlive())
         return false;
 
-    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
     switch (cohort)
     {
         case TwinRoleCohort::WarlockTank:
             return Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
         case TwinRoleCohort::MeleeTank:
-            return memberAI && memberAI->IsTank(member) && !memberAI->IsRanged(member);
+            return PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
         case TwinRoleCohort::Healer:
-            return memberAI && memberAI->IsHeal(member);
+            return PlayerbotAI::IsHeal(member);
         case TwinRoleCohort::Other:
             return true;
     }
@@ -51,16 +148,16 @@ TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
 {
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return TwinRoleCohort::WarlockTank;
-    if (botAI && botAI->IsTank(bot) && !botAI->IsRanged(bot))
+    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
         return TwinRoleCohort::MeleeTank;
-    if (botAI && botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
         return TwinRoleCohort::Healer;
     return TwinRoleCohort::Other;
 }
 
 uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
 {
-    if (!bot || !botAI)
+    if (!bot)
         return 0;
 
     Group* group = bot->GetGroup();
@@ -85,8 +182,13 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         members.push_back(member);
     }
 
-    std::sort(members.begin(), members.end(), [](Player const* left, Player const* right)
+    std::sort(members.begin(), members.end(), [bot, cohort](Player const* left, Player const* right)
     {
+        uint32 const leftPriority = GetTwinRolePriority(bot, const_cast<Player*>(left), cohort);
+        uint32 const rightPriority = GetTwinRolePriority(bot, const_cast<Player*>(right), cohort);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
         return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
     });
 
@@ -132,6 +234,7 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
     result.sideEmperor = sideIndex == 0 ? lowSide : highSide;
     result.oppositeEmperor = result.sideEmperor == lowSide ? highSide : lowSide;
+    UpdateTwinTeleportState(bot, result);
     return result;
 }
 
@@ -144,6 +247,41 @@ bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor
         return true;
 
     return unit->GetDistance2d(sideEmperor) <= unit->GetDistance2d(oppositeEmperor);
+}
+
+bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return false;
+
+    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinTeleportStates.end() || !itr->second.lastTeleportMs)
+        return false;
+
+    return (getMSTime() - itr->second.lastTeleportMs) <= 3500;
+}
+
+bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    if (!bot || !assignment.sideEmperor)
+        return false;
+
+    uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
+    bool const needWarlockTank = assignment.veklor && assignment.sideEmperor == assignment.veklor;
+    TwinRoleCohort const requiredCohort = needWarlockTank ? TwinRoleCohort::WarlockTank : TwinRoleCohort::MeleeTank;
+    Player* assignedTank = FindTwinAssignedPlayerForSide(bot, requiredCohort, sideIndex);
+    if (!assignedTank)
+        return false;
+
+    float const readyRange = needWarlockTank ? 34.0f : 8.0f;
+    if (assignment.sideEmperor->GetVictim() == assignedTank)
+        return true;
+
+    if (assignedTank->GetDistance2d(assignment.sideEmperor) > readyRange)
+        return false;
+
+    return assignedTank->GetTarget() == assignment.sideEmperor->GetGUID();
 }
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI)

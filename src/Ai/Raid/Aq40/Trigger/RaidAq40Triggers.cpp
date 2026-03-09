@@ -367,40 +367,45 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (!Aq40TwinEmperorsActiveTrigger::IsActive())
         return false;
 
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
-    if (!currentTarget)
-        return true;
+    if (botAI->IsHeal(bot))
+        return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    bool hasVeknilash = false;
-    bool hasVeklor = false;
-    for (ObjectGuid const guid : attackers)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
+    if (!assignment.sideEmperor)
+        return false;
 
-        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash"))
-            hasVeknilash = true;
-        else if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
-            hasVeklor = true;
+    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
+    bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, attackers);
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (!currentTarget)
+    {
+        if (!isWarlockTank && !isMeleeTank &&
+            inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
+            return false;
+
+        return true;
     }
 
-    bool preferVeknilash = botAI->IsTank(bot) || !botAI->IsRanged(bot);
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
-        preferVeknilash = false;
+    if (isWarlockTank)
+        return assignment.sideEmperor == assignment.veklor && currentTarget != assignment.veklor;
 
-    if (preferVeknilash &&
-        botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor") && hasVeknilash)
-        return true;
+    if (isMeleeTank)
+        return assignment.sideEmperor == assignment.veknilash && currentTarget != assignment.veknilash;
 
-    if (!preferVeknilash &&
-        botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") && hasVeklor)
-        return true;
+    if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
+        return false;
 
-    bool onEmperor = botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'nilash") ||
-                     botAI->EqualLowercaseName(currentTarget->GetName(), "emperor vek'lor");
-    return !onEmperor;
+    if (botAI->IsRanged(bot))
+        return currentTarget != assignment.veklor;
+
+    Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "mutate bug" });
+    if (mutateBug &&
+        Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
+        return currentTarget != mutateBug;
+
+    return currentTarget != assignment.veknilash;
 }
 
 bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()

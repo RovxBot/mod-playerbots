@@ -25,6 +25,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
+    bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, attackers);
     Unit* sideBoss = assignment.sideEmperor;
     if (!sideBoss)
         sideBoss = Aq40BossActions::FindTwinEmperorsTarget(botAI, attackers);
@@ -33,7 +34,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     Unit* target = nullptr;
     bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
+    bool isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, attackers);
     if (isWarlockTank)
@@ -53,6 +54,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
             return false;
     }
     else if (botAI->IsHeal(bot))
+        return false;
+    else if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
         return false;
     else if (isMeleeDps && mutateBug &&
              Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
@@ -76,8 +79,9 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         return false;
 
     bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
+    bool isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool isRangedDps = botAI->IsRanged(bot) && !botAI->IsHeal(bot);
-    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && !isWarlockTank && !isRangedDps)
+    if (!isMeleeTank && !botAI->IsHeal(bot) && !isWarlockTank && !isRangedDps)
         return false;
 
     Unit* sideBoss = assignment.sideEmperor;
@@ -89,11 +93,11 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (botAI->IsHeal(bot))
         desiredRange = 20.0f;
     else if (isWarlockTank)
-        desiredRange = 24.0f;
+        desiredRange = sideBoss == assignment.veklor ? 24.0f : 10.0f;
     else if (isRangedDps)
         desiredRange = 28.0f;
     else
-        desiredRange = 4.0f;
+        desiredRange = sideBoss == assignment.veknilash ? 4.0f : 22.0f;
 
     if (std::abs(distance - desiredRange) <= 3.0f)
         return false;
@@ -200,7 +204,7 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
         return false;
 
     bool isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool isMeleeTank = botAI->IsTank(bot) && !botAI->IsRanged(bot);
+    bool isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     if (!isWarlockTank && !isMeleeTank)
         return false;
 
