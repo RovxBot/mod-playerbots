@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 
 namespace Aq40BossActions

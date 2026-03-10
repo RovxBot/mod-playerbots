@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "GameObject.h"
+#include "Playerbots.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "Timer.h"
@@ -16,7 +17,8 @@ namespace Aq40Helpers
 namespace
 {
 using TwinRoleAssignmentMap = std::unordered_map<uint64, uint32>;
-using TwinInstanceAssignments = std::unordered_map<int, TwinRoleAssignmentMap>;
+using TwinCohortAssignments = std::unordered_map<int, TwinRoleAssignmentMap>;
+using TwinInstanceAssignments = std::unordered_map<uint32, TwinCohortAssignments>;
 
 struct TwinTeleportState
 {
@@ -101,6 +103,26 @@ void UpdateTwinTeleportState(Player* bot, TwinAssignments const& assignments)
     state.veknilashPosition = veknilashPosition;
 }
 
+bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
+{
+    if (!member || !member->IsAlive())
+        return false;
+
+    switch (cohort)
+    {
+        case TwinRoleCohort::WarlockTank:
+            return Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
+        case TwinRoleCohort::MeleeTank:
+            return PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
+        case TwinRoleCohort::Healer:
+            return PlayerbotAI::IsHeal(member);
+        case TwinRoleCohort::Other:
+            return true;
+    }
+
+    return false;
+}
+
 Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32 sideIndex)
 {
     if (!bot)
@@ -121,26 +143,6 @@ Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32
     }
 
     return nullptr;
-}
-
-bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
-{
-    if (!member || !member->IsAlive())
-        return false;
-
-    switch (cohort)
-    {
-        case TwinRoleCohort::WarlockTank:
-            return Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
-        case TwinRoleCohort::MeleeTank:
-            return PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
-        case TwinRoleCohort::Healer:
-            return PlayerbotAI::IsHeal(member);
-        case TwinRoleCohort::Other:
-            return true;
-    }
-
-    return false;
 }
 }  // namespace
 
@@ -331,7 +333,7 @@ bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers)
 
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
 {
-    GuidVector nearbyGameObjects = AI_VALUE(GuidVector, "nearest game objects");
+    GuidVector nearbyGameObjects = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
     GameObject* candidate = nullptr;
     float bestDistance = 999.0f;
 
