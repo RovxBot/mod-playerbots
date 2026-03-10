@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "../RaidAq40BossHelper.h"
+
 namespace Aq40BossActions
 {
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers)

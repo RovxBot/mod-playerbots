@@ -7,6 +7,7 @@
 
 #include "GameObject.h"
 #include "ObjectGuid.h"
+#include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
 #include "Timer.h"
