@@ -24,7 +24,7 @@ bool Aq40HuhuranPoisonSpreadAction::Execute(Event /*event*/)
 {
     // During poison/enrage windows, keep ranged non-tanks further out so
     // closest slots stay available for assigned tanks/melee soakers.
-    if (botAI->IsTank(bot) || !botAI->IsRanged(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot) || !botAI->IsRanged(bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();

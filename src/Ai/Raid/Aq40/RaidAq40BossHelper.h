@@ -23,6 +23,96 @@ inline bool IsInAq40(Player const* player)
     return player && player->GetMapId() == MAP_ID;
 }
 
+inline Player* GetEncounterPrimaryTank(Player* player)
+{
+    if (!player)
+        return nullptr;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        return PlayerbotAI::IsTank(player) && player->IsAlive() ? player : nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
+            continue;
+
+        if (PlayerbotAI::IsMainTank(member))
+            return member;
+    }
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && PlayerbotAI::IsTank(member))
+            return member;
+    }
+
+    return nullptr;
+}
+
+inline Player* GetEncounterBackupTank(Player* player, uint8 index = 0)
+{
+    if (!player)
+        return nullptr;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        return nullptr;
+
+    Player* primaryTank = GetEncounterPrimaryTank(player);
+    std::vector<Player*> backups;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || member == primaryTank)
+            continue;
+
+        backups.push_back(member);
+    }
+
+    std::sort(backups.begin(), backups.end(), [](Player* left, Player* right)
+    {
+        auto getPriority = [](Player* member) -> uint32
+        {
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+                return 0;
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
+                return 1;
+            if (PlayerbotAI::IsAssistTank(member))
+                return 2;
+            return 10;
+        };
+
+        uint32 const leftPriority = getPriority(left);
+        uint32 const rightPriority = getPriority(right);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    return index < backups.size() ? backups[index] : nullptr;
+}
+
+inline bool IsEncounterPrimaryTank(Player* referencePlayer, Player* player)
+{
+    return player && player == GetEncounterPrimaryTank(referencePlayer);
+}
+
+inline bool IsEncounterBackupTank(Player* referencePlayer, Player* player, uint8 index = 0)
+{
+    return player && player == GetEncounterBackupTank(referencePlayer, index);
+}
+
+inline bool IsEncounterTank(Player* referencePlayer, Player* player)
+{
+    return IsEncounterPrimaryTank(referencePlayer, player) ||
+           IsEncounterBackupTank(referencePlayer, player, 0) ||
+           IsEncounterBackupTank(referencePlayer, player, 1);
+}
+
 inline uint32 GetAliveWarlockOrdinal(Player* player)
 {
     if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())

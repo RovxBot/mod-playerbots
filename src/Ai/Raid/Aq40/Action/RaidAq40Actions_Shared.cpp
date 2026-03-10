@@ -225,7 +225,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -324,7 +324,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))

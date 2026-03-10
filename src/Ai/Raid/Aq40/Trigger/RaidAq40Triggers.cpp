@@ -142,7 +142,7 @@ bool Aq40SarturaActiveTrigger::IsActive()
 
 bool Aq40SarturaWhirlwindTrigger::IsActive()
 {
-    if (!Aq40SarturaActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
+    if (!Aq40SarturaActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -207,7 +207,7 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
 
 bool Aq40BugTrioPoisonCloudTrigger::IsActive()
 {
-    if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
+    if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -272,7 +272,7 @@ bool Aq40TrashActiveTrigger::IsActive()
 
 bool Aq40TrashDangerousAoeTrigger::IsActive()
 {
-    if (!Aq40TrashActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
+    if (!Aq40TrashActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
@@ -480,7 +480,7 @@ bool Aq40OuroScarabsTrigger::IsActive()
 
 bool Aq40OuroSweepTrigger::IsActive()
 {
-    if (!Aq40OuroActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
+    if (!Aq40OuroActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");

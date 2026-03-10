@@ -62,7 +62,12 @@ bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
     if (attackers.empty())
         return false;
 
-    Unit* target = FindOuroScarabs(botAI, attackers);
+    bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
+    Unit* target = nullptr;
+    if (isPrimaryTank)
+        target = Aq40BossActions::FindOuroTarget(botAI, attackers);
+    if (!target)
+        target = FindOuroScarabs(botAI, attackers);
     if (!target)
         target = Aq40BossActions::FindOuroTarget(botAI, attackers);
     if (!target)
@@ -76,7 +81,7 @@ bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40OuroHoldMeleeContactAction::Execute(Event /*event*/)
 {
-    if (!(botAI->IsTank(bot) || !botAI->IsRanged(bot)))
+    if (!(Aq40BossHelper::IsEncounterTank(bot, bot) || !botAI->IsRanged(bot)))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -107,7 +112,7 @@ bool Aq40OuroHoldMeleeContactAction::Execute(Event /*event*/)
 
 bool Aq40OuroAvoidSweepAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();

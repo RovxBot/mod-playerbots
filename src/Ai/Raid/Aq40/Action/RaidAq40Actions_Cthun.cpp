@@ -127,13 +127,14 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
     if (attackers.empty())
         return false;
 
+    bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
     Unit* target = nullptr;
 
     if (Aq40Helpers::IsCthunInStomach(bot, botAI))
         target = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle" });
 
     if (!target)
-        target = botAI->IsTank(bot) ? FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
+        target = isPrimaryTank ? FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
 
     if (!target)
     {
@@ -153,7 +154,7 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot) || !(botAI->IsRanged(bot) || botAI->IsHeal(bot)))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot) || !(botAI->IsRanged(bot) || botAI->IsHeal(bot)))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -178,7 +179,7 @@ bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
 
 bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -225,7 +226,7 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
         return false;
 
     uint32 exitStacks = 10;
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterPrimaryTank(bot, bot))
         exitStacks = 1;
     else if (botAI->IsHeal(bot))
         exitStacks = 5;
@@ -254,7 +255,8 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
 bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
 {
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* target = botAI->IsTank(bot) ? FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
+    Unit* target = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot) ?
+        FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 

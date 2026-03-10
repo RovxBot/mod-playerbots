@@ -56,7 +56,7 @@ bool Aq40ViscidusChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40ViscidusUseFrostAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot) || botAI->IsHeal(bot) || !botAI->IsRanged(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot) || botAI->IsHeal(bot) || !botAI->IsRanged(bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -85,7 +85,7 @@ bool Aq40ViscidusUseFrostAction::Execute(Event /*event*/)
 
 bool Aq40ViscidusShatterAction::Execute(Event /*event*/)
 {
-    if (botAI->IsRanged(bot) && !botAI->IsTank(bot))
+    if (botAI->IsRanged(bot) && !Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();

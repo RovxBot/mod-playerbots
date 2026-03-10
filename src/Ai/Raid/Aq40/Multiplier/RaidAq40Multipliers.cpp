@@ -33,7 +33,7 @@ float Aq40BugTrioMultiplier::GetValue(Action* action)
 
     bool poisonCloudWindow = kri->GetHealthPct() <= 5.0f ||
                              Aq40SpellIds::HasAnyAura(botAI, kri, { Aq40SpellIds::BugTrioPoisonCloud });
-    if (!poisonCloudWindow || botAI->IsTank(bot))
+    if (!poisonCloudWindow || Aq40BossHelper::IsEncounterTank(bot, bot))
         return 1.0f;
 
     if (bot->GetDistance2d(kri) > 12.0f)
@@ -60,7 +60,7 @@ float Aq40OuroMultiplier::GetValue(Action* action)
         return 1.0f;
 
     std::string const actionName = action->getName();
-    bool meleeOrTank = botAI->IsTank(bot) || !botAI->IsRanged(bot);
+    bool meleeOrTank = Aq40BossHelper::IsEncounterTank(bot, bot) || !botAI->IsRanged(bot);
     if (meleeOrTank && bot->GetDistance2d(ouro) > 8.0f)
     {
         if (actionName == "aq40 ouro hold melee contact")

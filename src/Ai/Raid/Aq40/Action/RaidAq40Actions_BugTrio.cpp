@@ -59,7 +59,7 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
     if (yauj && yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL))
         target = yauj;
 
-    if (!target && !botAI->IsTank(bot))
+    if (!target && !Aq40BossHelper::IsEncounterTank(bot, bot))
     {
         std::vector<Unit*> broods = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "yauj brood" });
         target = FindLowestHealthUnit(broods);
@@ -81,7 +81,7 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40BugTrioAvoidPoisonCloudAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
