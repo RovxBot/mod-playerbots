@@ -3,6 +3,7 @@
 #include <initializer_list>
 
 #include "ObjectGuid.h"
+#include "Spell.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
 
@@ -44,7 +45,7 @@ bool Aq40SkeramBlinkTrigger::IsActive()
 
 bool Aq40SkeramArcaneExplosionTrigger::IsActive()
 {
-    if (!Aq40SkeramActiveTrigger::IsActive())
+    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -65,7 +66,7 @@ bool Aq40SkeramArcaneExplosionTrigger::IsActive()
 
 bool Aq40SkeramMindControlTrigger::IsActive()
 {
-    if (!Aq40SkeramActiveTrigger::IsActive())
+    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -88,7 +89,7 @@ bool Aq40SkeramMindControlTrigger::IsActive()
 
 bool Aq40SkeramSplitTrigger::IsActive()
 {
-    if (!Aq40SkeramActiveTrigger::IsActive())
+    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
     uint32 skeramCount = 0;
@@ -105,7 +106,7 @@ bool Aq40SkeramSplitTrigger::IsActive()
 
 bool Aq40SkeramExecutePhaseTrigger::IsActive()
 {
-    if (!Aq40SkeramActiveTrigger::IsActive())
+    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -141,7 +142,7 @@ bool Aq40SarturaActiveTrigger::IsActive()
 
 bool Aq40SarturaWhirlwindTrigger::IsActive()
 {
-    if (!Aq40SarturaActiveTrigger::IsActive() || botAI->IsTank(bot))
+    if (!Aq40SarturaActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -183,7 +184,7 @@ bool Aq40BugTrioActiveTrigger::IsActive()
 
 bool Aq40BugTrioHealCastTrigger::IsActive()
 {
-    if (!Aq40BugTrioActiveTrigger::IsActive())
+    if (!Aq40BugTrioActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -206,7 +207,7 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
 
 bool Aq40BugTrioPoisonCloudTrigger::IsActive()
 {
-    if (!Aq40BugTrioActiveTrigger::IsActive() || botAI->IsTank(bot))
+    if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -243,7 +244,7 @@ bool Aq40FankrissActiveTrigger::IsActive()
 
 bool Aq40FankrissSpawnedTrigger::IsActive()
 {
-    if (!Aq40FankrissActiveTrigger::IsActive())
+    if (!Aq40FankrissActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -320,7 +321,7 @@ bool Aq40HuhuranActiveTrigger::IsActive()
 
 bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 {
-    if (!Aq40HuhuranActiveTrigger::IsActive())
+    if (!Aq40HuhuranActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -364,7 +365,7 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
 
 bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 {
-    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
     if (botAI->IsHeal(bot))
@@ -410,7 +411,7 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 
 bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
 {
-    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
@@ -435,7 +436,7 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
 
 bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
 {
-    if (!Aq40TwinEmperorsActiveTrigger::IsActive())
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -470,7 +471,7 @@ bool Aq40OuroActiveTrigger::IsActive()
 
 bool Aq40OuroScarabsTrigger::IsActive()
 {
-    if (!Aq40OuroActiveTrigger::IsActive())
+    if (!Aq40OuroActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -479,7 +480,7 @@ bool Aq40OuroScarabsTrigger::IsActive()
 
 bool Aq40OuroSweepTrigger::IsActive()
 {
-    if (!Aq40OuroActiveTrigger::IsActive() || botAI->IsTank(bot))
+    if (!Aq40OuroActiveTrigger(botAI).IsActive() || botAI->IsTank(bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -498,7 +499,7 @@ bool Aq40OuroSweepTrigger::IsActive()
 
 bool Aq40OuroSubmergeTrigger::IsActive()
 {
-    if (!Aq40OuroActiveTrigger::IsActive())
+    if (!Aq40OuroActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -526,7 +527,7 @@ bool Aq40ViscidusActiveTrigger::IsActive()
 
 bool Aq40ViscidusFrozenTrigger::IsActive()
 {
-    if (!Aq40ViscidusActiveTrigger::IsActive())
+    if (!Aq40ViscidusActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -546,7 +547,7 @@ bool Aq40ViscidusFrozenTrigger::IsActive()
 
 bool Aq40ViscidusGlobTrigger::IsActive()
 {
-    if (!Aq40ViscidusActiveTrigger::IsActive())
+    if (!Aq40ViscidusActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -566,7 +567,7 @@ bool Aq40CthunActiveTrigger::IsActive()
 
 bool Aq40CthunPhase2Trigger::IsActive()
 {
-    if (!Aq40CthunActiveTrigger::IsActive())
+    if (!Aq40CthunActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -576,7 +577,7 @@ bool Aq40CthunPhase2Trigger::IsActive()
 
 bool Aq40CthunAddsPresentTrigger::IsActive()
 {
-    if (!Aq40CthunActiveTrigger::IsActive())
+    if (!Aq40CthunActiveTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -587,7 +588,7 @@ bool Aq40CthunAddsPresentTrigger::IsActive()
 
 bool Aq40CthunDarkGlareTrigger::IsActive()
 {
-    if (!Aq40CthunActiveTrigger::IsActive())
+    if (!Aq40CthunActiveTrigger(botAI).IsActive())
         return false;
 
     if (Aq40CthunInStomachTrigger(botAI).IsActive())
@@ -622,7 +623,7 @@ bool Aq40CthunInStomachTrigger::IsActive()
 
 bool Aq40CthunVulnerableTrigger::IsActive()
 {
-    if (!Aq40CthunPhase2Trigger::IsActive())
+    if (!Aq40CthunPhase2Trigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -631,7 +632,7 @@ bool Aq40CthunVulnerableTrigger::IsActive()
 
 bool Aq40CthunEyeCastTrigger::IsActive()
 {
-    if (!Aq40CthunActiveTrigger::IsActive() || Aq40CthunInStomachTrigger(botAI).IsActive())
+    if (!Aq40CthunActiveTrigger(botAI).IsActive() || Aq40CthunInStomachTrigger(botAI).IsActive())
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");

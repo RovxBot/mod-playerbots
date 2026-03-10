@@ -174,11 +174,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40TwinEmperorsEnforceSeparationAction : public MovementAction
+class Aq40TwinEmperorsEnforceSeparationAction : public AttackAction
 {
 public:
     Aq40TwinEmperorsEnforceSeparationAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 twin emperors enforce separation")
+        : AttackAction(botAI, "aq40 twin emperors enforce separation")
     {
     }
     bool Execute(Event event) override;

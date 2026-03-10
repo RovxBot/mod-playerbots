@@ -1,6 +1,7 @@
 #ifndef _PLAYERBOT_RAIDAQ40TRIGGERS_H
 #define _PLAYERBOT_RAIDAQ40TRIGGERS_H
 
+#include "Playerbots.h"
 #include "../RaidAq40BossHelper.h"
 #include "Trigger.h"
 
