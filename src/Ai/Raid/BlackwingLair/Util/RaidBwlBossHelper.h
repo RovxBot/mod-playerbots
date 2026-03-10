@@ -11,6 +11,7 @@
 
 #include "AiObject.h"
 #include "AiObjectContext.h"
+#include "Group.h"
 #include "PlayerbotAI.h"
 #include "RaidBwlSpellIds.h"
 #include "SharedDefines.h"
