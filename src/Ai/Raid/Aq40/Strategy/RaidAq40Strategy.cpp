@@ -145,6 +145,8 @@ void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new Aq40GenericMultiplier(botAI));
     multipliers.push_back(new Aq40BugTrioMultiplier(botAI));
+    multipliers.push_back(new Aq40SarturaMultiplier(botAI));
+    multipliers.push_back(new Aq40HuhuranMultiplier(botAI));
     multipliers.push_back(new Aq40OuroMultiplier(botAI));
     multipliers.push_back(new Aq40TwinEmperorsMultiplier(botAI));
     multipliers.push_back(new Aq40ViscidusMultiplier(botAI));

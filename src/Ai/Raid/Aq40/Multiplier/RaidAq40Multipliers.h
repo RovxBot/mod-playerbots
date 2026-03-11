@@ -17,6 +17,20 @@ public:
     float GetValue(Action* action) override;
 };
 
+class Aq40SarturaMultiplier : public Multiplier
+{
+public:
+    Aq40SarturaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "aq40 sartura") {}
+    float GetValue(Action* action) override;
+};
+
+class Aq40HuhuranMultiplier : public Multiplier
+{
+public:
+    Aq40HuhuranMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "aq40 huhuran") {}
+    float GetValue(Action* action) override;
+};
+
 class Aq40OuroMultiplier : public Multiplier
 {
 public:

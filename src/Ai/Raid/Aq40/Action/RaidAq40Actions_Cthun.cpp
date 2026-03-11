@@ -24,6 +24,7 @@ namespace
 {
 float constexpr kPi = 3.14159265f;
 uint32 constexpr kCthunGiantWavePeriodMs = 20000;
+std::unordered_map<uint64, Position> sCthunSpreadPositions;
 
 enum class CthunExpectedGiantType : uint8
 {
@@ -120,6 +121,23 @@ uint32 GetRangedSpreadOrdinal(Player* bot, PlayerbotAI* botAI)
     return static_cast<uint32>(bot->GetGUID().GetCounter() % 12);
 }
 
+Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* boss)
+{
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto itr = sCthunSpreadPositions.find(botGuid);
+    if (itr != sCthunSpreadPositions.end())
+        return itr->second;
+
+    uint32 slot = GetRangedSpreadOrdinal(bot, botAI);
+    float angle = static_cast<float>(slot % 12) * ((2.0f * kPi) / 12.0f);
+    float radius = 28.0f;
+    Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
+                      boss->GetPositionY() + std::sin(angle) * radius,
+                      boss->GetPositionZ());
+    sCthunSpreadPositions[botGuid] = assigned;
+    return assigned;
+}
+
 }  // namespace
 
 bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
@@ -165,17 +183,15 @@ bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    uint32 slot = GetRangedSpreadOrdinal(bot, botAI);
-    float baseAngle = static_cast<float>(slot % 12) * ((2.0f * kPi) / 12.0f);
-    float radius = 28.0f;
-    float moveX = boss->GetPositionX() + std::cos(baseAngle) * radius;
-    float moveY = boss->GetPositionY() + std::sin(baseAngle) * radius;
+    Position assigned = GetAssignedCthunSpreadPosition(bot, botAI, boss);
+    float moveX = assigned.GetPositionX();
+    float moveY = assigned.GetPositionY();
 
     if (bot->GetDistance2d(moveX, moveY) < 5.0f)
         return false;
 
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(bot->GetMapId(), moveX, moveY, boss->GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT, true, false);
 }
 
 bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
@@ -189,6 +205,9 @@ bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
         boss = FindCthunBody(botAI, attackers);
     if (!boss)
         return false;
+
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
 
     float dx = bot->GetPositionX() - boss->GetPositionX();
     float dy = bot->GetPositionY() - boss->GetPositionY();
@@ -234,6 +253,9 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
 
     if (acid->GetStackAmount() < exitStacks)
         return false;
+
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
 
     GameObject* portal = Aq40Helpers::FindLikelyStomachExitPortal(bot, botAI);
     if (portal)

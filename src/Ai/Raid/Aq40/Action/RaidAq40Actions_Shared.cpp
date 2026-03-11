@@ -49,6 +49,43 @@ Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 }
 }  // namespace Aq40BossActions
 
+namespace
+{
+Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float& distanceToCreate)
+{
+    distanceToCreate = 0.0f;
+    if (!bot || !botAI)
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    Unit* riskiestMember = nullptr;
+    float largestDeficit = 0.0f;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        float const currentDistance = bot->GetDistance2d(member);
+        float const requiredDistance =
+            Aq40SpellIds::HasAnyAura(botAI, member, { Aq40SpellIds::Aq40DefenderPlague }) ? 28.0f : 20.0f;
+        float const deficit = requiredDistance - currentDistance;
+        if (deficit <= 0.0f || deficit <= largestDeficit)
+            continue;
+
+        largestDeficit = deficit;
+        riskiestMember = member;
+    }
+
+    distanceToCreate = largestDeficit;
+    return riskiestMember;
+}
+}  // namespace
+
 bool Aq40ChooseTargetAction::Execute(Event /*event*/)
 {
     if (!Aq40BossHelper::IsInAq40(bot))
@@ -239,26 +276,14 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
     if (!threat)
         return false;
 
-    float d = bot->GetDistance2d(threat);
-    if (d > 14.0f)
+    float currentDistance = bot->GetDistance2d(threat);
+    float desiredDistance = 18.0f;
+    if (currentDistance >= desiredDistance)
         return false;
 
-    float dx = bot->GetPositionX() - threat->GetPositionX();
-    float dy = bot->GetPositionY() - threat->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float escape = 18.0f;
-    float moveX = threat->GetPositionX() + (dx / len) * escape;
-    float moveY = threat->GetPositionY() + (dy / len) * escape;
-
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
+    return MoveAway(threat, desiredDistance - currentDistance);
 }
 
 bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
@@ -329,28 +354,18 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
 
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
     {
-        Unit* threat = AI_VALUE(Unit*, "current target");
-        if (!threat)
-            threat = AI_VALUE(Unit*, "enemy player target");
+        botAI->Reset();
+        bot->AttackStop();
+        bot->InterruptNonMeleeSpells(true);
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+        bot->SetTarget(ObjectGuid::Empty);
+        bot->SetSelection(ObjectGuid());
 
-        if (threat)
-        {
-            float dx = bot->GetPositionX() - threat->GetPositionX();
-            float dy = bot->GetPositionY() - threat->GetPositionY();
-            float len = std::sqrt(dx * dx + dy * dy);
-            if (len < 0.1f)
-            {
-                dx = std::cos(bot->GetOrientation());
-                dy = std::sin(bot->GetOrientation());
-                len = 1.0f;
-            }
+        float separationNeeded = 0.0f;
+        if (Unit* separationRisk = FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded))
+            return MoveAway(separationRisk, separationNeeded);
 
-            float desired = 22.0f;
-            float moveX = threat->GetPositionX() + (dx / len) * desired;
-            float moveY = threat->GetPositionY() + (dy / len) * desired;
-            return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                          MovementPriority::MOVEMENT_COMBAT);
-        }
+        return false;
     }
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -375,8 +390,7 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
         }
 
         if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap,
-                    Aq40SpellIds::Aq40DefenderShadowStorm }))
+                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }))
         {
             danger = unit;
             dangerRange = 16.0f;
@@ -387,23 +401,10 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
     if (!danger)
         return false;
 
-    float d = bot->GetDistance2d(danger);
-    if (d > dangerRange + 2.0f)
+    float currentDistance = bot->GetDistance2d(danger);
+    float desiredDistance = dangerRange + 8.0f;
+    if (currentDistance >= desiredDistance)
         return false;
 
-    float dx = bot->GetPositionX() - danger->GetPositionX();
-    float dy = bot->GetPositionY() - danger->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float desired = dangerRange + 8.0f;
-    float moveX = danger->GetPositionX() + (dx / len) * desired;
-    float moveY = danger->GetPositionY() + (dy / len) * desired;
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    return MoveAway(danger, desiredDistance - currentDistance);
 }

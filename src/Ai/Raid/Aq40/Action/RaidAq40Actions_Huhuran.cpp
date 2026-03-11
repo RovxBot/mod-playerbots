@@ -34,24 +34,10 @@ bool Aq40HuhuranPoisonSpreadAction::Execute(Event /*event*/)
     if (!huhuran)
         return false;
 
-    float d = bot->GetDistance2d(huhuran);
-    if (d >= 24.0f)
+    float currentDistance = bot->GetDistance2d(huhuran);
+    float desiredDistance = 28.0f;
+    if (currentDistance >= desiredDistance - 2.0f)
         return false;
 
-    float dx = bot->GetPositionX() - huhuran->GetPositionX();
-    float dy = bot->GetPositionY() - huhuran->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float retreatDistance = 28.0f;
-    float moveX = huhuran->GetPositionX() + (dx / len) * retreatDistance;
-    float moveY = huhuran->GetPositionY() + (dy / len) * retreatDistance;
-
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(huhuran, desiredDistance, MovementPriority::MOVEMENT_COMBAT);
 }

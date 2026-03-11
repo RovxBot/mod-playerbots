@@ -102,20 +102,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (std::abs(distance - desiredRange) <= 3.0f)
         return false;
 
-    float dx = bot->GetPositionX() - sideBoss->GetPositionX();
-    float dy = bot->GetPositionY() - sideBoss->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float moveX = sideBoss->GetPositionX() + (dx / len) * desiredRange;
-    float moveY = sideBoss->GetPositionY() + (dy / len) * desiredRange;
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(sideBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
@@ -134,21 +121,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     float d = bot->GetDistance2d(veklor);
     if (d < 20.0f || d > 32.0f)
     {
-        float dx = bot->GetPositionX() - veklor->GetPositionX();
-        float dy = bot->GetPositionY() - veklor->GetPositionY();
-        float len = std::sqrt(dx * dx + dy * dy);
-        if (len < 0.1f)
-        {
-            dx = std::cos(bot->GetOrientation());
-            dy = std::sin(bot->GetOrientation());
-            len = 1.0f;
-        }
-
-        float desired = 24.0f;
-        float moveX = veklor->GetPositionX() + (dx / len) * desired;
-        float moveY = veklor->GetPositionY() + (dy / len) * desired;
-        acted = MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                       MovementPriority::MOVEMENT_COMBAT) || acted;
+        acted = MoveTo(veklor, 24.0f, MovementPriority::MOVEMENT_COMBAT) || acted;
     }
 
     if (botAI->CanCastSpell("shadow ward", bot) && !botAI->HasAura("shadow ward", bot))
@@ -177,20 +150,9 @@ bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
         return false;
 
     float desiredRange = botAI->IsHeal(bot) ? 22.0f : 28.0f;
-    float dx = bot->GetPositionX() - veklor->GetPositionX();
-    float dy = bot->GetPositionY() - veklor->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float moveX = veklor->GetPositionX() + (dx / len) * desiredRange;
-    float moveY = veklor->GetPositionY() + (dy / len) * desiredRange;
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
+    return MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
@@ -217,20 +179,7 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
         acted = Attack(desiredBoss) || acted;
 
     float desiredRange = isWarlockTank ? 24.0f : 4.0f;
-    float dx = bot->GetPositionX() - desiredBoss->GetPositionX();
-    float dy = bot->GetPositionY() - desiredBoss->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float moveX = desiredBoss->GetPositionX() + (dx / len) * desiredRange;
-    float moveY = desiredBoss->GetPositionY() + (dy / len) * desiredRange;
-    acted = MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                   MovementPriority::MOVEMENT_COMBAT) || acted;
+    acted = MoveTo(desiredBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT) || acted;
 
     return acted;
 }

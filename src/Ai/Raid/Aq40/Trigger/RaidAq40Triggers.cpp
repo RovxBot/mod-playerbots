@@ -294,8 +294,7 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
             return true;
 
         if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap,
-                    Aq40SpellIds::Aq40DefenderShadowStorm }) &&
+                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }) &&
             bot->GetDistance2d(unit) <= 18.0f)
             return true;
     }

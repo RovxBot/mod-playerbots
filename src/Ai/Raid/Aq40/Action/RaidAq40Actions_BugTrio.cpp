@@ -95,23 +95,12 @@ bool Aq40BugTrioAvoidPoisonCloudAction::Execute(Event /*event*/)
     if (!poisonCloudWindow)
         return false;
 
-    float d = bot->GetDistance2d(kri);
-    if (d > 12.0f)
+    float currentDistance = bot->GetDistance2d(kri);
+    float desiredDistance = 18.0f;
+    if (currentDistance >= desiredDistance)
         return false;
 
-    float dx = bot->GetPositionX() - kri->GetPositionX();
-    float dy = bot->GetPositionY() - kri->GetPositionY();
-    float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.1f)
-    {
-        dx = std::cos(bot->GetOrientation());
-        dy = std::sin(bot->GetOrientation());
-        len = 1.0f;
-    }
-
-    float desired = 18.0f;
-    float moveX = kri->GetPositionX() + (dx / len) * desired;
-    float moveY = kri->GetPositionY() + (dy / len) * desired;
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
+    return MoveAway(kri, desiredDistance - currentDistance);
 }
