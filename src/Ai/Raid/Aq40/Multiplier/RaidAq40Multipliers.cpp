@@ -254,7 +254,6 @@ float Aq40CthunMultiplier::GetValue(Action* action)
     if (isCthunControlAction)
         return 1.0f;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
     bool const inStomach = Aq40Helpers::IsCthunInStomach(bot, botAI);
     bool const darkGlare = [&]()
     {
