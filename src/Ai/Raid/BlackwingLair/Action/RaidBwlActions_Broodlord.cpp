@@ -5,14 +5,6 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 
-namespace
-{
-// GPS-verified fixed tank spot for Broodlord Lashlayer.
-constexpr float BroodlordTankSpotX = -7573.97f;
-constexpr float BroodlordTankSpotY = -1034.39f;
-constexpr float BroodlordTankSpotZ = 449.34f;
-}  // namespace
-
 bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
 {
     bool usedAny = false;
@@ -80,39 +72,32 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
     bool const isPrimaryTank = helper.IsEncounterPrimaryTank(bot);
     bool const isBackupTank = helper.IsEncounterBackupTank(bot, 0);
     bool const isTankRole = isPrimaryTank || isBackupTank;
-
-    // Tanks and any bot that has boss aggro go to the fixed tank spot.
     bool const hasAggro = broodlord->GetVictim() == bot;
-    if (isTankRole || hasAggro)
+
+    // ── Tanks ──────────────────────────────────────────────────────────
+    // Stay in melee range of the boss.  No fixed spot – just close the
+    // gap so the boss doesn't path around.
+    if (isTankRole)
     {
-        float const dist = bot->GetDistance(BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ);
-        if (dist < 3.0f)
+        if (bot->GetExactDist2d(broodlord) < 5.0f)
         {
             return false;
         }
 
-        if (MoveTo(bot->GetMapId(), BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ,
-                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
-        {
-            return true;
-        }
-
-        return MoveInside(bot->GetMapId(), BroodlordTankSpotX, BroodlordTankSpotY, BroodlordTankSpotZ,
-                          2.0f, MovementPriority::MOVEMENT_COMBAT);
+        return MoveTo(bot->GetMapId(), broodlord->GetPositionX(), broodlord->GetPositionY(),
+                      broodlord->GetPositionZ(), false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT);
     }
 
-    // Non-tanks position relative to boss facing.
-    float targetX = broodlord->GetPositionX();
-    float targetY = broodlord->GetPositionY();
-    float targetZ = bot->GetPositionZ();
+    // ── Non-tank with aggro (Knock Away snap) ──────────────────────────
+    // Hold position so the boss doesn't get kited across the room while
+    // the tank picks it back up.
+    if (hasAggro)
+    {
+        return false;
+    }
 
-    float const facing = broodlord->GetOrientation();
-    uint32 const slot = botAI->GetGroupSlotIndex(bot);
-
-    float angleOffset = 0.0f;
-    float distance = 0.0f;
-
-    // During Blast Wave casts, melee should temporarily back out.
+    // ── Blast Wave detection ───────────────────────────────────────────
     bool blastWaveCasting = false;
     if (broodlord->HasUnitState(UNIT_STATE_CASTING))
     {
@@ -123,35 +108,71 @@ bool BwlBroodlordPositionAction::Execute(Event /*event*/)
         }
         if (spell && spell->GetSpellInfo())
         {
-            SpellInfo const* spellInfo = spell->GetSpellInfo();
-            if (BwlSpellIds::MatchesAnySpellId(spellInfo, {BwlSpellIds::BroodlordBlastWave}))
+            if (BwlSpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                                               {BwlSpellIds::BroodlordBlastWave}))
             {
                 blastWaveCasting = true;
             }
         }
     }
 
+    // ── Ranged / Healers ───────────────────────────────────────────────
+    // Positioning doesn't matter as long as they stay out of Blast Wave
+    // (10 yd) and Cleave range.  Just maintain minimum safe distance from
+    // the boss – no orientation tracking, so a boss snap changes nothing.
     if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
     {
-        float spread = ((slot % 6) - 2.5f) * 0.15f;
-        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
-        distance = botAI->IsHeal(bot) ? 15.0f : 18.0f;
+        constexpr float safeDistance = 20.0f;
+
+        if (bot->GetExactDist2d(broodlord) >= safeDistance)
+        {
+            return false;
+        }
+
+        // Too close – move directly away from the boss.
+        float dx = bot->GetPositionX() - broodlord->GetPositionX();
+        float dy = bot->GetPositionY() - broodlord->GetPositionY();
+        float mag = std::sqrt(dx * dx + dy * dy);
+        if (mag < 0.001f)
+        {
+            // On top of the boss – pick an arbitrary direction.
+            dx = 1.0f;
+            dy = 0.0f;
+            mag = 1.0f;
+        }
+
+        float targetX = broodlord->GetPositionX() + (dx / mag) * safeDistance;
+        float targetY = broodlord->GetPositionY() + (dy / mag) * safeDistance;
+
+        return MoveTo(bot->GetMapId(), targetX, targetY, bot->GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
-    else
+
+    // ── Melee DPS ──────────────────────────────────────────────────────
+    // Deterministic slot-based spread behind the boss (same pattern as
+    // BWL Shared trash positioning in RaidBwlActions_Shared.cpp).
+    // Back off during Blast Wave casts.
+    float const facing = broodlord->GetOrientation();
+    uint32 const slot = botAI->GetGroupSlotIndex(bot);
+    float spread = ((slot % 4) - 1.5f) * 0.16f;
+    float angle = facing + static_cast<float>(M_PI) + spread;
+    float distance = blastWaveCasting ? 14.0f : 4.0f;
+
+    float targetX = broodlord->GetPositionX() + std::cos(angle) * distance;
+    float targetY = broodlord->GetPositionY() + std::sin(angle) * distance;
+    float targetZ = bot->GetPositionZ();
+
+    if (bot->GetExactDist2d(targetX, targetY) < 2.0f)
     {
-        float spread = ((slot % 4) - 1.5f) * 0.18f;
-        angleOffset = static_cast<float>(-M_PI / 2.0f) + spread;
-        distance = blastWaveCasting ? 14.0f : 6.0f;
+        return false;
     }
 
-    float angle = facing + angleOffset;
-    targetX += std::cos(angle) * distance;
-    targetY += std::sin(angle) * distance;
-
-    if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
+    if (MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, false,
+               MovementPriority::MOVEMENT_COMBAT))
     {
         return true;
     }
 
-    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f, MovementPriority::MOVEMENT_COMBAT);
+    return MoveInside(bot->GetMapId(), targetX, targetY, targetZ, 2.0f,
+                      MovementPriority::MOVEMENT_COMBAT);
 }
