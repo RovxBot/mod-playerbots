@@ -37,6 +37,7 @@ public:
         creators["aq40 ouro active"] = &RaidAq40TriggerContext::ouro_active;
         creators["aq40 ouro scarabs present"] = &RaidAq40TriggerContext::ouro_scarabs_present;
         creators["aq40 ouro sweep risk"] = &RaidAq40TriggerContext::ouro_sweep_risk;
+        creators["aq40 ouro sand blast risk"] = &RaidAq40TriggerContext::ouro_sand_blast_risk;
         creators["aq40 ouro submerge hazard"] = &RaidAq40TriggerContext::ouro_submerge_hazard;
         creators["aq40 viscidus active"] = &RaidAq40TriggerContext::viscidus_active;
         creators["aq40 viscidus frozen"] = &RaidAq40TriggerContext::viscidus_frozen;
@@ -85,6 +86,7 @@ private:
     static Trigger* ouro_active(PlayerbotAI* botAI) { return new Aq40OuroActiveTrigger(botAI); }
     static Trigger* ouro_scarabs_present(PlayerbotAI* botAI) { return new Aq40OuroScarabsTrigger(botAI); }
     static Trigger* ouro_sweep_risk(PlayerbotAI* botAI) { return new Aq40OuroSweepTrigger(botAI); }
+    static Trigger* ouro_sand_blast_risk(PlayerbotAI* botAI) { return new Aq40OuroSandBlastRiskTrigger(botAI); }
     static Trigger* ouro_submerge_hazard(PlayerbotAI* botAI) { return new Aq40OuroSubmergeTrigger(botAI); }
     static Trigger* viscidus_active(PlayerbotAI* botAI) { return new Aq40ViscidusActiveTrigger(botAI); }
     static Trigger* viscidus_frozen(PlayerbotAI* botAI) { return new Aq40ViscidusFrozenTrigger(botAI); }

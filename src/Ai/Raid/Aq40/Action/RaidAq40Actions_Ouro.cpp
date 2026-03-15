@@ -60,20 +60,20 @@ Unit* FindNearestDirtMound(Player* bot, PlayerbotAI* botAI, GuidVector const& at
 
 bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
     bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
     Unit* target = nullptr;
     if (isPrimaryTank)
-        target = Aq40BossActions::FindOuroTarget(botAI, attackers);
+        target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
     if (!target)
-        target = FindOuroScarabs(botAI, attackers);
+        target = FindOuroScarabs(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindOuroTarget(botAI, attackers);
+        target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
     if (!target)
-        target = FindNearestDirtMound(bot, botAI, attackers);
+        target = FindNearestDirtMound(bot, botAI, encounterUnits);
 
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
@@ -83,11 +83,11 @@ bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40OuroHoldMeleeContactAction::Execute(Event /*event*/)
 {
-    if (!(Aq40BossHelper::IsEncounterTank(bot, bot) || !botAI->IsRanged(bot)))
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
     if (!ouro)
         return false;
 
@@ -117,8 +117,8 @@ bool Aq40OuroAvoidSweepAction::Execute(Event /*event*/)
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
     if (!ouro)
         return false;
 
@@ -142,10 +142,32 @@ bool Aq40OuroAvoidSweepAction::Execute(Event /*event*/)
                   MovementPriority::MOVEMENT_COMBAT);
 }
 
+bool Aq40OuroAvoidSandBlastAction::Execute(Event /*event*/)
+{
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
+    if (!ouro)
+        return false;
+
+    // Move behind Ouro using orientation + PI (Grobbulus behind-boss
+    // pattern from Naxxramas).  Melee stay at melee range, ranged at
+    // their normal distance.
+    float behindAngle = ouro->GetOrientation() + static_cast<float>(M_PI);
+    float distance = botAI->IsRanged(bot) ? std::max(bot->GetDistance2d(ouro), 20.0f) : 6.0f;
+    float moveX = ouro->GetPositionX() + std::cos(behindAngle) * distance;
+    float moveY = ouro->GetPositionY() + std::sin(behindAngle) * distance;
+
+    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
 bool Aq40OuroAvoidSubmergeAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* mound = FindNearestDirtMound(bot, botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* mound = FindNearestDirtMound(bot, botAI, encounterUnits);
     if (!mound)
         return false;
 

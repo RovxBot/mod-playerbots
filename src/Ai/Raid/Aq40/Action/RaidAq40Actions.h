@@ -208,6 +208,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40OuroAvoidSandBlastAction : public MovementAction
+{
+public:
+    Aq40OuroAvoidSandBlastAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 ouro avoid sand blast") {}
+    bool Execute(Event event) override;
+};
+
 class Aq40OuroAvoidSubmergeAction : public MovementAction
 {
 public:

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "ObjectGuid.h"
 #include "../RaidAq40BossHelper.h"
@@ -91,54 +92,54 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     if (!Aq40BossHelper::IsInAq40(bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
     Unit* target = nullptr;
 
     // Favor fight-ending or high-impact targets first.
-    target = Aq40BossActions::FindCthunTarget(botAI, attackers);
+    target = Aq40BossActions::FindCthunTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindTwinEmperorsTarget(botAI, attackers);
+        target = Aq40BossActions::FindTwinEmperorsTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindHuhuranTarget(botAI, attackers);
+        target = Aq40BossActions::FindHuhuranTarget(botAI, encounterUnits);
     if (!target)
     {
-        std::vector<Unit*> fankrissSpawns = Aq40BossActions::FindFankrissSpawns(botAI, attackers);
+        std::vector<Unit*> fankrissSpawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
         if (!fankrissSpawns.empty())
         {
-            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, { "spawn of fankriss" });
+            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, encounterUnits, { "spawn of fankriss" });
         }
         else
         {
-            target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
+            target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
         }
     }
     if (!target)
     {
-        std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+        std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
         if (!sarturaGuards.empty())
         {
-            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, { "sartura's royal guard" });
+            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, encounterUnits, { "sartura's royal guard" });
         }
         else
         {
-            target = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+            target = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
         }
     }
     if (!target)
-        target = Aq40BossActions::FindBugTrioTarget(botAI, attackers);
+        target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindSkeramTarget(botAI, attackers);
+        target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindOuroTarget(botAI, attackers);
+        target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindViscidusTarget(botAI, attackers);
+        target = Aq40BossActions::FindViscidusTarget(botAI, encounterUnits);
 
     if (!target)
     {
-        for (ObjectGuid const guid : attackers)
+        for (ObjectGuid const guid : encounterUnits)
         {
             target = botAI->GetUnit(guid);
             if (target)
@@ -154,8 +155,8 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target)
         return false;
 
@@ -167,9 +168,9 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
 
 bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     std::vector<Unit*> skerams =
-        Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
+        Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "the prophet skeram" });
 
     if (skerams.empty())
         return false;
@@ -199,9 +200,9 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
 
 bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     std::vector<Unit*> skerams =
-        Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
+        Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "the prophet skeram" });
 
     if (skerams.empty())
         return false;
@@ -221,10 +222,48 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
 
 bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 {
-    // Keep this baseline cheap and safe:
-    // when MC pressure appears, force target normalization on Skeram.
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, attackers);
+    // Pattern lifted from BWL BwlPolymorphMindControlledTargetAction and
+    // TempestKeep KaelthasSunstriderBreakMindControlAction:
+    // Detect charmed raid members and apply CC (sheep/fear) to neutralize them.
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+
+    // First: try to CC an MC'd player (mages sheep, priests fear, etc.)
+    Unit* mcTarget = nullptr;
+    float closestDist = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || player == bot)
+            continue;
+
+        // BWL pattern: IsCharmed() + !IsPolymorphed() to avoid double-CC.
+        if (!player->IsCharmed() || player->IsPolymorphed())
+            continue;
+
+        float const dist = bot->GetDistance2d(player);
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            mcTarget = player;
+        }
+    }
+
+    if (mcTarget)
+    {
+        // TempestKeep pattern: try multiple CC spells by class.
+        static std::initializer_list<char const*> ccSpells = {
+            "polymorph", "fear", "hibernate", "freezing trap", "repentance"
+        };
+        for (char const* spell : ccSpells)
+        {
+            if (botAI->CanCastSpell(spell, mcTarget) && botAI->CastSpell(spell, mcTarget))
+                return true;
+        }
+    }
+
+    // Fallback: force target back to Skeram.
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
@@ -233,12 +272,12 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 
 bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
     Unit* target = nullptr;
-    std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+    std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
     if (!guards.empty())
     {
         // Strategy baseline: kill the royal guards before Sartura.
@@ -251,7 +290,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
     }
     else
     {
-        target = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+        target = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
     }
 
     if (!target || AI_VALUE(Unit*, "current target") == target)
@@ -265,11 +304,11 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* threat = Aq40BossActions::FindSarturaTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* threat = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
     if (!threat)
     {
-        std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, attackers);
+        std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
         if (!guards.empty())
             threat = guards.front();
     }
@@ -288,12 +327,12 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
 
 bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
     Unit* target = nullptr;
-    std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, attackers);
+    std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
     if (!spawns.empty())
     {
         // Fankriss baseline: quickly remove Spawn adds before returning to boss.
@@ -306,7 +345,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     }
     else
     {
-        target = Aq40BossActions::FindFankrissTarget(botAI, attackers);
+        target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
     }
 
     if (!target || AI_VALUE(Unit*, "current target") == target)
@@ -317,11 +356,11 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
-    for (ObjectGuid const guid : attackers)
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier"))
@@ -340,7 +379,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         }
     }
 
-    Unit* target = Aq40BossActions::FindTrashTarget(botAI, attackers);
+    Unit* target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
@@ -354,7 +393,6 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
 
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
     {
-        botAI->Reset();
         bot->AttackStop();
         bot->InterruptNonMeleeSpells(true);
         context->GetValue<Unit*>("current target")->Set(nullptr);
@@ -368,11 +406,11 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
         return false;
     }
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* danger = nullptr;
     float dangerRange = 0.0f;
 
-    for (ObjectGuid const guid : attackers)
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)

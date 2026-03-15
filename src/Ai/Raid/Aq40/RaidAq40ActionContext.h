@@ -34,6 +34,7 @@ public:
         creators["aq40 ouro choose target"] = &RaidAq40ActionContext::ouro_choose_target;
         creators["aq40 ouro hold melee contact"] = &RaidAq40ActionContext::ouro_hold_melee_contact;
         creators["aq40 ouro avoid sweep"] = &RaidAq40ActionContext::ouro_avoid_sweep;
+        creators["aq40 ouro avoid sand blast"] = &RaidAq40ActionContext::ouro_avoid_sand_blast;
         creators["aq40 ouro avoid submerge"] = &RaidAq40ActionContext::ouro_avoid_submerge;
         creators["aq40 viscidus choose target"] = &RaidAq40ActionContext::viscidus_choose_target;
         creators["aq40 viscidus use frost"] = &RaidAq40ActionContext::viscidus_use_frost;
@@ -101,6 +102,7 @@ private:
         return new Aq40OuroHoldMeleeContactAction(botAI);
     }
     static Action* ouro_avoid_sweep(PlayerbotAI* botAI) { return new Aq40OuroAvoidSweepAction(botAI); }
+    static Action* ouro_avoid_sand_blast(PlayerbotAI* botAI) { return new Aq40OuroAvoidSandBlastAction(botAI); }
     static Action* ouro_avoid_submerge(PlayerbotAI* botAI)
     {
         return new Aq40OuroAvoidSubmergeAction(botAI);

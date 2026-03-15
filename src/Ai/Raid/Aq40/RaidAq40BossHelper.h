@@ -249,6 +249,23 @@ inline std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector cons
     return found;
 }
 
+inline GuidVector GetEncounterUnits(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    GuidVector units = attackers;
+    if (!botAI)
+        return units;
+
+    GuidVector const& possibleTargetsNoLos =
+        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (ObjectGuid const guid : possibleTargetsNoLos)
+    {
+        if (std::find(units.begin(), units.end(), guid) == units.end())
+            units.push_back(guid);
+    }
+
+    return units;
+}
+
 inline bool HasAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& units, std::initializer_list<char const*> names)
 {
     return FindUnitByAnyName(botAI, units, names) != nullptr;

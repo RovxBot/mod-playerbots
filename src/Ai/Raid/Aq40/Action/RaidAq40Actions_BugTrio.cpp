@@ -48,31 +48,36 @@ Unit* FindLowestHealthUnit(std::vector<Unit*> const& units)
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
-    Unit* yauj = FindBugTrioYauj(botAI, attackers);
-    Unit* kri = FindBugTrioKri(botAI, attackers);
-    Unit* vem = FindBugTrioVem(botAI, attackers);
+    Unit* yauj = FindBugTrioYauj(botAI, encounterUnits);
+    Unit* kri = FindBugTrioKri(botAI, encounterUnits);
+    Unit* vem = FindBugTrioVem(botAI, encounterUnits);
 
     Unit* target = nullptr;
-    if (yauj && yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL))
-        target = yauj;
+    if (yauj)
+    {
+        Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
+            target = yauj;
+    }
 
     if (!target && !Aq40BossHelper::IsEncounterTank(bot, bot))
     {
-        std::vector<Unit*> broods = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "yauj brood" });
+        std::vector<Unit*> broods = Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "yauj brood" });
         target = FindLowestHealthUnit(broods);
     }
 
-    // Baseline kill order with low branching cost.
-    if (!target && kri)
-        target = kri;
+    // Kill order: Yauj first (stop heals), then Vem, then Kri last
+    // (delay poison cloud as long as possible).
     if (!target && yauj)
         target = yauj;
     if (!target && vem)
         target = vem;
+    if (!target && kri)
+        target = kri;
 
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
@@ -85,8 +90,8 @@ bool Aq40BugTrioAvoidPoisonCloudAction::Execute(Event /*event*/)
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* kri = FindBugTrioKri(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* kri = FindBugTrioKri(botAI, encounterUnits);
     if (!kri)
         return false;
 

@@ -189,6 +189,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40OuroSandBlastRiskTrigger : public Trigger
+{
+public:
+    Aq40OuroSandBlastRiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 ouro sand blast risk") {}
+    bool IsActive() override;
+};
+
 class Aq40OuroSubmergeTrigger : public Trigger
 {
 public:

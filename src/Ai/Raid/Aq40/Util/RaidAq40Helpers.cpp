@@ -31,6 +31,7 @@ struct TwinTeleportState
 TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
 std::unordered_map<uint64, uint32> sCthunPhase2StartByBossGuid;
+std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
 {
@@ -167,6 +168,16 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         return static_cast<uint32>(bot->GetGUID().GetCounter() % 2);
 
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
+
+    // Clean stale state on wipe/re-pull (pattern from
+    // sTwinWarlockAssignmentsByInstance in RaidAq40BossHelper.h).
+    if (!bot->IsInCombat())
+    {
+        sTwinAssignments.erase(instanceId);
+        sTwinTeleportStates.erase(instanceId);
+        sCachedTwinSplitByX.erase(instanceId);
+    }
+
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
     TwinRoleAssignmentMap& assignments = sTwinAssignments[instanceId][static_cast<int>(cohort)];
     uint64 const botGuid = bot->GetGUID().GetRawValue();
@@ -226,8 +237,31 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     if (!result.veklor || !result.veknilash)
         return result;
 
-    bool splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
-                    std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
+    uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
+
+    // Cache the split axis and only recalculate when bosses are well-separated
+    // (>15 yards apart). During teleport they pass through the center, causing
+    // the dominant axis to flicker momentarily.
+    float separation = result.veklor->GetDistance2d(result.veknilash);
+    bool splitByX;
+    auto axisIt = sCachedTwinSplitByX.find(instanceId);
+    if (separation > 15.0f)
+    {
+        splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
+                   std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
+        sCachedTwinSplitByX[instanceId] = splitByX;
+    }
+    else if (axisIt != sCachedTwinSplitByX.end())
+    {
+        splitByX = axisIt->second;  // Use cached axis during teleport
+    }
+    else
+    {
+        splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
+                   std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
+        sCachedTwinSplitByX[instanceId] = splitByX;
+    }
+
     float veklorAxis = splitByX ? result.veklor->GetPositionX() : result.veklor->GetPositionY();
     float veknilashAxis = splitByX ? result.veknilash->GetPositionX() : result.veknilash->GetPositionY();
     Unit* lowSide = veklorAxis < veknilashAxis ? result.veklor : result.veknilash;
@@ -300,7 +334,11 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     Unit* cthunBody = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "c'thun" });
     if (!cthunBody)
+    {
+        // Clean stale state when boss not found (wipe/reset).
+        sCthunPhase2StartByBossGuid.clear();
         return 0;
+    }
 
     bool inPhase2 = Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
                                                     { "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
@@ -333,6 +371,14 @@ bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers)
 
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
 {
+    // Primary: find by entry ID (AzerothCore C'Thun script portal entry).
+    // Pattern lifted from Karazhan NPC_GREEN/BLUE/RED_PORTAL entry ID lookups.
+    static constexpr uint32 CTHUN_EXIT_PORTAL_ENTRY = 180523;
+    GameObject* portal = bot->FindNearestGameObject(CTHUN_EXIT_PORTAL_ENTRY, 150.0f);
+    if (portal)
+        return portal;
+
+    // Fallback: string matching for non-standard server scripts.
     GuidVector nearbyGameObjects = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
     GameObject* candidate = nullptr;
     float bestDistance = 999.0f;

@@ -7,24 +7,27 @@
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
 
+namespace
+{
+bool Aq40EncounterEngaged(PlayerbotAI* botAI, Player* bot)
+{
+    return Aq40BossHelper::IsInAq40(bot) &&
+           !botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty();
+}
+}  // namespace
+
 bool Aq40EngageTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot))
-        return false;
-
-    if (!bot->IsInCombat())
-        return false;
-
-    return !AI_VALUE(GuidVector, "attackers").empty();
+    return Aq40EncounterEngaged(botAI, bot);
 }
 
 bool Aq40SkeramActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
@@ -48,8 +51,8 @@ bool Aq40SkeramArcaneExplosionTrigger::IsActive()
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram"))
@@ -69,8 +72,8 @@ bool Aq40SkeramMindControlTrigger::IsActive()
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -93,8 +96,8 @@ bool Aq40SkeramSplitTrigger::IsActive()
         return false;
 
     uint32 skeramCount = 0;
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
@@ -109,8 +112,8 @@ bool Aq40SkeramExecutePhaseTrigger::IsActive()
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }) && unit->GetHealthPct() <= 25.0f)
@@ -122,11 +125,11 @@ bool Aq40SkeramExecutePhaseTrigger::IsActive()
 
 bool Aq40SarturaActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -145,8 +148,8 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
     if (!Aq40SarturaActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -159,10 +162,13 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
 
         // Use broad detection to avoid core-script dependencies:
         // either active cast window or whirlwind aura.
-        bool spinning = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL) ||
-                        Aq40SpellIds::HasAnyAura(botAI, unit,
-                                                 { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
-                        botAI->HasAura("whirlwind", unit);
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        bool const spinning =
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
+            Aq40SpellIds::HasAnyAura(botAI, unit,
+                                     { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+            botAI->HasAura("whirlwind", unit);
         if (!spinning)
             continue;
 
@@ -175,11 +181,11 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
 
 bool Aq40BugTrioActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "lord kri", "princess yauj", "vem", "yauj brood" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "lord kri", "princess yauj", "vem", "yauj brood" });
 }
 
 bool Aq40BugTrioHealCastTrigger::IsActive()
@@ -187,8 +193,8 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess yauj"))
@@ -210,8 +216,8 @@ bool Aq40BugTrioPoisonCloudTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "lord kri"))
@@ -228,11 +234,11 @@ bool Aq40BugTrioPoisonCloudTrigger::IsActive()
 
 bool Aq40FankrissActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && botAI->EqualLowercaseName(unit->GetName(), "fankriss the unyielding"))
@@ -247,8 +253,8 @@ bool Aq40FankrissSpawnedTrigger::IsActive()
     if (!Aq40FankrissActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && botAI->EqualLowercaseName(unit->GetName(), "spawn of fankriss"))
@@ -260,14 +266,14 @@ bool Aq40FankrissSpawnedTrigger::IsActive()
 
 bool Aq40TrashActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    if (attackers.empty() || Aq40BossHelper::IsBossEncounterActive(botAI, attackers))
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (encounterUnits.empty() || Aq40BossHelper::IsBossEncounterActive(botAI, encounterUnits))
         return false;
 
-    return Aq40BossHelper::IsTrashEncounterActive(botAI, attackers);
+    return Aq40BossHelper::IsTrashEncounterActive(botAI, encounterUnits);
 }
 
 bool Aq40TrashDangerousAoeTrigger::IsActive()
@@ -278,8 +284,8 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
         return true;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -304,11 +310,11 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
 
 bool Aq40HuhuranActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && botAI->EqualLowercaseName(unit->GetName(), "princess huhuran"))
@@ -323,8 +329,8 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
     if (!Aq40HuhuranActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess huhuran"))
@@ -344,11 +350,11 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 
 bool Aq40TwinEmperorsActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -370,14 +376,14 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (botAI->IsHeal(bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.sideEmperor)
         return false;
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
-    bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, attackers);
+    bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, encounterUnits);
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget)
     {
@@ -400,7 +406,7 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (botAI->IsRanged(bot))
         return currentTarget != assignment.veklor;
 
-    Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "mutate bug" });
+    Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
     if (mutateBug &&
         Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
         return currentTarget != mutateBug;
@@ -416,8 +422,8 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
@@ -438,10 +444,10 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     Unit* veklor = nullptr;
     Unit* veknilash = nullptr;
-    for (ObjectGuid const guid : attackers)
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -461,11 +467,11 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
 
 bool Aq40OuroActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
 }
 
 bool Aq40OuroScarabsTrigger::IsActive()
@@ -473,8 +479,8 @@ bool Aq40OuroScarabsTrigger::IsActive()
     if (!Aq40OuroActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "qiraji scarab", "scarab" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "qiraji scarab", "scarab" });
 }
 
 bool Aq40OuroSweepTrigger::IsActive()
@@ -482,14 +488,45 @@ bool Aq40OuroSweepTrigger::IsActive()
     if (!Aq40OuroActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "ouro"))
             continue;
 
+        // Detect actual Sweep cast or aura, matching the pattern used by
+        // Sartura whirlwind detection (spell + aura + name fallback).
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        bool const sweeping =
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::OuroSweep })) ||
+            Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::OuroSweep }) ||
+            botAI->HasAura("sweep", unit);
+        if (!sweeping)
+            continue;
+
         if (bot->GetDistance2d(unit) <= 10.0f)
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40OuroSandBlastRiskTrigger::IsActive()
+{
+    if (!Aq40OuroActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "ouro"))
+            continue;
+
+        // Non-tanks in Ouro's frontal arc are at Sand Blast risk
+        // (pattern from ICC Marrowgar: boss->isInFront(bot)).
+        if (unit->isInFront(bot, 10.0f) && bot->GetDistance2d(unit) <= 15.0f)
             return true;
     }
 
@@ -501,8 +538,8 @@ bool Aq40OuroSubmergeTrigger::IsActive()
     if (!Aq40OuroActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "dirt mound"))
@@ -517,11 +554,11 @@ bool Aq40OuroSubmergeTrigger::IsActive()
 
 bool Aq40ViscidusActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "viscidus", "glob of viscidus", "toxic slime" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "viscidus", "glob of viscidus", "toxic slime" });
 }
 
 bool Aq40ViscidusFrozenTrigger::IsActive()
@@ -529,8 +566,8 @@ bool Aq40ViscidusFrozenTrigger::IsActive()
     if (!Aq40ViscidusActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "viscidus"))
@@ -549,17 +586,17 @@ bool Aq40ViscidusGlobTrigger::IsActive()
     if (!Aq40ViscidusActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "glob of viscidus" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "glob of viscidus" });
 }
 
 bool Aq40CthunActiveTrigger::IsActive()
 {
-    if (!Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
                                            { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
                                              "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
@@ -569,8 +606,8 @@ bool Aq40CthunPhase2Trigger::IsActive()
     if (!Aq40CthunActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
                                            { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
 
@@ -579,8 +616,8 @@ bool Aq40CthunAddsPresentTrigger::IsActive()
     if (!Aq40CthunActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
                                            { "eye tentacle", "claw tentacle", "giant eye tentacle", "giant claw tentacle",
                                              "flesh tentacle" });
 }
@@ -593,8 +630,8 @@ bool Aq40CthunDarkGlareTrigger::IsActive()
     if (Aq40CthunInStomachTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
@@ -625,8 +662,8 @@ bool Aq40CthunVulnerableTrigger::IsActive()
     if (!Aq40CthunPhase2Trigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    return Aq40Helpers::IsCthunVulnerableNow(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40Helpers::IsCthunVulnerableNow(botAI, encounterUnits);
 }
 
 bool Aq40CthunEyeCastTrigger::IsActive()
@@ -634,8 +671,8 @@ bool Aq40CthunEyeCastTrigger::IsActive()
     if (!Aq40CthunActiveTrigger(botAI).IsActive() || Aq40CthunInStomachTrigger(botAI).IsActive())
         return false;
 
-    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
-    for (ObjectGuid const guid : attackers)
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)

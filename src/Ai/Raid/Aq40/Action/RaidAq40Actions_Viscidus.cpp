@@ -39,15 +39,15 @@ Unit* FindViscidusGlobTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
 bool Aq40ViscidusChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
-    Unit* target = FindViscidusGlobTarget(botAI, attackers);
+    Unit* target = FindViscidusGlobTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindViscidusTarget(botAI, attackers);
+        target = Aq40BossActions::FindViscidusTarget(botAI, encounterUnits);
     if (!target)
-        target = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "toxic slime" });
+        target = Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "toxic slime" });
 
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
@@ -57,17 +57,19 @@ bool Aq40ViscidusChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40ViscidusUseFrostAction::Execute(Event /*event*/)
 {
-    if (Aq40BossHelper::IsEncounterTank(bot, bot) || botAI->IsHeal(bot) || !botAI->IsRanged(bot))
+    // Allow any DPS (melee or ranged) to apply frost. Melee shamans
+    // (Frost Shock), DKs (Icy Touch), and others all contribute.
+    if (Aq40BossHelper::IsEncounterTank(bot, bot) || botAI->IsHeal(bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* viscidus = Aq40BossActions::FindViscidusTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* viscidus = Aq40BossActions::FindViscidusTarget(botAI, encounterUnits);
     if (!viscidus)
         return false;
 
     if (Aq40SpellIds::HasAnyAura(botAI, viscidus,
             { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore }) ||
-        FindViscidusGlobTarget(botAI, attackers))
+        FindViscidusGlobTarget(botAI, encounterUnits))
         return false;
 
     static std::initializer_list<char const*> frostSpells = { "frostbolt", "ice lance", "frost shock", "icy touch",
@@ -86,11 +88,14 @@ bool Aq40ViscidusUseFrostAction::Execute(Event /*event*/)
 
 bool Aq40ViscidusShatterAction::Execute(Event /*event*/)
 {
-    if (botAI->IsRanged(bot) && !Aq40BossHelper::IsEncounterTank(bot, bot))
+    // All DPS (melee and ranged) converge during freeze window.
+    // Viscidus requires 75-150 melee hits to shatter; ranged-heavy raids
+    // need everyone in melee to meet the threshold.
+    if (botAI->IsHeal(bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* viscidus = Aq40BossActions::FindViscidusTarget(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* viscidus = Aq40BossActions::FindViscidusTarget(botAI, encounterUnits);
     if (!viscidus)
         return false;
 

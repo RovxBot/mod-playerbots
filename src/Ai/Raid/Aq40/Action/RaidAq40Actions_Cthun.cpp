@@ -94,11 +94,12 @@ Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
     return FindHighestPriorityCthunAdd(botAI, attackers);
 }
 
-uint32 GetRangedSpreadOrdinal(Player* bot, PlayerbotAI* botAI)
+uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee)
 {
     Group* group = bot->GetGroup();
+    uint32 const fallbackSlots = forMelee ? 8u : 12u;
     if (!group)
-        return static_cast<uint32>(bot->GetGUID().GetCounter() % 12);
+        return static_cast<uint32>(bot->GetGUID().GetCounter() % fallbackSlots);
 
     uint32 index = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -108,8 +109,11 @@ uint32 GetRangedSpreadOrdinal(Player* bot, PlayerbotAI* botAI)
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        bool isRangedSlot = memberAI && !memberAI->IsTank(member) && (memberAI->IsRanged(member) || memberAI->IsHeal(member));
-        if (!isRangedSlot)
+        if (!memberAI || memberAI->IsTank(member))
+            continue;
+
+        bool const memberIsMelee = !memberAI->IsRanged(member) && !memberAI->IsHeal(member);
+        if (forMelee != memberIsMelee)
             continue;
 
         if (member->GetGUID() == bot->GetGUID())
@@ -118,17 +122,38 @@ uint32 GetRangedSpreadOrdinal(Player* bot, PlayerbotAI* botAI)
         ++index;
     }
 
-    return static_cast<uint32>(bot->GetGUID().GetCounter() % 12);
+    return static_cast<uint32>(bot->GetGUID().GetCounter() % fallbackSlots);
 }
 
-Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* boss)
+Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* boss, bool forMelee)
 {
+    // Clear stale positions on wipe/re-pull (pattern from
+    // sTwinWarlockAssignmentsByInstance in RaidAq40BossHelper.h).
+    if (!bot->IsInCombat())
+        sCthunSpreadPositions.clear();
+
     uint64 const botGuid = bot->GetGUID().GetRawValue();
     auto itr = sCthunSpreadPositions.find(botGuid);
     if (itr != sCthunSpreadPositions.end())
         return itr->second;
 
-    uint32 slot = GetRangedSpreadOrdinal(bot, botAI);
+    if (forMelee)
+    {
+        // Melee: spread evenly around the boss at melee range (~8y), using
+        // GUID-based angle slots (pattern from ICC Festergut spore spread).
+        uint32 slot = GetSpreadOrdinal(bot, botAI, true);
+        uint32 const kMeleeSlots = 8;
+        float angle = static_cast<float>(slot % kMeleeSlots) * ((2.0f * kPi) / static_cast<float>(kMeleeSlots));
+        float radius = 8.0f;
+        Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
+                          boss->GetPositionY() + std::sin(angle) * radius,
+                          boss->GetPositionZ());
+        sCthunSpreadPositions[botGuid] = assigned;
+        return assigned;
+    }
+
+    // Ranged/heals: spread at 28y around the boss in 12 slots.
+    uint32 slot = GetSpreadOrdinal(bot, botAI, false);
     float angle = static_cast<float>(slot % 12) * ((2.0f * kPi) / 12.0f);
     float radius = 28.0f;
     Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
@@ -142,24 +167,24 @@ Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* b
 
 bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (attackers.empty())
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (encounterUnits.empty())
         return false;
 
     bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
     Unit* target = nullptr;
 
     if (Aq40Helpers::IsCthunInStomach(bot, botAI))
-        target = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle" });
+        target = Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "flesh tentacle" });
 
     if (!target)
-        target = isPrimaryTank ? FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
+        target = isPrimaryTank ? FindTankPriorityCthunAdd(botAI, encounterUnits) : FindHighestPriorityCthunAdd(botAI, encounterUnits);
 
     if (!target)
     {
-        Unit* body = FindCthunBody(botAI, attackers);
-        Unit* eye = FindCthunEye(botAI, attackers);
-        if (body && Aq40Helpers::IsCthunVulnerableNow(botAI, attackers))
+        Unit* body = FindCthunBody(botAI, encounterUnits);
+        Unit* eye = FindCthunEye(botAI, encounterUnits);
+        if (body && Aq40Helpers::IsCthunVulnerableNow(botAI, encounterUnits))
             target = body;
         else
             target = eye ? eye : body;
@@ -173,21 +198,25 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
 {
-    if (Aq40BossHelper::IsEncounterTank(bot, bot) || !(botAI->IsRanged(bot) || botAI->IsHeal(bot)))
+    // Tanks hold position; everyone else must spread to prevent Eye Beam
+    // chain bouncing.
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* boss = FindCthunEye(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* boss = FindCthunEye(botAI, encounterUnits);
     if (!boss)
-        boss = FindCthunBody(botAI, attackers);
+        boss = FindCthunBody(botAI, encounterUnits);
     if (!boss)
         return false;
 
-    Position assigned = GetAssignedCthunSpreadPosition(bot, botAI, boss);
+    bool const isMelee = !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+    Position assigned = GetAssignedCthunSpreadPosition(bot, botAI, boss, isMelee);
     float moveX = assigned.GetPositionX();
     float moveY = assigned.GetPositionY();
 
-    if (bot->GetDistance2d(moveX, moveY) < 5.0f)
+    float const tolerance = isMelee ? 3.0f : 5.0f;
+    if (bot->GetDistance2d(moveX, moveY) < tolerance)
         return false;
 
     return MoveTo(bot->GetMapId(), moveX, moveY, boss->GetPositionZ(), false, false, false, true,
@@ -199,10 +228,10 @@ bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* boss = FindCthunEye(botAI, attackers);
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* boss = FindCthunEye(botAI, encounterUnits);
     if (!boss)
-        boss = FindCthunBody(botAI, attackers);
+        boss = FindCthunBody(botAI, encounterUnits);
     if (!boss)
         return false;
 
@@ -216,7 +245,25 @@ bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
         return false;
 
     float currentAngle = std::atan2(dy, dx);
-    float nextAngle = currentAngle + (kPi / 5.0f);
+
+    // Determine beam direction from boss orientation (Dark Glare fires
+    // in the direction the Eye is facing and rotates).
+    float beamAngle = boss->GetOrientation();
+    // Vector from boss along beam direction
+    float beamDx = std::cos(beamAngle);
+    float beamDy = std::sin(beamAngle);
+    // Normalize bot vector from boss
+    float botDx = dx / radius;
+    float botDy = dy / radius;
+    // Cross product determines which side of the beam the bot is on
+    // (pattern used by ICC Putricideoid directional avoidance).
+    float cross = beamDx * botDy - beamDy * botDx;
+    // Move in the direction that takes us away from the beam sweep.
+    // If cross > 0, bot is counter-clockwise from beam → rotate further CCW (+angle).
+    // If cross < 0, bot is clockwise from beam → rotate further CW (-angle).
+    // If cross ~0, bot is right in the beam path → pick either direction.
+    float step = kPi / 5.0f;  // 36 degrees
+    float nextAngle = currentAngle + (cross >= 0.0f ? step : -step);
     float moveX = boss->GetPositionX() + std::cos(nextAngle) * radius;
     float moveY = boss->GetPositionY() + std::sin(nextAngle) * radius;
 
@@ -226,8 +273,8 @@ bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
 
 bool Aq40CthunStomachDpsAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* fleshTentacle = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* fleshTentacle = Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "flesh tentacle" });
     if (!fleshTentacle)
         return false;
 
@@ -277,9 +324,9 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
 
 bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* target = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot) ?
-        FindTankPriorityCthunAdd(botAI, attackers) : FindHighestPriorityCthunAdd(botAI, attackers);
+        FindTankPriorityCthunAdd(botAI, encounterUnits) : FindHighestPriorityCthunAdd(botAI, encounterUnits);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
@@ -288,15 +335,15 @@ bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
 
 bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    if (!Aq40Helpers::IsCthunVulnerableNow(botAI, attackers))
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (!Aq40Helpers::IsCthunVulnerableNow(botAI, encounterUnits))
         return false;
 
     // Keep eye-tentacle cleanup priority even inside weakened windows.
-    if (Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "flesh tentacle", "eye tentacle", "giant eye tentacle" }))
+    if (Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "flesh tentacle", "eye tentacle", "giant eye tentacle" }))
         return false;
 
-    Unit* body = FindCthunBody(botAI, attackers);
+    Unit* body = FindCthunBody(botAI, encounterUnits);
     if (!body || AI_VALUE(Unit*, "current target") == body)
         return false;
 
@@ -305,15 +352,18 @@ bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
 
 bool Aq40CthunInterruptEyeAction::Execute(Event /*event*/)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    std::vector<Unit*> eyes = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "eye tentacle", "giant eye tentacle" });
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    std::vector<Unit*> eyes = Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "eye tentacle", "giant eye tentacle" });
     for (Unit* eye : eyes)
     {
         if (!eye || !eye->GetCurrentSpell(CURRENT_GENERIC_SPELL))
             continue;
 
-        if (AI_VALUE(Unit*, "current target") != eye && !Attack(eye))
-            continue;
+        // Switch target this tick; interrupt will fire on the next cycle
+        // once the bot is facing/in range. Avoids failing interrupts from
+        // same-tick target switch (Naxxramas uses separate ticks too).
+        if (AI_VALUE(Unit*, "current target") != eye)
+            return Attack(eye);
 
         return botAI->DoSpecificAction("interrupt spell", Event(), true);
     }

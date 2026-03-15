@@ -98,6 +98,8 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 ouro choose target", ACTION_RAID + 4) }));
     triggers.push_back(new TriggerNode("aq40 ouro sweep risk",
         { NextAction("aq40 ouro avoid sweep", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 ouro sand blast risk",
+        { NextAction("aq40 ouro avoid sand blast", ACTION_RAID + 4) }));
     triggers.push_back(new TriggerNode("aq40 ouro submerge hazard",
         { NextAction("aq40 ouro avoid submerge", ACTION_RAID + 5) }));
 
@@ -144,6 +146,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new Aq40GenericMultiplier(botAI));
+    multipliers.push_back(new Aq40SkeramMultiplier(botAI));
     multipliers.push_back(new Aq40BugTrioMultiplier(botAI));
     multipliers.push_back(new Aq40SarturaMultiplier(botAI));
     multipliers.push_back(new Aq40HuhuranMultiplier(botAI));
