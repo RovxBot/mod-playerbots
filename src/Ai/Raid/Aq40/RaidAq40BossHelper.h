@@ -11,6 +11,7 @@
 #include "Group.h"
 #include "ObjectGuid.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "PlayerbotAI.h"
 #include "SharedDefines.h"
 
@@ -249,16 +250,45 @@ inline std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector cons
     return found;
 }
 
+inline bool IsNearbyEncounterUnit(Player* bot, PlayerbotAI* botAI, Unit* candidate, GuidVector const& attackers)
+{
+    if (!bot || !botAI || !candidate || !candidate->IsInWorld() || !candidate->IsAlive() ||
+        candidate->GetMapId() != bot->GetMapId() || candidate->IsFriendlyTo(bot))
+        return false;
+
+    float const encounterRange = sPlayerbotAIConfig.sightDistance;
+
+    if (candidate->GetDistance2d(bot) <= encounterRange)
+        return true;
+
+    for (ObjectGuid const attackerGuid : attackers)
+    {
+        Unit* attacker = botAI->GetUnit(attackerGuid);
+        if (!attacker || !attacker->IsInWorld() || attacker->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (candidate->GetDistance2d(attacker) <= encounterRange)
+            return true;
+    }
+
+    return false;
+}
+
 inline GuidVector GetEncounterUnits(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     GuidVector units = attackers;
     if (!botAI)
         return units;
 
+    Player* bot = botAI->GetBot();
     GuidVector const& possibleTargetsNoLos =
         botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
     for (ObjectGuid const guid : possibleTargetsNoLos)
     {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsNearbyEncounterUnit(bot, botAI, unit, attackers))
+            continue;
+
         if (std::find(units.begin(), units.end(), guid) == units.end())
             units.push_back(guid);
     }
