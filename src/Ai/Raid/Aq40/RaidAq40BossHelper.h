@@ -296,6 +296,28 @@ inline GuidVector GetEncounterUnits(PlayerbotAI* botAI, GuidVector const& attack
     return units;
 }
 
+inline GuidVector GetActiveCombatUnits(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    GuidVector units;
+    if (!botAI)
+        return units;
+
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return units;
+
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+            continue;
+
+        units.push_back(guid);
+    }
+
+    return units;
+}
+
 inline bool HasAnyNamedUnit(PlayerbotAI* botAI, GuidVector const& units, std::initializer_list<char const*> names)
 {
     return FindUnitByAnyName(botAI, units, names) != nullptr;

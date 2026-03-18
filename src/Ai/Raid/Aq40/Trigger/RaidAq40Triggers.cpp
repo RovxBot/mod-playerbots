@@ -26,7 +26,7 @@ bool Aq40SkeramActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -128,7 +128,7 @@ bool Aq40SarturaActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -184,7 +184,7 @@ bool Aq40BugTrioActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "lord kri", "princess yauj", "vem", "yauj brood" });
 }
 
@@ -237,7 +237,7 @@ bool Aq40FankrissActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -269,7 +269,7 @@ bool Aq40TrashActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     if (encounterUnits.empty() || Aq40BossHelper::IsBossEncounterActive(botAI, encounterUnits))
         return false;
 
@@ -313,7 +313,7 @@ bool Aq40HuhuranActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -353,7 +353,7 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -470,7 +470,7 @@ bool Aq40OuroActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
 }
 
@@ -557,7 +557,7 @@ bool Aq40ViscidusActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "viscidus", "glob of viscidus", "toxic slime" });
 }
 
@@ -595,7 +595,7 @@ bool Aq40CthunActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
                                            { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
                                              "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });

@@ -92,14 +92,40 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     if (!Aq40BossHelper::IsInAq40(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-    if (encounterUnits.empty())
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    if (activeUnits.empty())
         return false;
 
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
     Unit* target = nullptr;
 
+    // Trash pulls should stay on trash logic unless a boss is actually engaged.
+    if (!Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
+    {
+        target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
+        if (!target)
+            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, activeUnits,
+                { "vekniss stinger", "vekniss guardian", "vekniss warrior", "vekniss drone", "vekniss soldier",
+                  "vekniss wasp", "obsidian nullifier", "obsidian eradicator", "qiraji mindslayer",
+                  "qiraji champion", "qiraji slayer", "anubisath warder", "anubisath defender",
+                  "anubisath sentinel", "qiraji lasher", "qiraji brainwasher", "qiraji battleguard",
+                  "qiraji scarab", "scarab", "scorpion", "spitting scarab" });
+
+        if (!target)
+        {
+            for (ObjectGuid const guid : activeUnits)
+            {
+                target = botAI->GetUnit(guid);
+                if (target)
+                    break;
+            }
+        }
+    }
+
     // Favor fight-ending or high-impact targets first.
-    target = Aq40BossActions::FindCthunTarget(botAI, encounterUnits);
+    if (!target)
+        target = Aq40BossActions::FindCthunTarget(botAI, encounterUnits);
     if (!target)
         target = Aq40BossActions::FindTwinEmperorsTarget(botAI, encounterUnits);
     if (!target)
