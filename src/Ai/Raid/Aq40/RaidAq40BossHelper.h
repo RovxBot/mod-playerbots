@@ -315,6 +315,25 @@ inline GuidVector GetActiveCombatUnits(PlayerbotAI* botAI, GuidVector const& att
         units.push_back(guid);
     }
 
+    GuidVector const& possibleTargetsNoLos =
+        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (ObjectGuid const guid : possibleTargetsNoLos)
+    {
+        if (std::find(units.begin(), units.end(), guid) != units.end())
+            continue;
+
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsNearbyEncounterUnit(bot, botAI, unit, attackers))
+            continue;
+
+        bool const isCombatRelevant =
+            unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || unit->GetThreatMgr().getCurrentVictim();
+        if (!isCombatRelevant)
+            continue;
+
+        units.push_back(guid);
+    }
+
     return units;
 }
 
