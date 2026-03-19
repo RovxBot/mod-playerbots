@@ -7,17 +7,25 @@
 
 namespace Aq40BossActions
 {
+Unit* FindBugTrioUnit(PlayerbotAI* botAI, char const* name)
+{
+    if (!botAI)
+        return nullptr;
+
+    return botAI->GetAiObjectContext()->GetValue<Unit*>("find target", name)->Get();
+}
+
 Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    Unit* yauj = AI_VALUE2(Unit*, "find target", "princess yauj");
+    Unit* yauj = FindBugTrioUnit(botAI, "princess yauj");
     if (yauj)
         return yauj;
 
-    Unit* vem = AI_VALUE2(Unit*, "find target", "vem");
+    Unit* vem = FindBugTrioUnit(botAI, "vem");
     if (vem)
         return vem;
 
-    return AI_VALUE2(Unit*, "find target", "lord kri");
+    return FindBugTrioUnit(botAI, "lord kri");
 }
 }  // namespace Aq40BossActions
 
@@ -25,17 +33,17 @@ namespace
 {
 Unit* FindBugTrioYauj(PlayerbotAI* botAI)
 {
-    return AI_VALUE2(Unit*, "find target", "princess yauj");
+    return Aq40BossActions::FindBugTrioUnit(botAI, "princess yauj");
 }
 
 Unit* FindBugTrioKri(PlayerbotAI* botAI)
 {
-    return AI_VALUE2(Unit*, "find target", "lord kri");
+    return Aq40BossActions::FindBugTrioUnit(botAI, "lord kri");
 }
 
 Unit* FindBugTrioVem(PlayerbotAI* botAI)
 {
-    return AI_VALUE2(Unit*, "find target", "vem");
+    return Aq40BossActions::FindBugTrioUnit(botAI, "vem");
 }
 }  // namespace
 
