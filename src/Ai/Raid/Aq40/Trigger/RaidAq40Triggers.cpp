@@ -184,8 +184,10 @@ bool Aq40BugTrioActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "lord kri", "princess yauj", "vem", "yauj brood" });
+    return AI_VALUE2(Unit*, "find target", "princess yauj") ||
+           AI_VALUE2(Unit*, "find target", "vem") ||
+           AI_VALUE2(Unit*, "find target", "lord kri") ||
+           AI_VALUE2(Unit*, "find target", "yauj brood");
 }
 
 bool Aq40BugTrioHealCastTrigger::IsActive()
@@ -193,22 +195,12 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess yauj"))
-            continue;
+    Unit* yauj = AI_VALUE2(Unit*, "find target", "princess yauj");
+    if (!yauj)
+        return false;
 
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!spell)
-            continue;
-
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
-            return true;
-    }
-
-    return false;
+    Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal });
 }
 
 bool Aq40BugTrioPoisonCloudTrigger::IsActive()
@@ -216,20 +208,13 @@ bool Aq40BugTrioPoisonCloudTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "lord kri"))
-            continue;
+    Unit* kri = AI_VALUE2(Unit*, "find target", "lord kri");
+    if (!kri)
+        return false;
 
-        bool poisonCloudWindow = unit->GetHealthPct() <= 5.0f ||
-                                 Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::BugTrioPoisonCloud });
-        if (poisonCloudWindow && bot->GetDistance2d(unit) <= 12.0f)
-            return true;
-    }
-
-    return false;
+    bool poisonCloudWindow = kri->GetHealthPct() <= 5.0f ||
+                             Aq40SpellIds::HasAnyAura(botAI, kri, { Aq40SpellIds::BugTrioPoisonCloud });
+    return poisonCloudWindow && bot->GetDistance2d(kri) <= 12.0f;
 }
 
 bool Aq40FankrissActiveTrigger::IsActive()

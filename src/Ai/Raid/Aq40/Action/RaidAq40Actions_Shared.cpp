@@ -100,8 +100,22 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
     Unit* target = nullptr;
 
+    Unit* yauj = AI_VALUE2(Unit*, "find target", "princess yauj");
+    Unit* vem = AI_VALUE2(Unit*, "find target", "vem");
+    Unit* kri = AI_VALUE2(Unit*, "find target", "lord kri");
+
+    if (yauj || vem || kri)
+    {
+        if (yauj)
+            target = yauj;
+        else if (vem)
+            target = vem;
+        else
+            target = kri;
+    }
+
     // Trash pulls should stay on trash logic unless a boss is actually engaged.
-    if (!Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
+    if (!target && !Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
     {
         target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
         if (!target)
@@ -155,8 +169,6 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
         }
     }
     if (!target)
-        target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
-    if (!target)
         target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target)
         target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
@@ -173,7 +185,10 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
         }
     }
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target)
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
     return Attack(target);
