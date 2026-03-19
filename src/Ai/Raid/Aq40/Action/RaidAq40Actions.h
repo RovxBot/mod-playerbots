@@ -89,6 +89,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40BugTrioInterruptHealAction : public AttackAction
+{
+public:
+    Aq40BugTrioInterruptHealAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 bug trio interrupt heal") {}
+    bool Execute(Event event) override;
+};
+
 class Aq40BugTrioAvoidPoisonCloudAction : public MovementAction
 {
 public:

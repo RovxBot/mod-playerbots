@@ -119,10 +119,11 @@ float Aq40BugTrioMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "lord kri", "princess yauj", "vem", "yauj brood" }))
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "lord kri", "princess yauj", "vem", "yauj brood" }))
         return 1.0f;
 
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     Unit* kri = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "lord kri" });
     if (!kri)
         return 1.0f;

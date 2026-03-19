@@ -36,9 +36,15 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // - follow stable kill order and prioritize Yauj heal interruptions
     // - move out from Kri poison cloud death zone
     triggers.push_back(new TriggerNode("aq40 bug trio active",
-        { NextAction("aq40 bug trio choose target", ACTION_RAID + 2) }));
+        {
+            NextAction("aq40 bug trio choose target", ACTION_RAID + 2),
+            NextAction("tremor totem", ACTION_RAID + 3),
+        }));
     triggers.push_back(new TriggerNode("aq40 bug trio heal cast",
-        { NextAction("aq40 bug trio choose target", ACTION_RAID + 4) }));
+        {
+            NextAction("aq40 bug trio interrupt heal", ACTION_RAID + 5),
+            NextAction("aq40 bug trio choose target", ACTION_RAID + 4),
+        }));
     triggers.push_back(new TriggerNode("aq40 bug trio poison cloud",
         { NextAction("aq40 bug trio avoid poison cloud", ACTION_RAID + 5) }));
 

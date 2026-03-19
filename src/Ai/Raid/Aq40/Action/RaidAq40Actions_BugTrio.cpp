@@ -7,51 +7,68 @@
 
 namespace Aq40BossActions
 {
-Unit* FindBugTrioUnit(PlayerbotAI* botAI, char const* name)
+Unit* FindBugTrioUnit(PlayerbotAI* botAI, GuidVector const& units, char const* name)
 {
     if (!botAI)
         return nullptr;
 
-    return botAI->GetAiObjectContext()->GetValue<Unit*>("find target", name)->Get();
+    return Aq40BossHelper::FindUnitByAnyName(botAI, units, { name });
 }
 
 Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    Unit* yauj = FindBugTrioUnit(botAI, "princess yauj");
+    Unit* yauj = FindBugTrioUnit(botAI, attackers, "princess yauj");
     if (yauj)
         return yauj;
 
-    Unit* vem = FindBugTrioUnit(botAI, "vem");
+    Unit* vem = FindBugTrioUnit(botAI, attackers, "vem");
     if (vem)
         return vem;
 
-    return FindBugTrioUnit(botAI, "lord kri");
+    return FindBugTrioUnit(botAI, attackers, "lord kri");
 }
 }  // namespace Aq40BossActions
 
 namespace
 {
-Unit* FindBugTrioYauj(PlayerbotAI* botAI)
+GuidVector GetBugTrioCombatUnits(PlayerbotAI* botAI)
 {
-    return Aq40BossActions::FindBugTrioUnit(botAI, "princess yauj");
+    if (!botAI)
+        return {};
+
+    GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+    return Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
 }
 
-Unit* FindBugTrioKri(PlayerbotAI* botAI)
+GuidVector GetBugTrioEncounterUnits(PlayerbotAI* botAI)
 {
-    return Aq40BossActions::FindBugTrioUnit(botAI, "lord kri");
+    if (!botAI)
+        return {};
+
+    GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+    return Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 }
 
-Unit* FindBugTrioVem(PlayerbotAI* botAI)
+Unit* FindBugTrioUnit(PlayerbotAI* botAI, GuidVector const& primaryUnits, GuidVector const& fallbackUnits, char const* name)
 {
-    return Aq40BossActions::FindBugTrioUnit(botAI, "vem");
+    Unit* unit = Aq40BossActions::FindBugTrioUnit(botAI, primaryUnits, name);
+    if (unit)
+        return unit;
+
+    return Aq40BossActions::FindBugTrioUnit(botAI, fallbackUnits, name);
 }
 }  // namespace
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
 {
-    Unit* yauj = FindBugTrioYauj(botAI);
-    Unit* kri = FindBugTrioKri(botAI);
-    Unit* vem = FindBugTrioVem(botAI);
+    GuidVector const activeUnits = GetBugTrioCombatUnits(botAI);
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
+        return false;
+
+    GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
+    Unit* yauj = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "princess yauj");
+    Unit* kri = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "lord kri");
+    Unit* vem = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "vem");
 
     Unit* target = nullptr;
     if (yauj)
@@ -79,12 +96,38 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
     return Attack(target);
 }
 
+bool Aq40BugTrioInterruptHealAction::Execute(Event /*event*/)
+{
+    GuidVector const activeUnits = GetBugTrioCombatUnits(botAI);
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
+        return false;
+
+    GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
+    Unit* yauj = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "princess yauj");
+    if (!yauj)
+        return false;
+
+    Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!spell || !Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") != yauj)
+        return Attack(yauj);
+
+    return botAI->DoSpecificAction("interrupt spell", Event(), true);
+}
+
 bool Aq40BugTrioAvoidPoisonCloudAction::Execute(Event /*event*/)
 {
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    Unit* kri = FindBugTrioKri(botAI);
+    GuidVector const activeUnits = GetBugTrioCombatUnits(botAI);
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
+        return false;
+
+    GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
+    Unit* kri = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "lord kri");
     if (!kri)
         return false;
 

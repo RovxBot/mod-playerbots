@@ -100,19 +100,8 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
     Unit* target = nullptr;
 
-    Unit* yauj = AI_VALUE2(Unit*, "find target", "princess yauj");
-    Unit* vem = AI_VALUE2(Unit*, "find target", "vem");
-    Unit* kri = AI_VALUE2(Unit*, "find target", "lord kri");
-
-    if (yauj || vem || kri)
-    {
-        if (yauj)
-            target = yauj;
-        else if (vem)
-            target = vem;
-        else
-            target = kri;
-    }
+    if (Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
+        target = Aq40BossActions::FindBugTrioTarget(botAI, activeUnits);
 
     // Trash pulls should stay on trash logic unless a boss is actually engaged.
     if (!target && !Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))

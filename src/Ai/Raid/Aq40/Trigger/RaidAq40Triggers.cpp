@@ -184,10 +184,8 @@ bool Aq40BugTrioActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    return AI_VALUE2(Unit*, "find target", "princess yauj") ||
-           AI_VALUE2(Unit*, "find target", "vem") ||
-           AI_VALUE2(Unit*, "find target", "lord kri") ||
-           AI_VALUE2(Unit*, "find target", "yauj brood");
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "princess yauj", "vem", "lord kri", "yauj brood" });
 }
 
 bool Aq40BugTrioHealCastTrigger::IsActive()
@@ -195,7 +193,8 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive())
         return false;
 
-    Unit* yauj = AI_VALUE2(Unit*, "find target", "princess yauj");
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* yauj = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "princess yauj" });
     if (!yauj)
         return false;
 
@@ -208,7 +207,8 @@ bool Aq40BugTrioPoisonCloudTrigger::IsActive()
     if (!Aq40BugTrioActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    Unit* kri = AI_VALUE2(Unit*, "find target", "lord kri");
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* kri = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "lord kri" });
     if (!kri)
         return false;
 

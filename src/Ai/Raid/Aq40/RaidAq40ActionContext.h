@@ -18,6 +18,7 @@ public:
         creators["aq40 sartura choose target"] = &RaidAq40ActionContext::sartura_choose_target;
         creators["aq40 sartura avoid whirlwind"] = &RaidAq40ActionContext::sartura_avoid_whirlwind;
         creators["aq40 bug trio choose target"] = &RaidAq40ActionContext::bug_trio_choose_target;
+        creators["aq40 bug trio interrupt heal"] = &RaidAq40ActionContext::bug_trio_interrupt_heal;
         creators["aq40 bug trio avoid poison cloud"] = &RaidAq40ActionContext::bug_trio_avoid_poison_cloud;
         creators["aq40 fankriss choose target"] = &RaidAq40ActionContext::fankriss_choose_target;
         creators["aq40 trash choose target"] = &RaidAq40ActionContext::trash_choose_target;
@@ -67,6 +68,10 @@ private:
         return new Aq40SarturaAvoidWhirlwindAction(botAI);
     }
     static Action* bug_trio_choose_target(PlayerbotAI* botAI) { return new Aq40BugTrioChooseTargetAction(botAI); }
+    static Action* bug_trio_interrupt_heal(PlayerbotAI* botAI)
+    {
+        return new Aq40BugTrioInterruptHealAction(botAI);
+    }
     static Action* bug_trio_avoid_poison_cloud(PlayerbotAI* botAI)
     {
         return new Aq40BugTrioAvoidPoisonCloudAction(botAI);
