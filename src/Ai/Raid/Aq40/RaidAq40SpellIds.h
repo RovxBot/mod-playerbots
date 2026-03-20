@@ -13,6 +13,7 @@ static constexpr uint32 SkeramTrueFulfillment = 785;
 static constexpr uint32 BugTrioToxicVolley = 25812;
 static constexpr uint32 BugTrioPoisonCloud = 26590;
 static constexpr uint32 BugTrioYaujHeal = 25807;
+static constexpr uint32 BugTrioYaujFear = 26580;
 static constexpr uint32 SarturaWhirlwind = 26083;
 static constexpr uint32 SarturaGuardWhirlwind = 26038;
 static constexpr uint32 Aq40DefenderMeteor = 26558;

@@ -21,6 +21,7 @@ public:
         creators["aq40 sartura whirlwind"] = &RaidAq40TriggerContext::sartura_whirlwind;
         creators["aq40 bug trio active"] = &RaidAq40TriggerContext::bug_trio_active;
         creators["aq40 bug trio heal cast"] = &RaidAq40TriggerContext::bug_trio_heal_cast;
+        creators["aq40 bug trio fear risk"] = &RaidAq40TriggerContext::bug_trio_fear_risk;
         creators["aq40 bug trio poison cloud"] = &RaidAq40TriggerContext::bug_trio_poison_cloud;
         creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
         creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
@@ -63,6 +64,7 @@ private:
     static Trigger* sartura_whirlwind(PlayerbotAI* botAI) { return new Aq40SarturaWhirlwindTrigger(botAI); }
     static Trigger* bug_trio_active(PlayerbotAI* botAI) { return new Aq40BugTrioActiveTrigger(botAI); }
     static Trigger* bug_trio_heal_cast(PlayerbotAI* botAI) { return new Aq40BugTrioHealCastTrigger(botAI); }
+    static Trigger* bug_trio_fear_risk(PlayerbotAI* botAI) { return new Aq40BugTrioFearTrigger(botAI); }
     static Trigger* bug_trio_poison_cloud(PlayerbotAI* botAI) { return new Aq40BugTrioPoisonCloudTrigger(botAI); }
     static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
     static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }

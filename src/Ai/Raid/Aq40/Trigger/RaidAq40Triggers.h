@@ -82,6 +82,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40BugTrioFearTrigger : public Trigger
+{
+public:
+    Aq40BugTrioFearTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 bug trio fear risk") {}
+    bool IsActive() override;
+};
+
 class Aq40BugTrioPoisonCloudTrigger : public Trigger
 {
 public:

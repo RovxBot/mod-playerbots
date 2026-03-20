@@ -43,6 +43,25 @@ bool GetAq40TrashDanger(PlayerbotAI* botAI, Player* bot, GuidVector const& encou
 
     return false;
 }
+
+bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
+                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
+}
+
+bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!IsSarturaMob(botAI, unit))
+        return false;
+
+    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
+           Aq40SpellIds::HasAnyAura(botAI, unit,
+               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+           botAI->HasAura("whirlwind", unit);
+}
 }  // namespace
 
 float Aq40GenericMultiplier::GetValue(Action* action)
@@ -159,25 +178,16 @@ float Aq40SarturaMultiplier::GetValue(Action* action)
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     bool whirlwindRisk = false;
+    bool const isBackline = botAI->IsRanged(bot) || botAI->IsHeal(bot);
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
+        if (!IsSarturaSpinning(botAI, unit))
             continue;
 
-        bool const isSarturaMob = botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
-                                  botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard");
-        if (!isSarturaMob || bot->GetDistance2d(unit) > 18.0f)
-            continue;
-
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        bool const spinning =
-            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
-            Aq40SpellIds::HasAnyAura(botAI, unit,
-                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
-            botAI->HasAura("whirlwind", unit);
-        if (spinning)
+        float const distance = bot->GetDistance2d(unit);
+        bool const isClosingOnBot = unit->GetVictim() == bot || unit->GetTarget() == bot->GetGUID();
+        if (distance <= 18.0f || (isBackline && isClosingOnBot && distance <= 24.0f))
         {
             whirlwindRisk = true;
             break;
@@ -280,6 +290,9 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         return 1.0f;
 
     std::string const actionName = action->getName();
+    if (actionName == "aq40 choose target")
+        return 0.0f;
+
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
         actionName == "aq40 twin emperors hold split" ||

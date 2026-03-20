@@ -14,6 +14,25 @@ bool Aq40EncounterEngaged(PlayerbotAI* botAI, Player* bot)
     return Aq40BossHelper::IsInAq40(bot) &&
            !botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty();
 }
+
+bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
+                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
+}
+
+bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!IsSarturaMob(botAI, unit))
+        return false;
+
+    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
+           Aq40SpellIds::HasAnyAura(botAI, unit,
+               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+           botAI->HasAura("whirlwind", unit);
+}
 }  // namespace
 
 bool Aq40EngageTrigger::IsActive()
@@ -148,31 +167,17 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
     if (!Aq40SarturaActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
+    bool const isBackline = botAI->IsRanged(bot) || botAI->IsHeal(bot);
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
+        if (!IsSarturaSpinning(botAI, unit))
             continue;
 
-        bool isSarturaMob = botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
-                            botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard");
-        if (!isSarturaMob)
-            continue;
-
-        // Use broad detection to avoid core-script dependencies:
-        // either active cast window or whirlwind aura.
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        bool const spinning =
-            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
-            Aq40SpellIds::HasAnyAura(botAI, unit,
-                                     { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
-            botAI->HasAura("whirlwind", unit);
-        if (!spinning)
-            continue;
-
-        if (bot->GetDistance2d(unit) <= 14.0f)
+        float const distance = bot->GetDistance2d(unit);
+        bool const isClosingOnBot = unit->GetVictim() == bot || unit->GetTarget() == bot->GetGUID();
+        if (distance <= 14.0f || (isBackline && isClosingOnBot && distance <= 24.0f))
             return true;
     }
 
@@ -200,6 +205,40 @@ bool Aq40BugTrioHealCastTrigger::IsActive()
 
     Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal });
+}
+
+bool Aq40BugTrioFearTrigger::IsActive()
+{
+    if (!Aq40BugTrioActiveTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* yauj = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "princess yauj" });
+    if (!yauj)
+        return false;
+
+    Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujFear }))
+        return true;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (bot->GetDistance2d(member) > 30.0f)
+            continue;
+
+        if (Aq40SpellIds::HasAnyAura(botAI, member, { Aq40SpellIds::BugTrioYaujFear }) || member->HasFearAura())
+            return true;
+    }
+
+    return false;
 }
 
 bool Aq40BugTrioPoisonCloudTrigger::IsActive()
@@ -338,19 +377,8 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash") ||
-            botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
-            return true;
-    }
-
-    return false;
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" });
 }
 
 bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()

@@ -48,15 +48,6 @@ GuidVector GetBugTrioEncounterUnits(PlayerbotAI* botAI)
     GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     return Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 }
-
-Unit* FindBugTrioUnit(PlayerbotAI* botAI, GuidVector const& primaryUnits, GuidVector const& fallbackUnits, char const* name)
-{
-    Unit* unit = Aq40BossActions::FindBugTrioUnit(botAI, primaryUnits, name);
-    if (unit)
-        return unit;
-
-    return Aq40BossActions::FindBugTrioUnit(botAI, fallbackUnits, name);
-}
 }  // namespace
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
@@ -66,26 +57,7 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* yauj = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "princess yauj");
-    Unit* kri = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "lord kri");
-    Unit* vem = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "vem");
-
-    Unit* target = nullptr;
-    if (yauj)
-    {
-        Spell* spell = yauj->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujHeal }))
-            target = yauj;
-    }
-
-    // Kill order: Yauj first (stop heals), then Vem, then Kri last
-    // (delay poison cloud as long as possible).
-    if (!target && yauj)
-        target = yauj;
-    if (!target && vem)
-        target = vem;
-    if (!target && kri)
-        target = kri;
+    Unit* target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
 
     if (!target)
         return false;
@@ -103,7 +75,7 @@ bool Aq40BugTrioInterruptHealAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* yauj = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "princess yauj");
+    Unit* yauj = Aq40BossActions::FindBugTrioUnit(botAI, encounterUnits, "princess yauj");
     if (!yauj)
         return false;
 
@@ -127,7 +99,7 @@ bool Aq40BugTrioAvoidPoisonCloudAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* kri = FindBugTrioUnit(botAI, activeUnits, encounterUnits, "lord kri");
+    Unit* kri = Aq40BossActions::FindBugTrioUnit(botAI, encounterUnits, "lord kri");
     if (!kri)
         return false;
 

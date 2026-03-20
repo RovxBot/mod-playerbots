@@ -8,6 +8,28 @@
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 
+namespace
+{
+bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
+                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
+}
+
+bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!IsSarturaMob(botAI, unit))
+        return false;
+
+    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
+           Aq40SpellIds::HasAnyAura(botAI, unit,
+               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+           botAI->HasAura("whirlwind", unit);
+}
+}  // namespace
+
 namespace Aq40BossActions
 {
 Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
@@ -101,7 +123,7 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     Unit* target = nullptr;
 
     if (Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
-        target = Aq40BossActions::FindBugTrioTarget(botAI, activeUnits);
+        target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
 
     // Trash pulls should stay on trash logic unless a boss is actually engaged.
     if (!target && !Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
@@ -335,18 +357,31 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-    Unit* threat = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
-    if (!threat)
+    Unit* threat = nullptr;
+    float closestDistance = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : encounterUnits)
     {
-        std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
-        if (!guards.empty())
-            threat = guards.front();
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsSarturaSpinning(botAI, unit))
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        bool const isCloser = distance < closestDistance;
+        bool const isChasingBot = unit->GetVictim() == bot || unit->GetTarget() == bot->GetGUID();
+        bool const currentThreatIsChasing = threat && (threat->GetVictim() == bot || threat->GetTarget() == bot->GetGUID());
+        if (!threat || (isChasingBot && !currentThreatIsChasing) || (isChasingBot == currentThreatIsChasing && isCloser))
+        {
+            threat = unit;
+            closestDistance = distance;
+        }
     }
     if (!threat)
         return false;
 
+    bool const isBackline = botAI->IsRanged(bot) || botAI->IsHeal(bot);
+    bool const isChasingBot = threat->GetVictim() == bot || threat->GetTarget() == bot->GetGUID();
     float currentDistance = bot->GetDistance2d(threat);
-    float desiredDistance = 18.0f;
+    float desiredDistance = (isBackline && isChasingBot) ? 24.0f : 18.0f;
     if (currentDistance >= desiredDistance)
         return false;
 
