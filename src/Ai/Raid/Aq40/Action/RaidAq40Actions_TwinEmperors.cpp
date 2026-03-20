@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 
+#include "CreatureAI.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
