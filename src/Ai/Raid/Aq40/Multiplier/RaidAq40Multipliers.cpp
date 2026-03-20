@@ -3,12 +3,17 @@
 #include "Action.h"
 #include "AttackAction.h"
 #include "ChooseTargetActions.h"
+#include "DKActions.h"
+#include "DruidBearActions.h"
 #include "FollowActions.h"
+#include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "ObjectGuid.h"
+#include "PaladinActions.h"
 #include "Playerbots.h"
 #include "ReachTargetActions.h"
+#include "WarriorActions.h"
 #include "../Action/RaidAq40Actions.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
@@ -298,11 +303,40 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         actionName == "aq40 twin emperors hold split" ||
         actionName == "aq40 twin emperors warlock tank" ||
         actionName == "aq40 twin emperors avoid arcane burst" ||
-        actionName == "aq40 twin emperors enforce separation";
+        actionName == "aq40 twin emperors avoid blizzard" ||
+        actionName == "aq40 twin emperors enforce separation" ||
+        actionName == "aq40 twin emperors pet control";
 
     if (isTwinControlAction)
         return 1.0f;
 
+    bool const blizzardRisk = (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
+                               (botAI->IsRanged(bot) || botAI->IsHeal(bot)) &&
+                               Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }));
+    if (blizzardRisk)
+    {
+        if (actionName == "aq40 twin emperors avoid blizzard")
+            return 4.0f;
+
+        if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+            dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action) ||
+            (dynamic_cast<MovementAction*>(action) &&
+             !dynamic_cast<Aq40TwinEmperorsAvoidBlizzardAction*>(action)))
+            return 0.0f;
+    }
+
+    // Twin Emperors are immune to taunt — suppress all taunt abilities to
+    // avoid wasting GCDs.
+    if (dynamic_cast<CastTauntAction*>(action) ||
+        dynamic_cast<CastDarkCommandAction*>(action) ||
+        dynamic_cast<CastGrowlAction*>(action) ||
+        dynamic_cast<CastHandOfReckoningAction*>(action))
+        return 0.0f;
+    // Suppress explicit pet attack commands — pet control is handled by
+    // the dedicated pet control action which sets the correct react state.
+    if (dynamic_cast<PetAttackAction*>(action))
+        return 0.0f;
     if (dynamic_cast<CombatFormationMoveAction*>(action) ||
         dynamic_cast<FollowAction*>(action) ||
         dynamic_cast<FleeAction*>(action))

@@ -165,6 +165,26 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinEmperorsBlizzardRiskTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsBlizzardRiskTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors blizzard risk")
+    {
+    }
+    bool IsActive() override;
+};
+
+class Aq40TwinEmperorsHealBrotherTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsHealBrotherTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors heal brother")
+    {
+    }
+    bool IsActive() override;
+};
+
 class Aq40TwinEmperorsNeedSeparationTrigger : public Trigger
 {
 public:

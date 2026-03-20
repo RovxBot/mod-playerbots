@@ -33,6 +33,10 @@ public:
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
         creators["aq40 twin emperors arcane burst risk"] =
             &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
+        creators["aq40 twin emperors blizzard risk"] =
+            &RaidAq40TriggerContext::twin_emperors_blizzard_risk;
+        creators["aq40 twin emperors heal brother"] =
+            &RaidAq40TriggerContext::twin_emperors_heal_brother;
         creators["aq40 twin emperors need separation"] =
             &RaidAq40TriggerContext::twin_emperors_need_separation;
         creators["aq40 ouro active"] = &RaidAq40TriggerContext::ouro_active;
@@ -80,6 +84,14 @@ private:
     static Trigger* twin_emperors_arcane_burst_risk(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsArcaneBurstRiskTrigger(botAI);
+    }
+    static Trigger* twin_emperors_blizzard_risk(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsBlizzardRiskTrigger(botAI);
+    }
+    static Trigger* twin_emperors_heal_brother(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsHealBrotherTrigger(botAI);
     }
     static Trigger* twin_emperors_need_separation(PlayerbotAI* botAI)
     {

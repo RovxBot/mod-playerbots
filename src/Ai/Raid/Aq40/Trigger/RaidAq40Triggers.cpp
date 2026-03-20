@@ -33,6 +33,40 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
            botAI->HasAura("whirlwind", unit);
 }
+
+Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits,
+                            Aq40Helpers::TwinAssignments const& assignment)
+{
+    Unit* sideBug = nullptr;
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* bug = botAI->GetUnit(guid);
+        if (!bug || !bug->IsAlive() ||
+            !Aq40BossHelper::IsUnitNamedAny(botAI, bug, { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" }) ||
+            !Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+            continue;
+
+        bool const isMutateBug = botAI->EqualLowercaseName(bug->GetName(), "mutate bug");
+        if (!sideBug)
+        {
+            sideBug = bug;
+            continue;
+        }
+
+        bool const chosenIsMutate = botAI->EqualLowercaseName(sideBug->GetName(), "mutate bug");
+        if (isMutateBug != chosenIsMutate)
+        {
+            if (isMutateBug)
+                sideBug = bug;
+            continue;
+        }
+
+        if (bug->GetHealthPct() < sideBug->GetHealthPct())
+            sideBug = bug;
+    }
+
+    return sideBug;
+}
 }  // namespace
 
 bool Aq40EngageTrigger::IsActive()
@@ -408,23 +442,39 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     }
 
     if (isWarlockTank)
-        return assignment.sideEmperor == assignment.veklor && currentTarget != assignment.veklor;
+        return assignment.sideEmperor == assignment.veklor ? currentTarget != assignment.veklor : currentTarget != nullptr;
 
     if (isMeleeTank)
-        return assignment.sideEmperor == assignment.veknilash && currentTarget != assignment.veknilash;
+        return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : currentTarget != nullptr;
 
     if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
-        return false;
+    {
+        Unit* sideBug = FindTwinSideBugTarget(botAI, encounterUnits, assignment);
+        if (!sideBug)
+            return false;
+
+        return currentTarget != sideBug;
+    }
+
+    Unit* sideBug = FindTwinSideBugTarget(botAI, encounterUnits, assignment);
 
     if (botAI->IsRanged(bot))
+    {
+        if (assignment.sideEmperor != assignment.veklor)
+            return currentTarget != nullptr;
+
+        if (sideBug)
+            return currentTarget != sideBug;
+
         return currentTarget != assignment.veklor;
+    }
 
     Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
-    if (mutateBug &&
+    if (assignment.sideEmperor == assignment.veknilash && mutateBug &&
         Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
         return currentTarget != mutateBug;
 
-    return currentTarget != assignment.veknilash;
+    return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : currentTarget != nullptr;
 }
 
 bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
@@ -452,6 +502,54 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     return false;
 }
 
+bool Aq40TwinEmperorsBlizzardRiskTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
+        return false;
+
+    if ((!botAI->IsRanged(bot) && !botAI->IsHeal(bot)) || Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
+        return false;
+
+    if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }))
+        return true;
+
+    Spell* spell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return spell &&
+           Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinBlizzard }) &&
+           bot->GetDistance2d(assignment.veklor) <= 36.0f;
+}
+
+bool Aq40TwinEmperorsHealBrotherTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
+        return false;
+
+    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
+    bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    if (!isWarlockTank && !isMeleeTank)
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor || !assignment.veknilash)
+        return false;
+
+    Spell* veklorSpell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    Spell* veknilashSpell = assignment.veknilash->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    bool const healBrotherCast =
+        (veklorSpell && Aq40SpellIds::MatchesAnySpellId(veklorSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother })) ||
+        (veknilashSpell && Aq40SpellIds::MatchesAnySpellId(veknilashSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }));
+    if (healBrotherCast)
+        return true;
+
+    return assignment.veklor->GetDistance2d(assignment.veknilash) < 60.0f;
+}
+
 bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
 {
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
@@ -475,7 +573,7 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
     if (!veklor || !veknilash)
         return false;
 
-    return veklor->GetDistance2d(veknilash) < 20.0f;
+    return veklor->GetDistance2d(veknilash) < 60.0f;
 }
 
 bool Aq40OuroActiveTrigger::IsActive()

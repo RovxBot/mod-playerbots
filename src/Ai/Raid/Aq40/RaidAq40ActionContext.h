@@ -30,8 +30,12 @@ public:
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
         creators["aq40 twin emperors avoid arcane burst"] =
             &RaidAq40ActionContext::twin_emperors_avoid_arcane_burst;
+        creators["aq40 twin emperors avoid blizzard"] =
+            &RaidAq40ActionContext::twin_emperors_avoid_blizzard;
         creators["aq40 twin emperors enforce separation"] =
             &RaidAq40ActionContext::twin_emperors_enforce_separation;
+        creators["aq40 twin emperors pet control"] =
+            &RaidAq40ActionContext::twin_emperors_pet_control;
         creators["aq40 ouro choose target"] = &RaidAq40ActionContext::ouro_choose_target;
         creators["aq40 ouro hold melee contact"] = &RaidAq40ActionContext::ouro_hold_melee_contact;
         creators["aq40 ouro avoid sweep"] = &RaidAq40ActionContext::ouro_avoid_sweep;
@@ -97,9 +101,17 @@ private:
     {
         return new Aq40TwinEmperorsAvoidArcaneBurstAction(botAI);
     }
+    static Action* twin_emperors_avoid_blizzard(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsAvoidBlizzardAction(botAI);
+    }
     static Action* twin_emperors_enforce_separation(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsEnforceSeparationAction(botAI);
+    }
+    static Action* twin_emperors_pet_control(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsPetControlAction(botAI);
     }
     static Action* ouro_choose_target(PlayerbotAI* botAI) { return new Aq40OuroChooseTargetAction(botAI); }
     static Action* ouro_hold_melee_contact(PlayerbotAI* botAI)

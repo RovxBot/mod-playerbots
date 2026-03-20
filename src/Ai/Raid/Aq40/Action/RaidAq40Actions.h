@@ -181,11 +181,31 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsAvoidBlizzardAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsAvoidBlizzardAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors avoid blizzard")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinEmperorsEnforceSeparationAction : public AttackAction
 {
 public:
     Aq40TwinEmperorsEnforceSeparationAction(PlayerbotAI* botAI)
         : AttackAction(botAI, "aq40 twin emperors enforce separation")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsPetControlAction : public Action
+{
+public:
+    Aq40TwinEmperorsPetControlAction(PlayerbotAI* botAI)
+        : Action(botAI, "aq40 twin emperors pet control")
     {
     }
     bool Execute(Event event) override;
