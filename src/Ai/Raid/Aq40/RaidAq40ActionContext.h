@@ -23,6 +23,7 @@ public:
         creators["aq40 fankriss choose target"] = &RaidAq40ActionContext::fankriss_choose_target;
         creators["aq40 trash choose target"] = &RaidAq40ActionContext::trash_choose_target;
         creators["aq40 trash avoid dangerous aoe"] = &RaidAq40ActionContext::trash_avoid_dangerous_aoe;
+        creators["aq40 trash control mind control"] = &RaidAq40ActionContext::trash_control_mind_control;
         creators["aq40 huhuran choose target"] = &RaidAq40ActionContext::huhuran_choose_target;
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
         creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
@@ -85,6 +86,10 @@ private:
     static Action* trash_avoid_dangerous_aoe(PlayerbotAI* botAI)
     {
         return new Aq40TrashAvoidDangerousAoeAction(botAI);
+    }
+    static Action* trash_control_mind_control(PlayerbotAI* botAI)
+    {
+        return new Aq40TrashControlMindControlAction(botAI);
     }
     static Action* huhuran_choose_target(PlayerbotAI* botAI) { return new Aq40HuhuranChooseTargetAction(botAI); }
     static Action* huhuran_poison_spread(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonSpreadAction(botAI); }

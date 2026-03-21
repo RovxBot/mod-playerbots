@@ -124,6 +124,20 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TrashMindslayerCastTrigger : public Trigger
+{
+public:
+    Aq40TrashMindslayerCastTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash mindslayer cast") {}
+    bool IsActive() override;
+};
+
+class Aq40TrashMindControlTrigger : public Trigger
+{
+public:
+    Aq40TrashMindControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash mc detected") {}
+    bool IsActive() override;
+};
+
 class Aq40HuhuranActiveTrigger : public Trigger
 {
 public:

@@ -56,10 +56,17 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 4) }));
 
     // AQ40 trash baseline strategy:
-    // - prioritize disruptive casters first (nullifier/eradicator)
+    // - kill mindslayers first (deadly AoE Mind Blast)
+    // - prioritize disruptive casters (nullifier/eradicator)
+    // - switch to interrupt Mind Blast casts immediately
+    // - CC mind-controlled players from Cause Insanity
     // - spread out of high-danger point-blank trash AoE casts
     triggers.push_back(new TriggerNode("aq40 trash active",
         { NextAction("aq40 trash choose target", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("aq40 trash mindslayer cast",
+        { NextAction("aq40 trash choose target", ACTION_RAID + 6) }));
+    triggers.push_back(new TriggerNode("aq40 trash mc detected",
+        { NextAction("aq40 trash control mind control", ACTION_RAID + 5) }));
     triggers.push_back(new TriggerNode("aq40 trash dangerous aoe",
         { NextAction("aq40 trash avoid dangerous aoe", ACTION_RAID + 5) }));
 

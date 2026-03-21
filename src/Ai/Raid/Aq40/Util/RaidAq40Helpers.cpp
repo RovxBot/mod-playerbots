@@ -237,11 +237,35 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     if (!result.veklor || !result.veknilash)
         return result;
 
+    TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
+
+    // DPS follows their assigned boss across the room after teleport.
+    //  - Ranged DPS → always Vek'lor  (caster, immune to physical)
+    //  - Melee DPS  → always Vek'nilash (melee, immune to magic)
+    if (cohort == TwinRoleCohort::Other)
+    {
+        if (PlayerbotAI::IsRanged(bot))
+        {
+            result.sideEmperor = result.veklor;
+            result.oppositeEmperor = result.veknilash;
+        }
+        else
+        {
+            result.sideEmperor = result.veknilash;
+            result.oppositeEmperor = result.veklor;
+        }
+        UpdateTwinTeleportState(bot, result);
+        return result;
+    }
+
+    // Tanks and healers are assigned a stable geographic room side.
+    // Each side has one warlock tank and one melee tank.  When its boss
+    // is the correct type the tank is "active" — otherwise it stands back.
+    // Healers stay on their assigned side healing whoever is there.
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
-    // Cache the split axis and only recalculate when bosses are well-separated
-    // (>15 yards apart). During teleport they pass through the center, causing
-    // the dominant axis to flicker momentarily.
+    // Determine which axis separates the two bosses (cache during teleport
+    // to avoid flicker as the bosses pass through the center).
     float separation = result.veklor->GetDistance2d(result.veknilash);
     bool splitByX;
     auto axisIt = sCachedTwinSplitByX.find(instanceId);
@@ -253,7 +277,7 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     }
     else if (axisIt != sCachedTwinSplitByX.end())
     {
-        splitByX = axisIt->second;  // Use cached axis during teleport
+        splitByX = axisIt->second;
     }
     else
     {
@@ -303,21 +327,30 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
     if (!bot || !assignment.sideEmperor)
         return false;
 
-    uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
     bool const needWarlockTank = assignment.veklor && assignment.sideEmperor == assignment.veklor;
     TwinRoleCohort const requiredCohort = needWarlockTank ? TwinRoleCohort::WarlockTank : TwinRoleCohort::MeleeTank;
-    Player* assignedTank = FindTwinAssignedPlayerForSide(bot, requiredCohort, sideIndex);
-    if (!assignedTank)
-        return false;
-
     float const readyRange = needWarlockTank ? 34.0f : 8.0f;
-    if (assignment.sideEmperor->GetVictim() == assignedTank)
-        return true;
 
-    if (assignedTank->GetDistance2d(assignment.sideEmperor) > readyRange)
-        return false;
+    // Check whether ANY tank of the required type is actively engaging the boss.
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !IsTwinRoleMatch(requiredCohort, member))
+            continue;
 
-    return assignedTank->GetTarget() == assignment.sideEmperor->GetGUID();
+        if (assignment.sideEmperor->GetVictim() == member)
+            return true;
+
+        if (member->GetDistance2d(assignment.sideEmperor) <= readyRange &&
+            member->GetTarget() == assignment.sideEmperor->GetGUID())
+            return true;
+    }
+
+    return false;
 }
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI)

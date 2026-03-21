@@ -46,9 +46,9 @@ std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& atta
 Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     std::initializer_list<std::initializer_list<char const*>> priority = {
+        { "qiraji mindslayer" },
         { "obsidian nullifier" },
         { "obsidian eradicator" },
-        { "qiraji mindslayer" },
         { "qiraji champion" },
         { "qiraji slayer" },
         { "anubisath warder" },
@@ -128,7 +128,7 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
     // Trash pulls should stay on trash logic unless a boss is actually engaged.
     if (!target && !Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
     {
-        target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
+        target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
         if (!target)
             target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, activeUnits,
                 { "vekniss stinger", "vekniss guardian", "vekniss warrior", "vekniss drone", "vekniss soldier",
@@ -188,7 +188,7 @@ bool Aq40ChooseTargetAction::Execute(Event /*event*/)
 
     if (!target)
     {
-        for (ObjectGuid const guid : encounterUnits)
+        for (ObjectGuid const guid : activeUnits)
         {
             target = botAI->GetUnit(guid);
             if (target)
@@ -421,21 +421,30 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 {
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
     if (encounterUnits.empty())
         return false;
 
+    // Prioritize interrupting Mindslayer Mind Blast (deadly AoE) or Nullifier Nullify.
+    // Use the wider encounter list so we detect casts from nearby mobs even if they
+    // haven't entered our threat table yet.
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier"))
+        if (!unit)
             continue;
 
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         if (!spell)
             continue;
 
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }))
+        bool const isMindBlast = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
+        bool const isNullify = botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier") &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify });
+
+        if (isMindBlast || isNullify)
         {
             if (AI_VALUE(Unit*, "current target") == unit)
                 return false;
@@ -444,7 +453,10 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         }
     }
 
-    Unit* target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
+    // Use combat-filtered units for general targeting so passive mobs
+    // (e.g. idle scarabs/scorpions) are ignored until they actually aggro.
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    Unit* target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
@@ -510,4 +522,49 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
         return false;
 
     return MoveAway(danger, desiredDistance - currentDistance);
+}
+
+bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
+{
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+
+    // Try to CC a mind-controlled player (polymorph, fear, etc.)
+    Unit* mcTarget = nullptr;
+    float closestDist = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || player == bot)
+            continue;
+
+        if (!player->IsCharmed() || player->IsPolymorphed())
+            continue;
+
+        float const dist = bot->GetDistance2d(player);
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            mcTarget = player;
+        }
+    }
+
+    if (mcTarget)
+    {
+        static std::initializer_list<char const*> ccSpells = {
+            "polymorph", "fear", "hibernate", "freezing trap", "repentance"
+        };
+        for (char const* spell : ccSpells)
+        {
+            if (botAI->CanCastSpell(spell, mcTarget) && botAI->CastSpell(spell, mcTarget))
+                return true;
+        }
+    }
+
+    // Fallback: resume normal trash targeting.
+    Unit* target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
+    if (!target || AI_VALUE(Unit*, "current target") == target)
+        return false;
+
+    return Attack(target);
 }

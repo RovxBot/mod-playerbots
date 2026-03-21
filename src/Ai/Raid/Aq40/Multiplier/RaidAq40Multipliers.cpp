@@ -342,6 +342,12 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         dynamic_cast<FleeAction*>(action))
         return 0.0f;
 
+    // Suppress reach-target actions that would push bots toward the wrong
+    // boss (pattern from Bug Trio and Sartura multipliers).
+    if (dynamic_cast<ReachTargetAction*>(action) ||
+        dynamic_cast<CastReachTargetSpellAction*>(action))
+        return 0.0f;
+
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
         return 0.0f;
 

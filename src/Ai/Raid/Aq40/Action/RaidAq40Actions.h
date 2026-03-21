@@ -130,6 +130,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TrashControlMindControlAction : public AttackAction
+{
+public:
+    Aq40TrashControlMindControlAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "aq40 trash control mind control")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40HuhuranChooseTargetAction : public AttackAction
 {
 public:
@@ -210,6 +220,7 @@ public:
     }
     bool Execute(Event event) override;
 };
+
 
 class Aq40OuroChooseTargetAction : public AttackAction
 {

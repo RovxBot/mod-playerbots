@@ -366,6 +366,46 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
     return false;
 }
 
+bool Aq40TrashMindslayerCastTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TrashMindControlTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || player == bot)
+            continue;
+
+        if (player->IsCharmed() && !player->IsPolymorphed())
+            return true;
+    }
+
+    return false;
+}
+
 bool Aq40HuhuranActiveTrigger::IsActive()
 {
     if (!Aq40EncounterEngaged(botAI, bot))

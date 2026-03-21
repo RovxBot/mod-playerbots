@@ -6,6 +6,7 @@
 
 #include "CreatureAI.h"
 #include "../RaidAq40BossHelper.h"
+#include "RaidBossHelpers.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
 
@@ -29,13 +30,6 @@ std::vector<Unit*> FindTwinSideBugs(PlayerbotAI* botAI, GuidVector const& attack
 
 namespace
 {
-bool IsCurrentAttackCommitted(Player* bot, Unit* target)
-{
-    return target && bot &&
-           bot->GetTarget() == target->GetGUID() &&
-           bot->GetVictim() == target;
-}
-
 bool IsTwinAssignedSideBoss(Aq40Helpers::TwinAssignments const& assignment, Unit* boss)
 {
     return boss && assignment.sideEmperor == boss;
@@ -128,16 +122,35 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    // RTI marking: the melee tank marks both bosses so the raid has
+    // clear icons to follow.  Diamond = Vek'nilash (physical), Square = Vek'lor (magic).
+    // Avoid Skull — it is a universal "primary target" marker that could mislead
+    // human players or interact with other bot targeting logic.
+    if (isMeleeTank && assignment.veknilash && assignment.veklor)
+    {
+        MarkTargetWithDiamond(bot, assignment.veknilash);
+        MarkTargetWithSquare(bot, assignment.veklor);
+    }
+
     // Twin Emperors are immune to taunt, so threat must be built organically.
     // Non-tank bots must wait for the assigned tank to establish threat before
     // attacking a boss — both at initial pull and after teleport recovery.
+    // Additionally, enforce a short DPS pause during the teleport recovery
+    // window so tanks can re-establish aggro before DPS piles on.
     bool const targetingBoss = target == assignment.veklor || target == assignment.veknilash;
     if (targetingBoss && !isWarlockTank && !isMeleeTank &&
-        !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
+        (Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, encounterUnits) ||
+         !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment)))
         return false;
 
-    if (IsCurrentAttackCommitted(bot, target))
+    if (AI_VALUE(Unit*, "current target") == target)
         return false;
+
+    // Four Horsemen pattern: if the target is not in line of sight
+    // (e.g. after teleport swap, boss is across the room), move closer
+    // before attempting Attack which would fail silently.
+    if (!bot->IsWithinLOSInMap(target))
+        return MoveNear(target, isWarlockTank ? 24.0f : 4.0f, MovementPriority::MOVEMENT_COMBAT);
 
     return Attack(target);
 }
@@ -165,7 +178,9 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (botAI->IsHeal(bot))
         desiredRange = 20.0f;
     else if (isWarlockTank)
-        desiredRange = sideBoss == assignment.veklor ? 24.0f : 10.0f;
+        desiredRange = sideBoss == assignment.veklor ? 24.0f : 28.0f;
+    else if (isMeleeTank)
+        desiredRange = sideBoss == assignment.veknilash ? 4.0f : 25.0f;
     else if (isRangedDps)
         desiredRange = 28.0f;
     else
@@ -177,13 +192,18 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     {
         float const awayAngle = std::atan2(sideBoss->GetPositionY() - oppositeBoss->GetPositionY(),
                                            sideBoss->GetPositionX() - oppositeBoss->GetPositionX());
-        float const targetX = sideBoss->GetPositionX() + desiredRange * std::cos(awayAngle);
-        float const targetY = sideBoss->GetPositionY() + desiredRange * std::sin(awayAngle);
+        float targetX = sideBoss->GetPositionX() + desiredRange * std::cos(awayAngle);
+        float targetY = sideBoss->GetPositionY() + desiredRange * std::sin(awayAngle);
+        float targetZ = bot->GetPositionZ();
 
         if (bot->GetExactDist2d(targetX, targetY) <= 3.0f)
             return false;
 
-        return MoveTo(bot->GetMapId(), targetX, targetY, bot->GetPositionZ(), false, false, false, true,
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                bot->GetPositionZ(), targetX, targetY, targetZ))
+            return false;
+
+        return MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true, false);
     }
 
@@ -269,7 +289,6 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
     if (!group)
         return false;
 
-    uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
     std::vector<Player*> healers;
     std::vector<Player*> rangedDps;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -278,10 +297,19 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
         if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
             continue;
 
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
         if ((!botAI->IsRanged(member) && !botAI->IsHeal(member)) ||
-            Aq40BossHelper::IsDesignatedTwinWarlockTank(member) ||
-            Aq40Helpers::GetStableTwinRoleIndex(member, memberAI) != sideIndex)
+            Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
+            continue;
+
+        // Only include members assigned to the Vek'lor side.
+        // DPS roles always follow Vek'lor, healers use stable role index.
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        bool const memberOnVeklorSide =
+            (botAI->IsRanged(member) && !botAI->IsHeal(member)) ||
+            (botAI->IsHeal(member) &&
+             Aq40Helpers::GetStableTwinRoleIndex(member, memberAI) ==
+             Aq40Helpers::GetStableTwinRoleIndex(bot, botAI));
+        if (!memberOnVeklorSide)
             continue;
 
         if (botAI->IsHeal(member))
@@ -304,15 +332,20 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
     float const arcStart = centerAngle - arcSpan / 2.0f;
     float const angle = count == 1 ? centerAngle :
         arcStart + arcSpan * static_cast<float>(botIndex) / static_cast<float>(count - 1);
-    float const targetX = assignment.veklor->GetPositionX() + radius * std::cos(angle);
-    float const targetY = assignment.veklor->GetPositionY() + radius * std::sin(angle);
+    float targetX = assignment.veklor->GetPositionX() + radius * std::cos(angle);
+    float targetY = assignment.veklor->GetPositionY() + radius * std::sin(angle);
+    float targetZ = bot->GetPositionZ();
 
     if (bot->GetExactDist2d(targetX, targetY) <= 1.5f)
         return false;
 
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+        return false;
+
     bot->AttackStop();
     bot->InterruptNonMeleeSpells(true);
-    return MoveTo(bot->GetMapId(), targetX, targetY, bot->GetPositionZ(), false, false, false, true,
+    return MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                   MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
@@ -332,6 +365,10 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
         return false;
 
     Unit* desiredBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
+    // Only enforce separation when actively tanking (correct boss on our side).
+    if (assignment.sideEmperor != desiredBoss)
+        return false;
+
     Unit* otherBoss = isWarlockTank ? assignment.veknilash : assignment.veklor;
     if (!desiredBoss || !otherBoss)
         return false;
@@ -345,13 +382,18 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
     float const desiredRange = isWarlockTank ? 24.0f : 4.0f;
     float const awayAngle = std::atan2(desiredBoss->GetPositionY() - otherBoss->GetPositionY(),
                                        desiredBoss->GetPositionX() - otherBoss->GetPositionX());
-    float const targetX = desiredBoss->GetPositionX() + desiredRange * std::cos(awayAngle);
-    float const targetY = desiredBoss->GetPositionY() + desiredRange * std::sin(awayAngle);
+    float targetX = desiredBoss->GetPositionX() + desiredRange * std::cos(awayAngle);
+    float targetY = desiredBoss->GetPositionY() + desiredRange * std::sin(awayAngle);
+    float targetZ = bot->GetPositionZ();
 
     if (bot->GetExactDist2d(targetX, targetY) <= 2.0f)
         return acted;
 
-    acted = MoveTo(bot->GetMapId(), targetX, targetY, bot->GetPositionZ(), false, false, false, true,
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+        return acted;
+
+    acted = MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                    MovementPriority::MOVEMENT_FORCED, true, false) || acted;
 
     return acted;
