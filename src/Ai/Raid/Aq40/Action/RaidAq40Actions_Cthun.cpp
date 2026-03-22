@@ -24,7 +24,13 @@ namespace
 {
 float constexpr kPi = 3.14159265f;
 uint32 constexpr kCthunGiantWavePeriodMs = 20000;
-std::unordered_map<uint64, Position> sCthunSpreadPositions;
+
+struct CthunSpreadState
+{
+    std::unordered_map<uint64, Position> positions;
+    uint64 anchorGuid = 0;
+};
+std::unordered_map<uint32, CthunSpreadState> sCthunSpreadByInstance;
 
 enum class CthunExpectedGiantType : uint8
 {
@@ -94,72 +100,94 @@ Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
     return FindHighestPriorityCthunAdd(botAI, attackers);
 }
 
-uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee)
+uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& outCohortSize)
 {
     Group* group = bot->GetGroup();
-    uint32 const fallbackSlots = forMelee ? 8u : 12u;
     if (!group)
-        return static_cast<uint32>(bot->GetGUID().GetCounter() % fallbackSlots);
+    {
+        outCohortSize = forMelee ? 8u : 12u;
+        return static_cast<uint32>(bot->GetGUID().GetCounter() % outCohortSize);
+    }
 
     uint32 index = 0;
+    uint32 botOrdinal = 0;
+    bool found = false;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+        if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
             continue;
 
+        if (Aq40BossHelper::IsEncounterTank(member, member))
+            continue;
+
+        // Human non-tanks count in the ranged cohort so bots spread around
+        // them rather than stacking on top of them.  We cannot reliably
+        // classify human hybrids, but counting them as ranged is the safest
+        // default (worst case: a melee human occupies a ranged slot, giving
+        // bots slightly wider ranged spread, which is harmless).
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || memberAI->IsTank(member))
-            continue;
-
-        bool const memberIsMelee = !memberAI->IsRanged(member) && !memberAI->IsHeal(member);
+        bool memberIsMelee;
+        if (memberAI)
+            memberIsMelee = !memberAI->IsRanged(member) && !memberAI->IsHeal(member);
+        else
+            memberIsMelee = false;  // default humans to ranged
         if (forMelee != memberIsMelee)
             continue;
 
         if (member->GetGUID() == bot->GetGUID())
-            return index;
+        {
+            botOrdinal = index;
+            found = true;
+        }
 
         ++index;
     }
 
-    return static_cast<uint32>(bot->GetGUID().GetCounter() % fallbackSlots);
+    outCohortSize = std::max(index, forMelee ? 8u : 12u);
+    if (found)
+        return botOrdinal;
+
+    outCohortSize = forMelee ? 8u : 12u;
+    return static_cast<uint32>(bot->GetGUID().GetCounter() % outCohortSize);
 }
 
 Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* boss, bool forMelee)
 {
-    // Clear stale positions on wipe/re-pull (pattern from
-    // sTwinWarlockAssignmentsByInstance in RaidAq40BossHelper.h).
-    if (!bot->IsInCombat())
-        sCthunSpreadPositions.clear();
+    uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
+    CthunSpreadState& state = sCthunSpreadByInstance[instanceId];
 
-    uint64 const botGuid = bot->GetGUID().GetRawValue();
-    auto itr = sCthunSpreadPositions.find(botGuid);
-    if (itr != sCthunSpreadPositions.end())
-        return itr->second;
-
-    if (forMelee)
+    // Clear stale positions on wipe/re-pull: only when no encounter-local
+    // cluster of combatants exists in the instance.
+    if (!Aq40BossHelper::IsEncounterCombatActive(bot))
     {
-        // Melee: spread evenly around the boss at melee range (~8y), using
-        // GUID-based angle slots (pattern from ICC Festergut spore spread).
-        uint32 slot = GetSpreadOrdinal(bot, botAI, true);
-        uint32 const kMeleeSlots = 8;
-        float angle = static_cast<float>(slot % kMeleeSlots) * ((2.0f * kPi) / static_cast<float>(kMeleeSlots));
-        float radius = 8.0f;
-        Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
-                          boss->GetPositionY() + std::sin(angle) * radius,
-                          boss->GetPositionZ());
-        sCthunSpreadPositions[botGuid] = assigned;
-        return assigned;
+        state.positions.clear();
+        state.anchorGuid = 0;
     }
 
-    // Ranged/heals: spread at 28y around the boss in 12 slots.
-    uint32 slot = GetSpreadOrdinal(bot, botAI, false);
-    float angle = static_cast<float>(slot % 12) * ((2.0f * kPi) / 12.0f);
-    float radius = 28.0f;
+    // Invalidate cached positions when the reference boss changes
+    // (e.g. Eye of C'Thun → C'Thun body on phase transition).
+    uint64 const bossGuid = boss->GetGUID().GetRawValue();
+    if (state.anchorGuid != bossGuid)
+    {
+        state.positions.clear();
+        state.anchorGuid = bossGuid;
+    }
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto itr = state.positions.find(botGuid);
+    if (itr != state.positions.end())
+        return itr->second;
+
+    uint32 totalSlots = 0;
+    uint32 slot = GetSpreadOrdinal(bot, botAI, forMelee, totalSlots);
+    float const angle = static_cast<float>(slot) * ((2.0f * kPi) / static_cast<float>(totalSlots));
+    float const radius = forMelee ? 8.0f : 28.0f;
+
     Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
                       boss->GetPositionY() + std::sin(angle) * radius,
                       boss->GetPositionZ());
-    sCthunSpreadPositions[botGuid] = assigned;
+    state.positions[botGuid] = assigned;
     return assigned;
 }
 
@@ -190,7 +218,7 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
             target = eye ? eye : body;
     }
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -198,9 +226,12 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
 {
-    // Tanks hold position; everyone else must spread to prevent Eye Beam
-    // chain bouncing.
+    // Tanks hold position; stomach bots are handled by stomach DPS/exit;
+    // only outside-room non-tanks should spread.
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    if (Aq40Helpers::IsCthunInStomach(bot, botAI))
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
@@ -278,7 +309,7 @@ bool Aq40CthunStomachDpsAction::Execute(Event /*event*/)
     if (!fleshTentacle)
         return false;
 
-    if (AI_VALUE(Unit*, "current target") == fleshTentacle)
+    if (AI_VALUE(Unit*, "current target") == fleshTentacle && bot->GetVictim() == fleshTentacle)
         return false;
 
     return Attack(fleshTentacle);
@@ -327,7 +358,7 @@ bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* target = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot) ?
         FindTankPriorityCthunAdd(botAI, encounterUnits) : FindHighestPriorityCthunAdd(botAI, encounterUnits);
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -339,12 +370,13 @@ bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
     if (!Aq40Helpers::IsCthunVulnerableNow(botAI, encounterUnits))
         return false;
 
-    // Keep eye-tentacle cleanup priority even inside weakened windows.
-    if (Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "flesh tentacle", "eye tentacle", "giant eye tentacle" }))
+    // Keep tentacle cleanup priority even inside weakened windows.
+    if (Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits,
+        { "flesh tentacle", "eye tentacle", "giant eye tentacle", "claw tentacle", "giant claw tentacle" }))
         return false;
 
     Unit* body = FindCthunBody(botAI, encounterUnits);
-    if (!body || AI_VALUE(Unit*, "current target") == body)
+    if (!body || (AI_VALUE(Unit*, "current target") == body && bot->GetVictim() == body))
         return false;
 
     return Attack(body);
@@ -362,7 +394,7 @@ bool Aq40CthunInterruptEyeAction::Execute(Event /*event*/)
         // Switch target this tick; interrupt will fire on the next cycle
         // once the bot is facing/in range. Avoids failing interrupts from
         // same-tick target switch (Naxxramas uses separate ticks too).
-        if (AI_VALUE(Unit*, "current target") != eye)
+        if (AI_VALUE(Unit*, "current target") != eye || bot->GetVictim() != eye)
             return Attack(eye);
 
         return botAI->DoSpecificAction("interrupt spell", Event(), true);

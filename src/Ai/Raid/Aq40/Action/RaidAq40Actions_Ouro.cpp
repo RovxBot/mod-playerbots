@@ -4,6 +4,11 @@
 
 #include "../RaidAq40BossHelper.h"
 
+namespace
+{
+float constexpr kPi = 3.14159265f;
+}  // namespace
+
 namespace Aq40BossActions
 {
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers)
@@ -72,10 +77,9 @@ bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
         target = FindOuroScarabs(botAI, encounterUnits);
     if (!target)
         target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
-    if (!target)
-        target = FindNearestDirtMound(bot, botAI, encounterUnits);
+    // Don't fall through to dirt mounds — they are hazard markers, not DPS targets.
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -153,10 +157,11 @@ bool Aq40OuroAvoidSandBlastAction::Execute(Event /*event*/)
         return false;
 
     // Move behind Ouro using orientation + PI (Grobbulus behind-boss
-    // pattern from Naxxramas).  Melee stay at melee range, ranged at
-    // their normal distance.
-    float behindAngle = ouro->GetOrientation() + static_cast<float>(M_PI);
-    float distance = botAI->IsRanged(bot) ? std::max(bot->GetDistance2d(ouro), 20.0f) : 6.0f;
+    // pattern from Naxxramas).  Melee stay at melee range, ranged/healers
+    // at their normal backline distance.
+    float behindAngle = ouro->GetOrientation() + kPi;
+    float distance = (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+        ? std::max(bot->GetDistance2d(ouro), 20.0f) : 6.0f;
     float moveX = ouro->GetPositionX() + std::cos(behindAngle) * distance;
     float moveY = ouro->GetPositionY() + std::sin(behindAngle) * distance;
 

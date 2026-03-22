@@ -8,6 +8,11 @@
 #include "../RaidAq40BossHelper.h"
 #include "RaidBossHelpers.h"
 #include "../RaidAq40SpellIds.h"
+
+namespace
+{
+float constexpr kPi = 3.14159265f;
+}
 #include "../Util/RaidAq40Helpers.h"
 
 namespace Aq40BossActions
@@ -143,14 +148,24 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
          !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment)))
         return false;
 
-    if (AI_VALUE(Unit*, "current target") == target)
+    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
     // Four Horsemen pattern: if the target is not in line of sight
     // (e.g. after teleport swap, boss is across the room), move closer
     // before attempting Attack which would fail silently.
+    // Use role-appropriate ranges so ranged DPS/healers don't collapse to melee.
     if (!bot->IsWithinLOSInMap(target))
-        return MoveNear(target, isWarlockTank ? 24.0f : 4.0f, MovementPriority::MOVEMENT_COMBAT);
+    {
+        float losRange;
+        if (isWarlockTank)
+            losRange = 24.0f;
+        else if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+            losRange = 28.0f;
+        else
+            losRange = 4.0f;
+        return MoveNear(target, losRange, MovementPriority::MOVEMENT_COMBAT);
+    }
 
     return Attack(target);
 }
@@ -238,7 +253,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 
     if (botAI->CanCastSpell("searing pain", veklor))
         acted = botAI->CastSpell("searing pain", veklor) || acted;
-    else if (AI_VALUE(Unit*, "current target") != veklor)
+    else if (AI_VALUE(Unit*, "current target") != veklor || bot->GetVictim() != veklor)
         acted = Attack(veklor) || acted;
 
     return acted;
@@ -294,7 +309,7 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+        if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
             continue;
 
         if ((!botAI->IsRanged(member) && !botAI->IsHeal(member)) ||
@@ -325,7 +340,7 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
 
     size_t const botIndex = static_cast<size_t>(std::distance(cohort.begin(), botIt));
     size_t const count = cohort.size();
-    float const arcSpan = botAI->IsHeal(bot) ? static_cast<float>(M_PI) / 2.0f : 2.0f * static_cast<float>(M_PI) / 3.0f;
+    float const arcSpan = botAI->IsHeal(bot) ? kPi / 2.0f : 2.0f * kPi / 3.0f;
     float const radius = botAI->IsHeal(bot) ? 36.0f : 32.0f;
     float const centerAngle = std::atan2(assignment.veklor->GetPositionY() - assignment.veknilash->GetPositionY(),
                                          assignment.veklor->GetPositionX() - assignment.veknilash->GetPositionX());
@@ -374,7 +389,7 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
         return false;
 
     bool acted = false;
-    if (AI_VALUE(Unit*, "current target") != desiredBoss)
+    if (AI_VALUE(Unit*, "current target") != desiredBoss || bot->GetVictim() != desiredBoss)
         acted = Attack(desiredBoss) || acted;
 
     // Move to a position on the far side of our boss, away from the other boss,

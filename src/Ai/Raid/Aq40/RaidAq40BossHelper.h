@@ -24,6 +24,120 @@ inline bool IsInAq40(Player const* player)
     return player && player->GetMapId() == MAP_ID;
 }
 
+// Returns true if any group member near the caller (~100y, same instance) is
+// currently in combat.  Scoped by proximity so that unrelated trash combat
+// elsewhere in AQ40 does not prevent per-encounter state cleanup on wipe.
+inline bool IsNearbyGroupMemberInCombat(Player const* player, float range = 100.0f)
+{
+    if (!player)
+        return false;
+
+    if (player->IsInCombat())
+        return true;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player const* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member == player)
+            continue;
+        if (member->GetMapId() != player->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (member->IsInCombat() &&
+            const_cast<Player*>(player)->GetDistance2d(const_cast<Player*>(member)) <= range)
+            return true;
+    }
+
+    return false;
+}
+
+// Returns true when an active encounter cluster exists near the caller.
+// Requires two or more in-combat group members within |range| of the caller
+// in the same instance.  Caller-relative so that distant trash combat
+// elsewhere in AQ40 does NOT preserve stale boss state after a wipe.
+// Does NOT short-circuit on the caller's own combat (a single bot on
+// trash cannot keep the flag active by itself).
+inline bool IsEncounterCombatActive(Player const* player, float range = 100.0f)
+{
+    if (!player)
+        return false;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
+
+    // Count in-combat members near the caller.
+    uint32 nearbyCombatants = 0;
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player const* member = ref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+        if (member->GetMapId() != player->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (!member->IsInCombat())
+            continue;
+        if (const_cast<Player*>(player)->GetDistance2d(const_cast<Player*>(member)) > range)
+            continue;
+
+        if (++nearbyCombatants >= 2)
+            return true;
+    }
+
+    return false;
+}
+
+// Returns true when |member| is in the same instance copy as |reference|.
+// Used for globally-stable role selection (tanks, warlocks) where every member
+// in the instance must agree on the same assignment regardless of position.
+inline bool IsSameInstance(Player const* reference, Player const* member)
+{
+    if (!reference || !member)
+        return false;
+    if (member == reference)
+        return true;
+    if (member->GetMapId() != reference->GetMapId())
+        return false;
+    if (reference->GetMap() && member->GetMap() &&
+        reference->GetMap()->GetInstanceId() != member->GetMap()->GetInstanceId())
+        return false;
+    return true;
+}
+
+// Returns true when |member| is near the same encounter as |reference|:
+// same instance and within encounter range.  Used for spread/cohort
+// assignment so that distant players elsewhere in the same instance copy
+// do not consume positioning slots.
+inline bool IsNearEncounter(Player const* reference, Player const* member, float range = 100.0f)
+{
+    if (!IsSameInstance(reference, member))
+        return false;
+    if (member == reference)
+        return true;
+    return const_cast<Player*>(reference)->GetDistance2d(const_cast<Player*>(member)) <= range;
+}
+
+// Returns true when |member| is an active encounter participant: same
+// instance copy as the caller.  Used for role resolution (tanks, warlocks)
+// where every participant in the instance must agree on the same assignment
+// regardless of position.  Instance-global so that an isolated tank cannot
+// promote itself to "primary" in a local view, and so that a tank that
+// briefly moves far from the boss remains in the candidate set.
+inline bool IsEncounterParticipant(Player const* reference, Player const* member)
+{
+    return IsSameInstance(reference, member);
+}
+
 inline Player* GetEncounterPrimaryTank(Player* player)
 {
     if (!player)
@@ -38,6 +152,8 @@ inline Player* GetEncounterPrimaryTank(Player* player)
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
             continue;
+        if (!IsEncounterParticipant(player, member))
+            continue;
 
         if (PlayerbotAI::IsMainTank(member))
             return member;
@@ -46,8 +162,12 @@ inline Player* GetEncounterPrimaryTank(Player* player)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->IsAlive() && PlayerbotAI::IsTank(member))
-            return member;
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
+            continue;
+        if (!IsEncounterParticipant(player, member))
+            continue;
+
+        return member;
     }
 
     return nullptr;
@@ -68,6 +188,8 @@ inline Player* GetEncounterBackupTank(Player* player, uint8 index = 0)
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || member == primaryTank)
+            continue;
+        if (!IsEncounterParticipant(player, member))
             continue;
 
         backups.push_back(member);
@@ -125,7 +247,7 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
 
     uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
     static std::unordered_map<uint32, std::array<uint64, 2>> sTwinWarlockAssignmentsByInstance;
-    if (!player->IsInCombat())
+    if (!IsEncounterCombatActive(player))
         sTwinWarlockAssignmentsByInstance.erase(instanceId);
 
     std::vector<Player*> warlocks;
@@ -134,6 +256,8 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
+            continue;
+        if (!IsEncounterParticipant(player, member))
             continue;
 
         warlocks.push_back(member);

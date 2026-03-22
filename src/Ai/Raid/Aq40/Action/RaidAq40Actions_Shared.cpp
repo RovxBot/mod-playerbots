@@ -90,7 +90,7 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+        if (!member || member == bot || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
             continue;
 
         float const currentDistance = bot->GetDistance2d(member);
@@ -212,7 +212,7 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    if (AI_VALUE(Unit*, "current target") == target)
+    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
     return Attack(target);
@@ -227,13 +227,24 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
     if (skerams.empty())
         return false;
 
+    // If we are already targeting a casting Skeram, fire the interrupt directly.
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (currentTarget)
+    {
+        for (Unit* skeram : skerams)
+        {
+            if (skeram == currentTarget && skeram->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+                return botAI->DoSpecificAction("interrupt spell", Event(), true);
+        }
+    }
+
+    // Otherwise switch to a casting Skeram; the interrupt fires next tick.
     Unit* target = nullptr;
     for (Unit* skeram : skerams)
     {
         if (!skeram)
             continue;
 
-        // Prefer whichever visible Skeram is currently casting.
         if (skeram->GetCurrentSpell(CURRENT_GENERIC_SPELL))
         {
             target = skeram;
@@ -242,9 +253,9 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
     }
 
     if (!target)
-        target = skerams.front();
+        return false;
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
     return Attack(target);
@@ -266,7 +277,7 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
             target = skeram;
     }
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -316,7 +327,7 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 
     // Fallback: force target back to Skeram.
     Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -345,7 +356,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
         target = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
     }
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -413,7 +424,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
         target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
     }
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -458,7 +469,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         uint32 const idx = bot->GetGUID().GetCounter() % castingDanger.size();
         Unit* assigned = castingDanger[idx];
 
-        if (!assigned || AI_VALUE(Unit*, "current target") == assigned)
+        if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
             return false;
 
         return Attack(assigned);
@@ -468,7 +479,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     // (e.g. idle scarabs/scorpions) are ignored until they actually aggro.
     GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
     Unit* target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -476,54 +487,73 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
 {
-    // If we are already targeting a Mindslayer that is casting Mind Blast or channeling Mind Flay,
+    // If we are already targeting a Mindslayer or Nullifier that is casting,
     // fire our interrupt spell directly (Counterspell, Kick, Wind Shear, etc.).
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
-    if (currentTarget && botAI->EqualLowercaseName(currentTarget->GetName(), "qiraji mindslayer"))
+    if (currentTarget)
     {
-        Spell* spell = currentTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        Spell* channel = currentTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        bool const castingMindBlast = spell &&
-            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
-        bool const channelingMindFlay = channel &&
-            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
+        bool shouldInterrupt = false;
 
-        if (castingMindBlast || channelingMindFlay)
+        if (botAI->EqualLowercaseName(currentTarget->GetName(), "qiraji mindslayer"))
+        {
+            Spell* spell = currentTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            Spell* channel = currentTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+            shouldInterrupt =
+                (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast })) ||
+                (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }));
+        }
+        else if (botAI->EqualLowercaseName(currentTarget->GetName(), "obsidian nullifier"))
+        {
+            Spell* spell = currentTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            shouldInterrupt = spell &&
+                Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify });
+        }
+
+        if (shouldInterrupt)
             return botAI->DoSpecificAction("interrupt spell", Event(), true);
     }
 
-    // Not yet targeting a casting Mindslayer – find one and switch.
+    // Not yet targeting a casting dangerous trash mob – find one and switch.
     // The actual interrupt fires next tick once we're facing/in range
     // (same two-tick pattern used in C'Thun eye tentacle interrupts).
     GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 
-    std::vector<Unit*> castingMindslayers;
+    std::vector<Unit*> castingTargets;
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+        if (!unit)
             continue;
 
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        bool const castingMindBlast = spell &&
-            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
-        bool const channelingMindFlay = channel &&
-            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
+        if (botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+        {
+            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+            bool const castingMindBlast = spell &&
+                Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
+            bool const channelingMindFlay = channel &&
+                Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
 
-        if (castingMindBlast || channelingMindFlay)
-            castingMindslayers.push_back(unit);
+            if (castingMindBlast || channelingMindFlay)
+                castingTargets.push_back(unit);
+        }
+        else if (botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier"))
+        {
+            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }))
+                castingTargets.push_back(unit);
+        }
     }
 
-    if (castingMindslayers.empty())
+    if (castingTargets.empty())
         return false;
 
-    // Distribute bots across casting Mindslayers so each one gets an interrupter.
-    uint32 const idx = bot->GetGUID().GetCounter() % castingMindslayers.size();
-    Unit* assigned = castingMindslayers[idx];
+    // Distribute bots across casting targets so each one gets an interrupter.
+    uint32 const idx = bot->GetGUID().GetCounter() % castingTargets.size();
+    Unit* assigned = castingTargets[idx];
 
-    if (!assigned || AI_VALUE(Unit*, "current target") == assigned)
+    if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
         return false;
 
     return Attack(assigned);
@@ -627,9 +657,11 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
         }
     }
 
-    // Fallback: resume normal trash targeting.
-    Unit* target = Aq40BossActions::FindTrashTarget(botAI, encounterUnits);
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    // Fallback: resume normal trash targeting using combat-filtered units
+    // so passive mobs (idle scarabs/scorpions) are ignored.
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Unit* target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);

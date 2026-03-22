@@ -11,8 +11,17 @@ namespace
 {
 bool Aq40EncounterEngaged(PlayerbotAI* botAI, Player* bot)
 {
-    return Aq40BossHelper::IsInAq40(bot) &&
-           !botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty();
+    if (!Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    // Primary check: the bot's own attackers list.
+    if (!botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty())
+        return true;
+
+    // Fallback: a cluster of nearby group members is in combat, so the
+    // encounter is active even though this bot briefly dropped threat.
+    // Uses the same cluster check as shared state cleanup so both agree.
+    return Aq40BossHelper::IsEncounterCombatActive(bot);
 }
 
 bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
@@ -143,23 +152,6 @@ bool Aq40SkeramMindControlTrigger::IsActive()
     return false;
 }
 
-bool Aq40SkeramSplitTrigger::IsActive()
-{
-    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
-        return false;
-
-    uint32 skeramCount = 0;
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
-            ++skeramCount;
-    }
-
-    return skeramCount >= 2;
-}
-
 bool Aq40SkeramExecutePhaseTrigger::IsActive()
 {
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
@@ -211,7 +203,7 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
 
         float const distance = bot->GetDistance2d(unit);
         bool const isClosingOnBot = unit->GetVictim() == bot || unit->GetTarget() == bot->GetGUID();
-        if (distance <= 14.0f || (isBackline && isClosingOnBot && distance <= 24.0f))
+        if (distance <= 18.0f || (isBackline && isClosingOnBot && distance <= 24.0f))
             return true;
     }
 
@@ -262,7 +254,7 @@ bool Aq40BugTrioFearTrigger::IsActive()
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+        if (!member || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
             continue;
 
         if (bot->GetDistance2d(member) > 30.0f)
@@ -354,12 +346,12 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
             continue;
 
         if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40EradicatorShockBlast }) &&
-            bot->GetDistance2d(unit) <= 14.0f)
+            bot->GetDistance2d(unit) <= 20.0f)
             return true;
 
         if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
                 { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }) &&
-            bot->GetDistance2d(unit) <= 18.0f)
+            bot->GetDistance2d(unit) <= 24.0f)
             return true;
     }
 
@@ -375,16 +367,26 @@ bool Aq40TrashMindslayerCastTrigger::IsActive()
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+        if (!unit)
             continue;
 
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }))
-            return true;
+        if (botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+        {
+            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }))
+                return true;
 
-        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }))
-            return true;
+            Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+            if (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }))
+                return true;
+        }
+
+        if (botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier"))
+        {
+            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }))
+                return true;
+        }
     }
 
     return false;
@@ -462,7 +464,7 @@ bool Aq40TrashChampionFearTrigger::IsActive()
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+        if (!member || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
             continue;
 
         if (bot->GetDistance2d(member) > 30.0f)
@@ -532,6 +534,63 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
     }
 
     return false;
+}
+
+bool Aq40HuhuranNatureResistanceTrigger::IsActive()
+{
+    // Only relevant for hunters.
+    if (!bot->IsAlive() || bot->getClass() != CLASS_HUNTER)
+        return false;
+
+    // Boss must be engaged and alive.
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* huhuran = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "princess huhuran" });
+    if (!huhuran || !huhuran->IsAlive() || huhuran->IsFriendlyTo(bot))
+        return false;
+
+    // Check if bot already has Aspect of the Wild active (any rank).
+    if (botAI->HasAura("aspect of the wild", bot))
+        return false;
+
+    // Check bot knows the spell.
+    if (!botAI->CanCastSpell("aspect of the wild", bot))
+        return false;
+
+    // First alive bot hunter near the encounter that can cast the spell
+    // should apply it.  Skip humans (we can't command them) and bots that
+    // are silenced/oom/don't know the spell — a later hunter can cover.
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+        if (member->getClass() != CLASS_HUNTER)
+            continue;
+        if (!Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+        if (bot->GetDistance2d(member) > 60.0f)
+            continue;
+
+        // Skip humans — we cannot control their aspect choice.
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI)
+            continue;
+
+        // Skip bots that already have Wild up or cannot cast it right now.
+        if (memberAI->HasAura("aspect of the wild", member) ||
+            !memberAI->CanCastSpell("aspect of the wild", member))
+            continue;
+
+        // First eligible bot hunter wins.
+        return member == bot;
+    }
+
+    // No eligible bot hunter found — this bot is elected by default.
+    return true;
 }
 
 bool Aq40TwinEmperorsActiveTrigger::IsActive()
@@ -710,7 +769,7 @@ bool Aq40OuroActiveTrigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro", "dirt mound", "qiraji scarab", "scarab" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro", "qiraji scarab", "scarab" });
 }
 
 bool Aq40OuroScarabsTrigger::IsActive()
@@ -774,7 +833,10 @@ bool Aq40OuroSandBlastRiskTrigger::IsActive()
 
 bool Aq40OuroSubmergeTrigger::IsActive()
 {
-    if (!Aq40OuroActiveTrigger(botAI).IsActive())
+    // Bypass Aq40OuroActiveTrigger — during submerge, Ouro is underground
+    // and only dirt mounds are visible, so the active trigger (which requires
+    // ouro/scarabs) would never fire.  Do our own engagement check instead.
+    if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -813,7 +875,7 @@ bool Aq40ViscidusFrozenTrigger::IsActive()
             continue;
 
         if (Aq40SpellIds::HasAnyAura(botAI, unit,
-                { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore }))
+                { Aq40SpellIds::ViscidusFreeze }))
             return true;
     }
 

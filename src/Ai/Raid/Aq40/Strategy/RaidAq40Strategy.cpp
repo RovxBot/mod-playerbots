@@ -10,7 +10,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // - quickly reacquire target after blink/teleport
     // - prioritize interrupt windows
     // - respond to mind control pressure
-    // - split-phase handling and execute-phase focus
+    // - execute-phase focus on the real boss
     triggers.push_back(new TriggerNode("aq40 skeram active",
         { NextAction("aq40 skeram acquire platform target", ACTION_RAID + 2) }));
     triggers.push_back(new TriggerNode("aq40 skeram blinked",
@@ -19,8 +19,6 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 skeram interrupt", ACTION_RAID + 4) }));
     triggers.push_back(new TriggerNode("aq40 skeram mc detected",
         { NextAction("aq40 skeram control mind control", ACTION_RAID + 3) }));
-    triggers.push_back(new TriggerNode("aq40 skeram split active",
-        { NextAction("aq40 skeram interrupt", ACTION_RAID + 3) }));
     triggers.push_back(new TriggerNode("aq40 skeram execute phase",
         { NextAction("aq40 skeram focus real boss", ACTION_RAID + 4) }));
 

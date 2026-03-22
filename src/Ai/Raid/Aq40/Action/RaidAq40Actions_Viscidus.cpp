@@ -49,7 +49,7 @@ bool Aq40ViscidusChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         target = Aq40BossActions::FindUnitByAnyName(botAI, encounterUnits, { "toxic slime" });
 
-    if (!target || AI_VALUE(Unit*, "current target") == target)
+    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     return Attack(target);
@@ -68,7 +68,7 @@ bool Aq40ViscidusUseFrostAction::Execute(Event /*event*/)
         return false;
 
     if (Aq40SpellIds::HasAnyAura(botAI, viscidus,
-            { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore }) ||
+            { Aq40SpellIds::ViscidusFreeze }) ||
         FindViscidusGlobTarget(botAI, encounterUnits))
         return false;
 
@@ -100,7 +100,7 @@ bool Aq40ViscidusShatterAction::Execute(Event /*event*/)
         return false;
 
     if (!Aq40SpellIds::HasAnyAura(botAI, viscidus,
-            { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore }))
+            { Aq40SpellIds::ViscidusFreeze }))
         return false;
 
     if (AI_VALUE(Unit*, "current target") != viscidus)

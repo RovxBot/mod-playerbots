@@ -30,7 +30,7 @@ struct TwinTeleportState
 
 TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
-std::unordered_map<uint64, uint32> sCthunPhase2StartByBossGuid;
+std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
@@ -138,6 +138,8 @@ Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32
         Player* member = ref->GetSource();
         if (!IsTwinRoleMatch(cohort, member))
             continue;
+        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
+            continue;
 
         if (GetStableTwinRoleIndex(member, GET_PLAYERBOT_AI(member)) == sideIndex)
             return member;
@@ -169,9 +171,11 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
 
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
-    // Clean stale state on wipe/re-pull (pattern from
-    // sTwinWarlockAssignmentsByInstance in RaidAq40BossHelper.h).
-    if (!bot->IsInCombat())
+    // Clean stale state on wipe/re-pull: only when no encounter-local
+    // cluster of combatants exists.  Perspective-independent so an isolated
+    // bot cannot wipe shared assignments, but distant trash combat does not
+    // preserve stale boss state after a wipe.
+    if (!Aq40BossHelper::IsEncounterCombatActive(bot))
     {
         sTwinAssignments.erase(instanceId);
         sTwinTeleportStates.erase(instanceId);
@@ -190,6 +194,8 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     {
         Player* member = ref->GetSource();
         if (!IsTwinRoleMatch(cohort, member))
+            continue;
+        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
             continue;
 
         members.push_back(member);
@@ -335,11 +341,19 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
     TwinRoleCohort const requiredCohort = needWarlockTank ? TwinRoleCohort::WarlockTank : TwinRoleCohort::MeleeTank;
     float const readyRange = needWarlockTank ? 34.0f : 8.0f;
 
-    // Check whether ANY tank of the required type is actively engaging the boss.
+    // Use stable side assignment to identify the tank for THIS side,
+    // not proximity which can misclassify during teleport crossings.
+    uint32 const botSideIndex = GetStableTwinRoleIndex(bot, botAI);
+
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !IsTwinRoleMatch(requiredCohort, member))
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+
+        if (GetStableTwinRoleIndex(member, memberAI) != botSideIndex)
             continue;
 
         if (assignment.sideEmperor->GetVictim() == member)
@@ -366,27 +380,53 @@ bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI)
 uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     Unit* cthunBody = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "c'thun" });
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    uint32 const instanceId = (bot && bot->GetMap()) ? bot->GetMap()->GetInstanceId() : 0;
+
+    // Wipe/reset safety: if no encounter cluster is active near the caller,
+    // clear the timer unconditionally so stale state cannot survive a repull.
+    if (bot && !Aq40BossHelper::IsEncounterCombatActive(bot))
+    {
+        sCthunPhase2StartByInstance.erase(instanceId);
+        return 0;
+    }
+
     if (!cthunBody)
     {
-        // Clean stale state when boss not found (wipe/reset).
-        sCthunPhase2StartByBossGuid.clear();
+        // Body not in this caller's view.  Only erase the timer if no
+        // C'Thun-related unit is visible at all (encounter over).  A bot
+        // that sees tentacles but not the body must not zero the shared
+        // timer — other callers who CAN see the body will maintain it.
+        if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
+                { "eye of c'thun", "flesh tentacle", "eye tentacle",
+                  "giant eye tentacle", "claw tentacle", "giant claw tentacle" }))
+        {
+            sCthunPhase2StartByInstance.erase(instanceId);
+            return 0;
+        }
+
+        // Tentacles visible but body not — return the stored elapsed time
+        // so wave prediction stays consistent with bots that can see the body.
+        auto itr = sCthunPhase2StartByInstance.find(instanceId);
+        if (itr != sCthunPhase2StartByInstance.end())
+            return getMSTime() - itr->second;
+
         return 0;
     }
 
     bool inPhase2 = Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
                                                     { "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
-    uint64 const bodyGuid = cthunBody->GetGUID().GetRawValue();
     if (!inPhase2)
     {
-        sCthunPhase2StartByBossGuid.erase(bodyGuid);
+        sCthunPhase2StartByInstance.erase(instanceId);
         return 0;
     }
 
     uint32 const now = getMSTime();
-    auto itr = sCthunPhase2StartByBossGuid.find(bodyGuid);
-    if (itr == sCthunPhase2StartByBossGuid.end())
+    auto itr = sCthunPhase2StartByInstance.find(instanceId);
+    if (itr == sCthunPhase2StartByInstance.end())
     {
-        sCthunPhase2StartByBossGuid[bodyGuid] = now;
+        sCthunPhase2StartByInstance[instanceId] = now;
         return 0;
     }
 

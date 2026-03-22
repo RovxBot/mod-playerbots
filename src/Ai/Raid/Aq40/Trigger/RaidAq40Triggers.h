@@ -40,13 +40,6 @@ public:
     bool IsActive() override;
 };
 
-class Aq40SkeramSplitTrigger : public Trigger
-{
-public:
-    Aq40SkeramSplitTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 skeram split active") {}
-    bool IsActive() override;
-};
-
 class Aq40SkeramExecutePhaseTrigger : public Trigger
 {
 public:
@@ -170,6 +163,16 @@ class Aq40HuhuranPoisonPhaseTrigger : public Trigger
 {
 public:
     Aq40HuhuranPoisonPhaseTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 huhuran poison phase") {}
+    bool IsActive() override;
+};
+
+// AQ40-specific nature resistance trigger that adds encounter-local proximity
+// filtering so a hunter elsewhere in the raid does not block the nearby hunter.
+class Aq40HuhuranNatureResistanceTrigger : public Trigger
+{
+public:
+    Aq40HuhuranNatureResistanceTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 huhuran nature resistance") {}
     bool IsActive() override;
 };
 

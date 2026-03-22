@@ -71,7 +71,7 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
 
 float Aq40GenericMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     std::string const actionName = action->getName();
@@ -112,7 +112,7 @@ float Aq40GenericMultiplier::GetValue(Action* action)
 
 float Aq40SkeramMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -140,7 +140,7 @@ float Aq40SkeramMultiplier::GetValue(Action* action)
 
 float Aq40BugTrioMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -178,7 +178,7 @@ float Aq40BugTrioMultiplier::GetValue(Action* action)
 
 float Aq40SarturaMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat() || Aq40BossHelper::IsEncounterTank(bot, bot))
+    if (!action || !Aq40BossHelper::IsInAq40(bot) || Aq40BossHelper::IsEncounterTank(bot, bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -215,7 +215,7 @@ float Aq40SarturaMultiplier::GetValue(Action* action)
 
 float Aq40HuhuranMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -243,7 +243,7 @@ float Aq40HuhuranMultiplier::GetValue(Action* action)
 
 float Aq40OuroMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -253,6 +253,11 @@ float Aq40OuroMultiplier::GetValue(Action* action)
 
     std::string const actionName = action->getName();
     bool const isEncounterTank = Aq40BossHelper::IsEncounterTank(bot, bot);
+
+    // Suppress generic targeting during Ouro — encounter-specific
+    // targeting handles scarabs, dirt mounds, and submerge phases.
+    if (actionName == "aq40 choose target")
+        return 0.0f;
 
     // Tank melee contact priority
     if (isEncounterTank && bot->GetDistance2d(ouro) > 8.0f)
@@ -287,7 +292,7 @@ float Aq40OuroMultiplier::GetValue(Action* action)
 
 float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -356,7 +361,7 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
 float Aq40ViscidusMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -365,8 +370,13 @@ float Aq40ViscidusMultiplier::GetValue(Action* action)
         return 1.0f;
 
     bool frozen = Aq40SpellIds::HasAnyAura(botAI, viscidus,
-        { Aq40SpellIds::ViscidusFreeze, Aq40SpellIds::ViscidusSlowedMore });
+        { Aq40SpellIds::ViscidusFreeze });
     std::string const actionName = action->getName();
+
+    // Suppress generic targeting during Viscidus — encounter-specific
+    // targeting handles globs, frost priority, shatter windows, etc.
+    if (actionName == "aq40 choose target")
+        return 0.0f;
 
     if (frozen)
     {
@@ -389,7 +399,7 @@ float Aq40ViscidusMultiplier::GetValue(Action* action)
 
 float Aq40CthunMultiplier::GetValue(Action* action)
 {
-    if (!action || !Aq40BossHelper::IsInAq40(bot) || !bot->IsInCombat())
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -401,7 +411,6 @@ float Aq40CthunMultiplier::GetValue(Action* action)
     std::string const actionName = action->getName();
     bool isCthunControlAction =
         actionName == "aq40 cthun choose target" ||
-        actionName == "aq40 cthun maintain spread" ||
         actionName == "aq40 cthun avoid dark glare" ||
         actionName == "aq40 cthun stomach dps" ||
         actionName == "aq40 cthun stomach exit" ||
@@ -412,7 +421,17 @@ float Aq40CthunMultiplier::GetValue(Action* action)
     if (isCthunControlAction)
         return 1.0f;
 
+    // Suppress generic targeting during C'Thun — encounter-specific
+    // targeting handles add priority, stomach, vulnerable burst, etc.
+    if (actionName == "aq40 choose target")
+        return 0.0f;
+
     bool const inStomach = Aq40Helpers::IsCthunInStomach(bot, botAI);
+
+    // Spread is an outside-room action; suppress it for stomach bots so
+    // they stay locked to flesh-tentacle/exit behavior.
+    if (actionName == "aq40 cthun maintain spread")
+        return inStomach ? 0.0f : 1.0f;
     bool const darkGlare = [&]()
     {
         if (inStomach)
@@ -428,8 +447,6 @@ float Aq40CthunMultiplier::GetValue(Action* action)
                botAI->HasAura("dark glare", eye);
     }();
     bool const vulnerable = Aq40Helpers::IsCthunVulnerableNow(botAI, encounterUnits);
-    bool const addsPresent = Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
-        { "eye tentacle", "claw tentacle", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 
     if (inStomach)
     {
@@ -468,7 +485,7 @@ float Aq40CthunMultiplier::GetValue(Action* action)
             return 0.0f;
     }
 
-    if (!inStomach && !darkGlare && !vulnerable && !addsPresent &&
+    if (!inStomach && !darkGlare && !vulnerable &&
         !Aq40BossHelper::IsEncounterTank(bot, bot))
     {
         if (dynamic_cast<Aq40CthunMaintainSpreadAction*>(action))

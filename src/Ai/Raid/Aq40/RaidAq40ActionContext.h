@@ -2,7 +2,6 @@
 #define _PLAYERBOT_RAIDAQ40ACTIONCONTEXT_H
 
 #include "Action.h"
-#include "BossAuraActions.h"
 #include "NamedObjectContext.h"
 #include "Action/RaidAq40Actions.h"
 
@@ -109,7 +108,7 @@ private:
     static Action* huhuran_poison_spread(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonSpreadAction(botAI); }
     static Action* huhuran_nature_resistance(PlayerbotAI* botAI)
     {
-        return new BossNatureResistanceAction(botAI, "princess huhuran");
+        return new Aq40HuhuranNatureResistanceAction(botAI);
     }
     static Action* huhuran_nature_resist_totem(PlayerbotAI* botAI)
     {
