@@ -4,6 +4,7 @@
 
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
+#include "../../RaidBossHelpers.h"
 
 namespace Aq40BossActions
 {
@@ -65,6 +66,7 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
+    MarkTargetWithSkull(bot, target);
     return Attack(target);
 }
 

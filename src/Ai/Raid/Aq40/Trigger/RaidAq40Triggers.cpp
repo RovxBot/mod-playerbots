@@ -381,6 +381,10 @@ bool Aq40TrashMindslayerCastTrigger::IsActive()
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }))
             return true;
+
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }))
+            return true;
     }
 
     return false;
@@ -400,6 +404,90 @@ bool Aq40TrashMindControlTrigger::IsActive()
             continue;
 
         if (player->IsCharmed() && !player->IsPolymorphed())
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TrashSlayerEnrageTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive())
+        return false;
+
+    if (bot->getClass() != CLASS_HUNTER)
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji slayer"))
+            continue;
+
+        if (botAI->HasAura(Aq40SpellIds::Aq40SlayerEnrage, unit))
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TrashChampionFearTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive())
+        return false;
+
+    if (bot->getClass() != CLASS_SHAMAN && bot->getClass() != CLASS_PRIEST)
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+
+    // Trigger if a Champion is casting Frightening Shout
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji champion"))
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40ChampionFrighteningShout }))
+            return true;
+    }
+
+    // Also trigger if nearby group members are feared
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (bot->GetDistance2d(member) > 30.0f)
+            continue;
+
+        if (Aq40SpellIds::HasAnyAura(botAI, member, { Aq40SpellIds::Aq40ChampionFrighteningShout }) || member->HasFearAura())
+            return true;
+    }
+
+    return false;
+}
+
+bool Aq40TrashChampionVengeanceTrigger::IsActive()
+{
+    if (!Aq40TrashActiveTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji champion"))
+            continue;
+
+        if (botAI->HasAura(Aq40SpellIds::Aq40ChampionVengeance, unit))
             return true;
     }
 

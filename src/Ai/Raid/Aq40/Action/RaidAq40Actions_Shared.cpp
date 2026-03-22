@@ -426,31 +426,42 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     if (encounterUnits.empty())
         return false;
 
-    // Prioritize interrupting Mindslayer Mind Blast (deadly AoE) or Nullifier Nullify.
-    // Use the wider encounter list so we detect casts from nearby mobs even if they
-    // haven't entered our threat table yet.
+    // Collect all Mindslayers/Nullifiers currently casting dangerous spells.
+    // Distribute bots across them so each caster gets coverage instead of
+    // everyone dog-piling the same one.
+    std::vector<Unit*> castingDanger;
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit)
             continue;
 
+        // Check both regular casts and channels (Mind Flay is channeled)
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!spell)
-            continue;
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
 
         bool const isMindBlast = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
-            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }));
+        bool const isMindFlay = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
+            (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }));
         bool const isNullify = botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier") &&
-            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify });
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }));
 
-        if (isMindBlast || isNullify)
-        {
-            if (AI_VALUE(Unit*, "current target") == unit)
-                return false;
+        if (isMindBlast || isMindFlay || isNullify)
+            castingDanger.push_back(unit);
+    }
 
-            return Attack(unit);
-        }
+    if (!castingDanger.empty())
+    {
+        // Distribute: assign each bot to a caster based on GUID modulo count,
+        // so different bots cover different Mindslayers.
+        uint32 const idx = bot->GetGUID().GetCounter() % castingDanger.size();
+        Unit* assigned = castingDanger[idx];
+
+        if (!assigned || AI_VALUE(Unit*, "current target") == assigned)
+            return false;
+
+        return Attack(assigned);
     }
 
     // Use combat-filtered units for general targeting so passive mobs
@@ -461,6 +472,61 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     return Attack(target);
+}
+
+bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
+{
+    // If we are already targeting a Mindslayer that is casting Mind Blast or channeling Mind Flay,
+    // fire our interrupt spell directly (Counterspell, Kick, Wind Shear, etc.).
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (currentTarget && botAI->EqualLowercaseName(currentTarget->GetName(), "qiraji mindslayer"))
+    {
+        Spell* spell = currentTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        Spell* channel = currentTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        bool const castingMindBlast = spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
+        bool const channelingMindFlay = channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
+
+        if (castingMindBlast || channelingMindFlay)
+            return botAI->DoSpecificAction("interrupt spell", Event(), true);
+    }
+
+    // Not yet targeting a casting Mindslayer – find one and switch.
+    // The actual interrupt fires next tick once we're facing/in range
+    // (same two-tick pattern used in C'Thun eye tentacle interrupts).
+    GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
+
+    std::vector<Unit*> castingMindslayers;
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        bool const castingMindBlast = spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
+        bool const channelingMindFlay = channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
+
+        if (castingMindBlast || channelingMindFlay)
+            castingMindslayers.push_back(unit);
+    }
+
+    if (castingMindslayers.empty())
+        return false;
+
+    // Distribute bots across casting Mindslayers so each one gets an interrupter.
+    uint32 const idx = bot->GetGUID().GetCounter() % castingMindslayers.size();
+    Unit* assigned = castingMindslayers[idx];
+
+    if (!assigned || AI_VALUE(Unit*, "current target") == assigned)
+        return false;
+
+    return Attack(assigned);
 }
 
 bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
@@ -552,7 +618,7 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
     if (mcTarget)
     {
         static std::initializer_list<char const*> ccSpells = {
-            "polymorph", "fear", "hibernate", "freezing trap", "repentance"
+            "polymorph", "fear", "hibernate", "freezing trap", "repentance", "blind"
         };
         for (char const* spell : ccSpells)
         {
@@ -567,4 +633,81 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
         return false;
 
     return Attack(target);
+}
+
+bool Aq40TrashTranqEnrageAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_HUNTER)
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji slayer"))
+            continue;
+
+        if (botAI->HasAura(Aq40SpellIds::Aq40SlayerEnrage, unit))
+        {
+            if (botAI->CanCastSpell("tranquilizing shot", unit))
+                return botAI->CastSpell("tranquilizing shot", unit);
+        }
+    }
+
+    return false;
+}
+
+bool Aq40TrashDispelVengeanceAction::Execute(Event /*event*/)
+{
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+
+    Unit* vengeanceTarget = nullptr;
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "qiraji champion"))
+            continue;
+
+        if (botAI->HasAura(Aq40SpellIds::Aq40ChampionVengeance, unit))
+        {
+            vengeanceTarget = unit;
+            break;
+        }
+    }
+
+    if (!vengeanceTarget)
+        return false;
+
+    // Mage spellsteal, shaman purge, hunter tranq shot can remove this buff
+    static std::initializer_list<char const*> dispelSpells = {
+        "spellsteal", "purge", "tranquilizing shot"
+    };
+    for (char const* spell : dispelSpells)
+    {
+        if (botAI->CanCastSpell(spell, vengeanceTarget))
+            return botAI->CastSpell(spell, vengeanceTarget);
+    }
+
+    return false;
+}
+
+bool Aq40TrashFearWardAction::Execute(Event /*event*/)
+{
+    // Shamans: drop tremor totem (handles the fear after it lands)
+    if (bot->getClass() == CLASS_SHAMAN)
+    {
+        if (botAI->CanCastSpell("tremor totem", bot))
+            return botAI->CastSpell("tremor totem", bot);
+        return false;
+    }
+
+    // Priests: pre-cast Fear Ward on the main tank
+    if (bot->getClass() == CLASS_PRIEST)
+    {
+        Player* mainTank = Aq40BossHelper::GetEncounterPrimaryTank(bot);
+        if (mainTank && botAI->CanCastSpell("fear ward", mainTank))
+            return botAI->CastSpell("fear ward", mainTank);
+    }
+
+    return false;
 }

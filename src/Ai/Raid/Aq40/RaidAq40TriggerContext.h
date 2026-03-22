@@ -29,6 +29,9 @@ public:
         creators["aq40 trash dangerous aoe"] = &RaidAq40TriggerContext::trash_dangerous_aoe;
         creators["aq40 trash mindslayer cast"] = &RaidAq40TriggerContext::trash_mindslayer_cast;
         creators["aq40 trash mc detected"] = &RaidAq40TriggerContext::trash_mc_detected;
+        creators["aq40 trash slayer enrage"] = &RaidAq40TriggerContext::trash_slayer_enrage;
+        creators["aq40 trash champion fear"] = &RaidAq40TriggerContext::trash_champion_fear;
+        creators["aq40 trash champion vengeance"] = &RaidAq40TriggerContext::trash_champion_vengeance;
         creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
@@ -78,6 +81,12 @@ private:
     static Trigger* trash_dangerous_aoe(PlayerbotAI* botAI) { return new Aq40TrashDangerousAoeTrigger(botAI); }
     static Trigger* trash_mindslayer_cast(PlayerbotAI* botAI) { return new Aq40TrashMindslayerCastTrigger(botAI); }
     static Trigger* trash_mc_detected(PlayerbotAI* botAI) { return new Aq40TrashMindControlTrigger(botAI); }
+    static Trigger* trash_slayer_enrage(PlayerbotAI* botAI) { return new Aq40TrashSlayerEnrageTrigger(botAI); }
+    static Trigger* trash_champion_fear(PlayerbotAI* botAI) { return new Aq40TrashChampionFearTrigger(botAI); }
+    static Trigger* trash_champion_vengeance(PlayerbotAI* botAI)
+    {
+        return new Aq40TrashChampionVengeanceTrigger(botAI);
+    }
     static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
     static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
     static Trigger* twin_emperors_active(PlayerbotAI* botAI) { return new Aq40TwinEmperorsActiveTrigger(botAI); }
