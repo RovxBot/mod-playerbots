@@ -82,10 +82,17 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Huhuran baseline strategy:
     // - maintain boss focus
     // - move ranged non-tanks outward during poison/enrage phase
+    // - first alive hunter uses Aspect of the Wild for nature resistance
+    // - first alive shaman drops Nature Resistance Totem
     triggers.push_back(new TriggerNode("aq40 huhuran active",
-        { NextAction("aq40 huhuran choose target", ACTION_RAID + 2) }));
+        {
+            NextAction("aq40 huhuran choose target", ACTION_RAID + 2),
+            NextAction("aq40 huhuran nature resist totem", ACTION_RAID + 1),
+        }));
     triggers.push_back(new TriggerNode("aq40 huhuran poison phase",
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 huhuran nature resistance",
+        { NextAction("aq40 huhuran nature resistance", ACTION_RAID) }));
 
     // Twin Emperors baseline strategy:
     // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor

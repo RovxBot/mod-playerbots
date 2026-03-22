@@ -2,6 +2,7 @@
 #define _PLAYERBOT_RAIDAQ40TRIGGERCONTEXT_H
 
 #include "AiObjectContext.h"
+#include "BossAuraTriggers.h"
 #include "NamedObjectContext.h"
 #include "Trigger/RaidAq40Triggers.h"
 
@@ -34,6 +35,7 @@ public:
         creators["aq40 trash champion vengeance"] = &RaidAq40TriggerContext::trash_champion_vengeance;
         creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
+        creators["aq40 huhuran nature resistance"] = &RaidAq40TriggerContext::huhuran_nature_resistance;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
         creators["aq40 twin emperors arcane burst risk"] =
@@ -89,6 +91,10 @@ private:
     }
     static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
     static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
+    static Trigger* huhuran_nature_resistance(PlayerbotAI* botAI)
+    {
+        return new BossNatureResistanceTrigger(botAI, "princess huhuran");
+    }
     static Trigger* twin_emperors_active(PlayerbotAI* botAI) { return new Aq40TwinEmperorsActiveTrigger(botAI); }
     static Trigger* twin_emperors_role_mismatch(PlayerbotAI* botAI)
     {

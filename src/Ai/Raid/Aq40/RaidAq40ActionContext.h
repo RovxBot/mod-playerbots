@@ -2,6 +2,7 @@
 #define _PLAYERBOT_RAIDAQ40ACTIONCONTEXT_H
 
 #include "Action.h"
+#include "BossAuraActions.h"
 #include "NamedObjectContext.h"
 #include "Action/RaidAq40Actions.h"
 
@@ -30,6 +31,8 @@ public:
         creators["aq40 trash fear ward"] = &RaidAq40ActionContext::trash_fear_ward;
         creators["aq40 huhuran choose target"] = &RaidAq40ActionContext::huhuran_choose_target;
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
+        creators["aq40 huhuran nature resistance"] = &RaidAq40ActionContext::huhuran_nature_resistance;
+        creators["aq40 huhuran nature resist totem"] = &RaidAq40ActionContext::huhuran_nature_resist_totem;
         creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
@@ -104,6 +107,14 @@ private:
     static Action* trash_fear_ward(PlayerbotAI* botAI) { return new Aq40TrashFearWardAction(botAI); }
     static Action* huhuran_choose_target(PlayerbotAI* botAI) { return new Aq40HuhuranChooseTargetAction(botAI); }
     static Action* huhuran_poison_spread(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonSpreadAction(botAI); }
+    static Action* huhuran_nature_resistance(PlayerbotAI* botAI)
+    {
+        return new BossNatureResistanceAction(botAI, "princess huhuran");
+    }
+    static Action* huhuran_nature_resist_totem(PlayerbotAI* botAI)
+    {
+        return new Aq40HuhuranNatureResistTotemAction(botAI);
+    }
     static Action* twin_emperors_choose_target(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsChooseTargetAction(botAI);

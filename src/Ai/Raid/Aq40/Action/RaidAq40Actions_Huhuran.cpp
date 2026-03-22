@@ -44,3 +44,33 @@ bool Aq40HuhuranPoisonSpreadAction::Execute(Event /*event*/)
 
     return MoveTo(huhuran, desiredDistance, MovementPriority::MOVEMENT_COMBAT);
 }
+
+bool Aq40HuhuranNatureResistTotemAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() != CLASS_SHAMAN)
+        return false;
+
+    // Only the first alive shaman in the group should use it
+    Group* group = bot->GetGroup();
+    if (group)
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive())
+                continue;
+
+            if (member->getClass() == CLASS_SHAMAN)
+            {
+                if (member != bot)
+                    return false;
+                break;
+            }
+        }
+    }
+
+    if (botAI->CanCastSpell("nature resistance totem", bot))
+        return botAI->CastSpell("nature resistance totem", bot);
+
+    return false;
+}
