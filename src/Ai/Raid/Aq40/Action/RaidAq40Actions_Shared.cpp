@@ -80,7 +80,7 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     if (!bot || !botAI)
         return nullptr;
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return nullptr;
 

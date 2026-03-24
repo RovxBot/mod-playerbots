@@ -102,7 +102,7 @@ Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
 
 uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& outCohortSize)
 {
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
     {
         outCohortSize = forMelee ? 8u : 12u;

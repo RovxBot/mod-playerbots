@@ -143,7 +143,7 @@ inline Player* GetEncounterPrimaryTank(Player* player)
     if (!player)
         return nullptr;
 
-    Group* group = player->GetGroup();
+    Group const* group = player->GetGroup();
     if (!group)
         return PlayerbotAI::IsTank(player) && player->IsAlive() ? player : nullptr;
 
@@ -178,7 +178,7 @@ inline Player* GetEncounterBackupTank(Player* player, uint8 index = 0)
     if (!player)
         return nullptr;
 
-    Group* group = player->GetGroup();
+    Group const* group = player->GetGroup();
     if (!group)
         return nullptr;
 
@@ -241,7 +241,7 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
         return std::numeric_limits<uint32>::max();
 
-    Group* group = player->GetGroup();
+    Group const* group = player->GetGroup();
     if (!group)
         return 0;
 

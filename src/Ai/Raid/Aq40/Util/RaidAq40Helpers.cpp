@@ -43,7 +43,7 @@ uint32 GetGroupMemberOrder(Player* bot, Player* member)
     if (!bot || !member)
         return std::numeric_limits<uint32>::max();
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return std::numeric_limits<uint32>::max();
 
@@ -129,7 +129,7 @@ Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32
     if (!bot)
         return nullptr;
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return nullptr;
 
@@ -165,7 +165,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     if (!bot)
         return 0;
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return static_cast<uint32>(bot->GetGUID().GetCounter() % 2);
 
