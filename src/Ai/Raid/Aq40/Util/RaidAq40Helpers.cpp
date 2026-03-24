@@ -48,7 +48,7 @@ uint32 GetGroupMemberOrder(Player* bot, Player* member)
         return std::numeric_limits<uint32>::max();
 
     uint32 order = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next(), ++order)
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next(), ++order)
     {
         if (ref->GetSource() == member)
             return order;
@@ -133,7 +133,7 @@ Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32
     if (!group)
         return nullptr;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!IsTwinRoleMatch(cohort, member))
@@ -190,7 +190,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         return assignments[botGuid];
 
     std::vector<Player*> members;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!IsTwinRoleMatch(cohort, member))
@@ -333,7 +333,7 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
     if (!bot || !assignment.sideEmperor)
         return false;
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return false;
 
@@ -345,7 +345,7 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
     // not proximity which can misclassify during teleport crossings.
     uint32 const botSideIndex = GetStableTwinRoleIndex(bot, botAI);
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !IsTwinRoleMatch(requiredCohort, member))

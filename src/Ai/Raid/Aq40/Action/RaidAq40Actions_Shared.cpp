@@ -87,7 +87,7 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     Unit* riskiestMember = nullptr;
     float largestDeficit = 0.0f;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || member == bot || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))

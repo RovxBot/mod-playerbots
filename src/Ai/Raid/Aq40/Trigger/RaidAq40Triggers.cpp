@@ -247,11 +247,11 @@ bool Aq40BugTrioFearTrigger::IsActive()
     if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::BugTrioYaujFear }))
         return true;
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return false;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
@@ -457,11 +457,11 @@ bool Aq40TrashChampionFearTrigger::IsActive()
     }
 
     // Also trigger if nearby group members are feared
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return false;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
@@ -559,11 +559,11 @@ bool Aq40HuhuranNatureResistanceTrigger::IsActive()
     // First alive bot hunter near the encounter that can cast the spell
     // should apply it.  Skip humans (we can't command them) and bots that
     // are silenced/oom/don't know the spell — a later hunter can cover.
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return true;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive())

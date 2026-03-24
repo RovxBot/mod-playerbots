@@ -300,13 +300,13 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
             return false;
     }
 
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
         return false;
 
     std::vector<Player*> healers;
     std::vector<Player*> rangedDps;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))

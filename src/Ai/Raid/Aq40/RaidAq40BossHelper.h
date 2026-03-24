@@ -35,7 +35,7 @@ inline bool IsNearbyGroupMemberInCombat(Player const* player, float range = 100.
     if (player->IsInCombat())
         return true;
 
-    Group* group = player->GetGroup();
+    Group const* group = player->GetGroup();
     if (!group)
         return false;
 
@@ -68,7 +68,7 @@ inline bool IsEncounterCombatActive(Player const* player, float range = 100.0f)
     if (!player)
         return false;
 
-    Group* group = player->GetGroup();
+    Group const* group = player->GetGroup();
     if (!group)
         return false;
 
@@ -147,7 +147,7 @@ inline Player* GetEncounterPrimaryTank(Player* player)
     if (!group)
         return PlayerbotAI::IsTank(player) && player->IsAlive() ? player : nullptr;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
@@ -159,7 +159,7 @@ inline Player* GetEncounterPrimaryTank(Player* player)
             return member;
     }
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
@@ -184,7 +184,7 @@ inline Player* GetEncounterBackupTank(Player* player, uint8 index = 0)
 
     Player* primaryTank = GetEncounterPrimaryTank(player);
     std::vector<Player*> backups;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || member == primaryTank)
@@ -252,7 +252,7 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
 
     std::vector<Player*> warlocks;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)

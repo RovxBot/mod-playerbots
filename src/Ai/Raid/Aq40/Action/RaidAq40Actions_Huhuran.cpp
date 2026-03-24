@@ -13,7 +13,7 @@ float constexpr kPi = 3.14159265f;
 
 uint32 GetHuhuranSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& outCohortSize)
 {
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (!group)
     {
         outCohortSize = forMelee ? 8u : 12u;
@@ -23,7 +23,7 @@ uint32 GetHuhuranSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, u
     uint32 index = 0;
     uint32 botOrdinal = 0;
     bool found = false;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
@@ -119,10 +119,10 @@ bool Aq40HuhuranNatureResistTotemAction::Execute(Event /*event*/)
     // Only the first eligible bot shaman near the encounter should cast.
     // Skip humans (can't be commanded) and bots that can't cast right now
     // (silenced, oom, doesn't know the spell).
-    Group* group = bot->GetGroup();
+    Group const* group = bot->GetGroup();
     if (group)
     {
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
             if (!member || !member->IsAlive())

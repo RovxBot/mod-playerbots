@@ -112,7 +112,7 @@ uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& 
     uint32 index = 0;
     uint32 botOrdinal = 0;
     bool found = false;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
