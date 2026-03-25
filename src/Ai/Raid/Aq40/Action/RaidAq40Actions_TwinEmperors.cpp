@@ -38,7 +38,7 @@ std::vector<Unit*> FindTwinSideBugs(PlayerbotAI* botAI, GuidVector const& attack
 {
     return FindUnitsByAnyName(botAI, attackers, { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" });
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions
 
 namespace
 {
@@ -175,7 +175,7 @@ bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers:
     outPosition.Relocate(targetX, targetY, targetZ);
     return true;
 }
-}  // namespace
+}    // namespace
 
 bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 {
@@ -235,8 +235,6 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     // RTI marking: the melee tank marks both bosses so the raid has
     // clear icons to follow.  Diamond = Vek'nilash (physical), Square = Vek'lor (magic).
-    // Avoid Skull — it is a universal "primary target" marker that could mislead
-    // human players or interact with other bot targeting logic.
     if (isMeleeTank && assignment.veknilash && assignment.veklor)
     {
         MarkTargetWithDiamond(bot, assignment.veknilash);
@@ -464,12 +462,16 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
             continue;
 
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI)
+            continue;
+
         if ((!memberAI->IsRanged(member) && !memberAI->IsHeal(member)) ||
             Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
             continue;
 
-        // Only include members assigned to the Vek'lor side.
-        // DPS roles always follow Vek'lor, healers use stable role index.
+    // Only include members assigned to the Vek'lor side.
+    // DPS roles always follow Vek'lor, healers use stable role index.
         bool const memberOnVeklorSide =
             (memberAI->IsRanged(member) && !memberAI->IsHeal(member)) ||
             (memberAI->IsHeal(member) &&
@@ -565,9 +567,9 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
     return acted;
 }
 
-// Vek'lor is immune to physical damage.  Pets assigned to that side would
-// generate nothing but IMMUNE spam.  Set them passive when the owner is on
-// the Vek'lor side, and restore defensive mode on the Vek'nilash side.
+    // Vek'lor is immune to physical damage.  Pets assigned to that side would
+    // generate nothing but IMMUNE spam.  Set them passive when the owner is on
+    // the Vek'lor side, and restore defensive mode on the Vek'nilash side.
 bool Aq40TwinEmperorsPetControlAction::Execute(Event /*event*/)
 {
     Pet* pet = bot->GetPet();
@@ -583,7 +585,7 @@ bool Aq40TwinEmperorsPetControlAction::Execute(Event /*event*/)
 
     if (onVeklorSide)
     {
-        // Check if there are side bugs the pet could attack instead.
+    // Check if there are side bugs the pet could attack instead.
         std::vector<Unit*> sideBugs = Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits);
         Unit* bugTarget = nullptr;
         for (Unit* bug : sideBugs)
@@ -611,7 +613,7 @@ bool Aq40TwinEmperorsPetControlAction::Execute(Event /*event*/)
             return false;
         }
 
-        // No bugs available — go passive so the pet doesn't hit the immune boss.
+    // No bugs available — go passive so the pet doesn't hit the immune boss.
         if (pet->GetReactState() != REACT_PASSIVE)
         {
             pet->AttackStop();

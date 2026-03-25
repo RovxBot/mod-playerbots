@@ -560,63 +560,6 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
     return false;
 }
 
-bool Aq40HuhuranNatureResistanceTrigger::IsActive()
-{
-    // Only relevant for hunters.
-    if (!bot->IsAlive() || bot->getClass() != CLASS_HUNTER)
-        return false;
-
-    // Boss must be engaged and alive.
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* huhuran = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "princess huhuran" });
-    if (!huhuran || !huhuran->IsAlive() || huhuran->IsFriendlyTo(bot))
-        return false;
-
-    // Check if bot already has Aspect of the Wild active (any rank).
-    if (botAI->HasAura("aspect of the wild", bot))
-        return false;
-
-    // Check bot knows the spell.
-    if (!botAI->CanCastSpell("aspect of the wild", bot))
-        return false;
-
-    // First alive bot hunter near the encounter that can cast the spell
-    // should apply it.  Skip humans (we can't command them) and bots that
-    // are silenced/oom/don't know the spell — a later hunter can cover.
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return true;
-
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive())
-            continue;
-        if (member->getClass() != CLASS_HUNTER)
-            continue;
-        if (!Aq40BossHelper::IsSameInstance(bot, member))
-            continue;
-        if (bot->GetDistance2d(member) > 60.0f)
-            continue;
-
-        // Skip humans — we cannot control their aspect choice.
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI)
-            continue;
-
-        // Skip bots that already have Wild up or cannot cast it right now.
-        if (memberAI->HasAura("aspect of the wild", member) ||
-            !memberAI->CanCastSpell("aspect of the wild", member))
-            continue;
-
-        // First eligible bot hunter wins.
-        return member == bot;
-    }
-
-    // No eligible bot hunter found — this bot is elected by default.
-    return true;
-}
-
 bool Aq40TwinEmperorsActiveTrigger::IsActive()
 {
     if (!Aq40EncounterEngaged(botAI, bot))

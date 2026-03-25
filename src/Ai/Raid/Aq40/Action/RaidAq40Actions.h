@@ -195,25 +195,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40HuhuranNatureResistTotemAction : public Action
-{
-public:
-    Aq40HuhuranNatureResistTotemAction(PlayerbotAI* botAI) : Action(botAI, "aq40 huhuran nature resist totem") {}
-    bool Execute(Event event) override;
-};
-
-// AQ40-specific nature resistance action that bypasses the generic
-// BossNatureResistanceTrigger in isUseful(), using the encounter-local
-// Aq40HuhuranNatureResistanceTrigger instead.
-class Aq40HuhuranNatureResistanceAction : public Action
-{
-public:
-    Aq40HuhuranNatureResistanceAction(PlayerbotAI* botAI)
-        : Action(botAI, "aq40 huhuran nature resistance") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
 class Aq40TwinEmperorsChooseTargetAction : public AttackAction
 {
 public:

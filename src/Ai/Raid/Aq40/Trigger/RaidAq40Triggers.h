@@ -176,16 +176,6 @@ public:
     bool IsActive() override;
 };
 
-// AQ40-specific nature resistance trigger that adds encounter-local proximity
-// filtering so a hunter elsewhere in the raid does not block the nearby hunter.
-class Aq40HuhuranNatureResistanceTrigger : public Trigger
-{
-public:
-    Aq40HuhuranNatureResistanceTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "aq40 huhuran nature resistance") {}
-    bool IsActive() override;
-};
-
 class Aq40TwinEmperorsActiveTrigger : public Trigger
 {
 public:
