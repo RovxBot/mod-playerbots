@@ -132,8 +132,8 @@ bool ShouldReserveForTwinBug(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinA
     return true;
 }
 
-bool MoveToTwinFallbackAnchor(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment,
-                              bool forPreTeleport)
+bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment,
+                                   bool forPreTeleport, Position& outPosition)
 {
     if (!bot || !botAI || !assignment.sideEmperor)
         return false;
@@ -168,10 +168,12 @@ bool MoveToTwinFallbackAnchor(Player* bot, PlayerbotAI* botAI, Aq40Helpers::Twin
     if (bot->GetDistance(targetX, targetY, targetZ) <= tolerance)
         return false;
 
-    return bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
-               bot->GetPositionZ(), targetX, targetY, targetZ) &&
-           MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true, false);
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+        return false;
+
+    outPosition.Relocate(targetX, targetY, targetZ);
+    return true;
 }
 }  // namespace
 
@@ -295,8 +297,13 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (!sideBoss)
         return false;
 
-    if (MoveToTwinFallbackAnchor(bot, botAI, assignment, false))
-        return true;
+    Position fallbackAnchor;
+    if (GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
+    {
+        return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
+                      fallbackAnchor.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+    }
 
     float desiredRange = 0.0f;
     if (botAI->IsHeal(bot))
@@ -362,7 +369,13 @@ bool Aq40TwinEmperorsPreTeleportStageAction::Execute(Event /*event*/)
                       MovementPriority::MOVEMENT_COMBAT, true, false);
     }
 
-    return MoveToTwinFallbackAnchor(bot, botAI, assignment, true);
+    Position fallbackAnchor;
+    if (!GetTwinFallbackAnchorPosition(bot, botAI, assignment, true, fallbackAnchor))
+        return false;
+
+    return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
+                  fallbackAnchor.GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT, true, false);
 }
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
