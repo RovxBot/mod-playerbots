@@ -115,8 +115,8 @@ float Aq40SkeramMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "the prophet skeram" }))
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "the prophet skeram" }))
         return 1.0f;
 
     std::string const actionName = action->getName();
@@ -218,8 +218,8 @@ float Aq40HuhuranMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* huhuran = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "princess huhuran" });
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* huhuran = Aq40BossHelper::FindUnitByAnyName(botAI, activeUnits, { "princess huhuran" });
     if (!huhuran || Aq40BossHelper::IsEncounterTank(bot, bot))
         return 1.0f;
 
@@ -246,8 +246,8 @@ float Aq40OuroMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* ouro = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "ouro" });
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* ouro = Aq40BossHelper::FindUnitByAnyName(botAI, activeUnits, { "ouro" });
     if (!ouro)
         return 1.0f;
 
@@ -295,8 +295,8 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" }))
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
         return 1.0f;
 
     std::string const actionName = action->getName();
@@ -366,8 +366,8 @@ float Aq40ViscidusMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* viscidus = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "viscidus" });
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* viscidus = Aq40BossHelper::FindUnitByAnyName(botAI, activeUnits, { "viscidus" });
     if (!viscidus)
         return 1.0f;
 
@@ -404,11 +404,13 @@ float Aq40CthunMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
                                          { "c'thun", "eye of c'thun", "eye tentacle", "claw tentacle",
                                            "giant eye tentacle", "giant claw tentacle", "flesh tentacle" }))
         return 1.0f;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
 
     std::string const actionName = action->getName();
     bool isCthunControlAction =

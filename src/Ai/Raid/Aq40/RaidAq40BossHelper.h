@@ -400,6 +400,15 @@ inline GuidVector GetEncounterUnits(PlayerbotAI* botAI, GuidVector const& attack
         return units;
 
     Player* bot = botAI->GetBot();
+    if (!bot)
+        return units;
+
+    // Do not pull in no-LOS AQ40 units unless there is an actual local
+    // encounter in progress. Otherwise nearby dead-room bosses/trash can
+    // suppress normal follow/formation behavior just by being visible.
+    if (attackers.empty() && !IsEncounterCombatActive(bot))
+        return units;
+
     GuidVector const& possibleTargetsNoLos =
         botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
     for (ObjectGuid const guid : possibleTargetsNoLos)
