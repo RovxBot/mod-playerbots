@@ -32,6 +32,13 @@ struct CthunSpreadState
 };
 std::unordered_map<uint32, CthunSpreadState> sCthunSpreadByInstance;
 
+struct CthunSpreadSlot
+{
+    bool innerRing = false;
+    uint32 ordinal = 0;
+    uint32 ringSize = 1;
+};
+
 enum class CthunExpectedGiantType : uint8
 {
     Claw = 0,
@@ -46,6 +53,16 @@ Unit* FindCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
 Unit* FindCthunEye(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     return Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "eye of c'thun" });
+}
+
+void PinCthunTarget(PlayerbotAI* botAI, ActionContext* context, Unit* target)
+{
+    if (!botAI || !context || !target)
+        return;
+
+    ObjectGuid const guid = target->GetGUID();
+    botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({ guid });
+    context->GetValue<ObjectGuid>("pull target")->Set(guid);
 }
 
 Unit* FindHighestPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
@@ -100,6 +117,28 @@ Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
     return FindHighestPriorityCthunAdd(botAI, attackers);
 }
 
+Unit* FindCthunBeamSpacingRisk(Player* bot, PlayerbotAI* botAI, Unit* eye)
+{
+    if (!bot || !botAI || !eye)
+        return nullptr;
+
+    ObjectGuid const eyeTargetGuid = eye->GetTarget();
+    if (!eyeTargetGuid || eyeTargetGuid == bot->GetGUID())
+        return nullptr;
+
+    Unit* eyeTarget = botAI->GetUnit(eyeTargetGuid);
+    if (!eyeTarget || !eyeTarget->IsAlive())
+        return nullptr;
+
+    return bot->GetDistance2d(eyeTarget) < 12.0f ? eyeTarget : nullptr;
+}
+
+Creature* FindLikelyStomachExitTrigger(Player* bot)
+{
+    static constexpr uint32 kCthunExitTriggerEntry = 15800;
+    return bot ? bot->FindNearestCreature(kCthunExitTriggerEntry, 150.0f, true) : nullptr;
+}
+
 uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& outCohortSize)
 {
     Group const* group = bot->GetGroup();
@@ -152,6 +191,23 @@ uint32 GetSpreadOrdinal(Player* bot, PlayerbotAI* botAI, bool forMelee, uint32& 
     return static_cast<uint32>(bot->GetGUID().GetCounter() % outCohortSize);
 }
 
+CthunSpreadSlot GetSpreadSlot(Player* bot, PlayerbotAI* botAI, bool forMelee)
+{
+    uint32 cohortSize = 0;
+    uint32 ordinal = GetSpreadOrdinal(bot, botAI, forMelee, cohortSize);
+    if (forMelee)
+        return { false, ordinal, std::max<uint32>(cohortSize, 8u) };
+
+    uint32 innerRingSize = std::max<uint32>(1u, cohortSize / 2);
+    uint32 outerRingSize = std::max<uint32>(1u, cohortSize - innerRingSize);
+    bool const innerRing = (ordinal % 2u) != 0u;
+    uint32 ringOrdinal = ordinal / 2u;
+    if (innerRing)
+        return { true, ringOrdinal % innerRingSize, innerRingSize };
+
+    return { false, ringOrdinal % outerRingSize, outerRingSize };
+}
+
 Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* boss, bool forMelee)
 {
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
@@ -179,10 +235,9 @@ Position GetAssignedCthunSpreadPosition(Player* bot, PlayerbotAI* botAI, Unit* b
     if (itr != state.positions.end())
         return itr->second;
 
-    uint32 totalSlots = 0;
-    uint32 slot = GetSpreadOrdinal(bot, botAI, forMelee, totalSlots);
-    float const angle = static_cast<float>(slot) * ((2.0f * kPi) / static_cast<float>(totalSlots));
-    float const radius = forMelee ? 8.0f : 28.0f;
+    CthunSpreadSlot const slot = GetSpreadSlot(bot, botAI, forMelee);
+    float const angle = static_cast<float>(slot.ordinal) * ((2.0f * kPi) / static_cast<float>(slot.ringSize));
+    float const radius = forMelee ? 8.0f : (slot.innerRing ? 18.0f : 28.0f);
 
     Position assigned(boss->GetPositionX() + std::cos(angle) * radius,
                       boss->GetPositionY() + std::sin(angle) * radius,
@@ -221,6 +276,7 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
+    PinCthunTarget(botAI, context, target);
     return Attack(target);
 }
 
@@ -240,6 +296,9 @@ bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
         boss = FindCthunBody(botAI, encounterUnits);
     if (!boss)
         return false;
+
+    if (Unit* spacingRisk = FindCthunBeamSpacingRisk(bot, botAI, FindCthunEye(botAI, encounterUnits)))
+        return MoveAway(spacingRisk, 12.0f - bot->GetDistance2d(spacingRisk));
 
     bool const isMelee = !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
     Position assigned = GetAssignedCthunSpreadPosition(bot, botAI, boss, isMelee);
@@ -312,6 +371,7 @@ bool Aq40CthunStomachDpsAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") == fleshTentacle && bot->GetVictim() == fleshTentacle)
         return false;
 
+    PinCthunTarget(botAI, context, fleshTentacle);
     return Attack(fleshTentacle);
 }
 
@@ -342,6 +402,12 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
                       false, false, MovementPriority::MOVEMENT_COMBAT);
     }
 
+    if (Creature* exitTrigger = FindLikelyStomachExitTrigger(bot))
+    {
+        return MoveTo(bot->GetMapId(), exitTrigger->GetPositionX(), exitTrigger->GetPositionY(), exitTrigger->GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    }
+
     // Fallback: deterministic radial sweep to avoid straight-line dead ends.
     uint32 direction = (getMSTime() / 2000) % 8;
     float angle = (2.0f * kPi) * (static_cast<float>(direction) / 8.0f);
@@ -361,6 +427,7 @@ bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
+    PinCthunTarget(botAI, context, target);
     return Attack(target);
 }
 
@@ -379,6 +446,7 @@ bool Aq40CthunVulnerableBurstAction::Execute(Event /*event*/)
     if (!body || (AI_VALUE(Unit*, "current target") == body && bot->GetVictim() == body))
         return false;
 
+    PinCthunTarget(botAI, context, body);
     return Attack(body);
 }
 
@@ -395,7 +463,10 @@ bool Aq40CthunInterruptEyeAction::Execute(Event /*event*/)
         // once the bot is facing/in range. Avoids failing interrupts from
         // same-tick target switch (Naxxramas uses separate ticks too).
         if (AI_VALUE(Unit*, "current target") != eye || bot->GetVictim() != eye)
+        {
+            PinCthunTarget(botAI, context, eye);
             return Attack(eye);
+        }
 
         return botAI->DoSpecificAction("interrupt spell", Event(), true);
     }

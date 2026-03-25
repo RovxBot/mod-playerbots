@@ -34,6 +34,15 @@ Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
     return ouro;
 }
 
+Unit* FindSelectableCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    Unit* cthun = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "c'thun" });
+    if (!cthun || (cthun->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) == UNIT_FLAG_NOT_SELECTABLE)
+        return nullptr;
+
+    return cthun;
+}
+
 bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
 {
     return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
@@ -962,6 +971,9 @@ bool Aq40CthunPhase2Trigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (FindSelectableCthunBody(botAI, encounterUnits))
+        return true;
+
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
                                            { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
