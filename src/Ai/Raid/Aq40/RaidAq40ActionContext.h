@@ -11,6 +11,7 @@ public:
     RaidAq40ActionContext()
     {
         creators["aq40 choose target"] = &RaidAq40ActionContext::choose_target;
+        creators["aq40 manage resistance strategies"] = &RaidAq40ActionContext::manage_resistance_strategies;
         creators["aq40 skeram acquire platform target"] = &RaidAq40ActionContext::skeram_acquire_platform_target;
         creators["aq40 skeram interrupt"] = &RaidAq40ActionContext::skeram_interrupt;
         creators["aq40 skeram focus real boss"] = &RaidAq40ActionContext::skeram_focus_real_boss;
@@ -63,6 +64,10 @@ public:
 
 private:
     static Action* choose_target(PlayerbotAI* botAI) { return new Aq40ChooseTargetAction(botAI); }
+    static Action* manage_resistance_strategies(PlayerbotAI* botAI)
+    {
+        return new Aq40ManageResistanceStrategiesAction(botAI);
+    }
     static Action* skeram_acquire_platform_target(PlayerbotAI* botAI)
     {
         return new Aq40SkeramAcquirePlatformTargetAction(botAI);

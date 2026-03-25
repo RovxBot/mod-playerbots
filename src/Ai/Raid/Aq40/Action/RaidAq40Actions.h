@@ -34,6 +34,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40ManageResistanceStrategiesAction : public Action
+{
+public:
+    Aq40ManageResistanceStrategiesAction(PlayerbotAI* botAI)
+        : Action(botAI, "aq40 manage resistance strategies")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40SkeramAcquirePlatformTargetAction : public AttackAction
 {
 public:

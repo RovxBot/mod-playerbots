@@ -12,6 +12,16 @@ public:
     bool IsActive() override;
 };
 
+// Low-priority AQ40 housekeeping trigger used to toggle encounter-specific
+// resistance strategies on and off as bosses change.
+class Aq40ResistanceStrategyTrigger : public Trigger
+{
+public:
+    Aq40ResistanceStrategyTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 resistance strategy check") {}
+    bool IsActive() override;
+};
+
 class Aq40SkeramActiveTrigger : public Trigger
 {
 public:

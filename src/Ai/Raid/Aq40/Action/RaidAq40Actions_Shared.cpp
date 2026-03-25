@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 
 #include "ObjectGuid.h"
 #include "../RaidAq40BossHelper.h"
@@ -10,6 +11,17 @@
 
 namespace
 {
+struct Aq40ManagedResistanceState
+{
+    bool natureCombatEnabled = false;
+    bool natureNonCombatEnabled = false;
+    bool shamanNatureCombatEnabled = false;
+    bool shadowCombatEnabled = false;
+    bool shadowNonCombatEnabled = false;
+};
+
+std::unordered_map<uint64, Aq40ManagedResistanceState> sManagedResistanceStateByBot;
+
 bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
 {
     return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
@@ -108,6 +120,148 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     return riskiestMember;
 }
 }  // namespace
+
+bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
+{
+    if (!bot)
+        return false;
+
+    Aq40ManagedResistanceState& managedState = sManagedResistanceStateByBot[bot->GetGUID().GetRawValue()];
+
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector const activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    bool const inAq40 = Aq40BossHelper::IsInAq40(bot);
+    bool const needNatureResistance =
+        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    bool const needShadowResistance =
+        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "emperor vek'nilash", "emperor vek'lor" });
+
+    bool acted = false;
+
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        bool const hasNatureStrategyCombat = botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT);
+        bool const hasNatureStrategyNonCombat = botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT);
+
+        if (needNatureResistance)
+        {
+            if (!hasNatureStrategyCombat)
+            {
+                botAI->ChangeStrategy("+rnature", BotState::BOT_STATE_COMBAT);
+                managedState.natureCombatEnabled = true;
+                acted = true;
+            }
+            if (!hasNatureStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("+rnature", BotState::BOT_STATE_NON_COMBAT);
+                managedState.natureNonCombatEnabled = true;
+                acted = true;
+            }
+
+            if (!botAI->HasAura("aspect of the wild", bot))
+                acted = botAI->DoSpecificAction("aspect of the wild", Event(), true) || acted;
+        }
+        else if (managedState.natureCombatEnabled || managedState.natureNonCombatEnabled)
+        {
+            if (managedState.natureCombatEnabled && hasNatureStrategyCombat)
+            {
+                botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_COMBAT);
+                managedState.natureCombatEnabled = false;
+                acted = true;
+            }
+            if (managedState.natureNonCombatEnabled && hasNatureStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_NON_COMBAT);
+                managedState.natureNonCombatEnabled = false;
+                acted = true;
+            }
+        }
+    }
+
+    if (bot->getClass() == CLASS_SHAMAN)
+    {
+        bool const hasNatureTotemStrategyCombat = botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT);
+
+        if (needNatureResistance)
+        {
+            if (!hasNatureTotemStrategyCombat)
+            {
+                botAI->ChangeStrategy("+nature resistance", BotState::BOT_STATE_COMBAT);
+                managedState.shamanNatureCombatEnabled = true;
+                acted = true;
+            }
+
+            if (!botAI->HasAura("nature resistance totem", bot))
+                acted = botAI->DoSpecificAction("nature resistance totem", Event(), true) || acted;
+        }
+        else if (managedState.shamanNatureCombatEnabled)
+        {
+            if (hasNatureTotemStrategyCombat)
+            {
+                botAI->ChangeStrategy("-nature resistance", BotState::BOT_STATE_COMBAT);
+                acted = true;
+            }
+            managedState.shamanNatureCombatEnabled = false;
+        }
+    }
+
+    if (bot->getClass() == CLASS_PRIEST || bot->getClass() == CLASS_PALADIN)
+    {
+        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
+        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+
+        if (needShadowResistance)
+        {
+            if (!hasShadowStrategyCombat)
+            {
+                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_COMBAT);
+                managedState.shadowCombatEnabled = true;
+                acted = true;
+            }
+            if (!hasShadowStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_NON_COMBAT);
+                managedState.shadowNonCombatEnabled = true;
+                acted = true;
+            }
+
+            if (bot->getClass() == CLASS_PRIEST)
+            {
+                if (!botAI->HasAura("shadow protection", bot) &&
+                    !botAI->HasAura("prayer of shadow protection", bot))
+                    acted = botAI->DoSpecificAction("shadow protection on party", Event(), true) || acted;
+            }
+            else if (bot->getClass() == CLASS_PALADIN)
+            {
+                acted = botAI->DoSpecificAction("shadow resistance aura", Event(), true) || acted;
+            }
+        }
+        else if (managedState.shadowCombatEnabled || managedState.shadowNonCombatEnabled)
+        {
+            if (managedState.shadowCombatEnabled && hasShadowStrategyCombat)
+            {
+                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
+                managedState.shadowCombatEnabled = false;
+                acted = true;
+            }
+            if (managedState.shadowNonCombatEnabled && hasShadowStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
+                managedState.shadowNonCombatEnabled = false;
+                acted = true;
+            }
+        }
+    }
+
+    if (!managedState.natureCombatEnabled && !managedState.natureNonCombatEnabled &&
+        !managedState.shamanNatureCombatEnabled &&
+        !managedState.shadowCombatEnabled && !managedState.shadowNonCombatEnabled)
+        sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue());
+
+    return acted;
+}
 
 bool Aq40ChooseTargetAction::Execute(Event /*event*/)
 {

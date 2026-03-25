@@ -83,6 +83,11 @@ bool Aq40EngageTrigger::IsActive()
     return Aq40EncounterEngaged(botAI, bot);
 }
 
+bool Aq40ResistanceStrategyTrigger::IsActive()
+{
+    return true;
+}
+
 bool Aq40SkeramActiveTrigger::IsActive()
 {
     if (!Aq40EncounterEngaged(botAI, bot))

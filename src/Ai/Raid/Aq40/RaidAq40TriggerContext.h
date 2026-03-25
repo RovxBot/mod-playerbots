@@ -11,6 +11,7 @@ public:
     RaidAq40TriggerContext()
     {
         creators["aq40 engage"] = &RaidAq40TriggerContext::engage;
+        creators["aq40 resistance strategy check"] = &RaidAq40TriggerContext::resistance_strategy_check;
         creators["aq40 skeram active"] = &RaidAq40TriggerContext::skeram_active;
         creators["aq40 skeram blinked"] = &RaidAq40TriggerContext::skeram_blinked;
         creators["aq40 skeram interrupt cast"] = &RaidAq40TriggerContext::skeram_interrupt_cast;
@@ -63,6 +64,10 @@ public:
 
 private:
     static Trigger* engage(PlayerbotAI* botAI) { return new Aq40EngageTrigger(botAI); }
+    static Trigger* resistance_strategy_check(PlayerbotAI* botAI)
+    {
+        return new Aq40ResistanceStrategyTrigger(botAI);
+    }
     static Trigger* skeram_active(PlayerbotAI* botAI) { return new Aq40SkeramActiveTrigger(botAI); }
     static Trigger* skeram_blinked(PlayerbotAI* botAI) { return new Aq40SkeramBlinkTrigger(botAI); }
     static Trigger* skeram_interrupt_cast(PlayerbotAI* botAI) { return new Aq40SkeramArcaneExplosionTrigger(botAI); }
