@@ -306,11 +306,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
         actionName == "aq40 twin emperors hold split" ||
+        actionName == "aq40 twin emperors pre teleport stage" ||
         actionName == "aq40 twin emperors warlock tank" ||
         actionName == "aq40 twin emperors avoid arcane burst" ||
         actionName == "aq40 twin emperors avoid blizzard" ||
         actionName == "aq40 twin emperors enforce separation" ||
-        actionName == "aq40 twin emperors pet control";
+        actionName == "aq40 twin emperors pet control" ||
+        actionName == "aq40 twin emperors move away from brother";
 
     if (isTwinControlAction)
         return 1.0f;

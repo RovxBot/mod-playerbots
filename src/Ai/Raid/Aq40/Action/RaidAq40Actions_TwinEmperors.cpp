@@ -451,22 +451,21 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsNearEncounter(bot, member))
             continue;
 
-        if ((!botAI->IsRanged(member) && !botAI->IsHeal(member)) ||
+        if ((!memberAI->IsRanged(member) && !memberAI->IsHeal(member)) ||
             Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
             continue;
 
         // Only include members assigned to the Vek'lor side.
         // DPS roles always follow Vek'lor, healers use stable role index.
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
         bool const memberOnVeklorSide =
-            (botAI->IsRanged(member) && !botAI->IsHeal(member)) ||
-            (botAI->IsHeal(member) &&
+            (memberAI->IsRanged(member) && !memberAI->IsHeal(member)) ||
+            (memberAI->IsHeal(member) &&
              Aq40Helpers::GetStableTwinRoleIndex(member, memberAI) ==
              Aq40Helpers::GetStableTwinRoleIndex(bot, botAI));
         if (!memberOnVeklorSide)
             continue;
 
-        if (botAI->IsHeal(member))
+        if (memberAI->IsHeal(member))
             healers.push_back(member);
         else
             rangedDps.push_back(member);
