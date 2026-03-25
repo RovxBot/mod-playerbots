@@ -11,4 +11,4 @@ std::vector<Unit*> FindFankrissSpawns(PlayerbotAI* botAI, GuidVector const& atta
 {
     return FindUnitsByAnyName(botAI, attackers, { "spawn of fankriss" });
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions

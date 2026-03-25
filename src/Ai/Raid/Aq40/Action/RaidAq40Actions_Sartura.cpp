@@ -11,4 +11,4 @@ std::vector<Unit*> FindSarturaGuards(PlayerbotAI* botAI, GuidVector const& attac
 {
     return FindUnitsByAnyName(botAI, attackers, { "sartura's royal guard" });
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions

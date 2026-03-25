@@ -28,7 +28,7 @@ Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
     return FindBugTrioUnit(botAI, attackers, "lord kri");
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions
 
 namespace
 {
@@ -49,7 +49,7 @@ GuidVector GetBugTrioEncounterUnits(PlayerbotAI* botAI)
     GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     return Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 }
-}  // namespace
+}    // namespace
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
 {

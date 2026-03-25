@@ -67,7 +67,7 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
            botAI->HasAura("whirlwind", unit);
 }
-}  // namespace
+}    // namespace
 
 float Aq40GenericMultiplier::GetValue(Action* action)
 {

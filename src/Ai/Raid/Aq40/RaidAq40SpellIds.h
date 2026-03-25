@@ -90,6 +90,6 @@ inline bool MatchesAnySpellId(SpellInfo const* info, std::initializer_list<uint3
 
     return false;
 }
-}  // namespace Aq40SpellIds
+}    // namespace Aq40SpellIds
 
 #endif

@@ -37,16 +37,11 @@ public:
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
         creators["aq40 twin emperors pre teleport"] = &RaidAq40TriggerContext::twin_emperors_pre_teleport;
-        creators["aq40 twin emperors arcane burst risk"] =
-            &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
-        creators["aq40 twin emperors blizzard risk"] =
-            &RaidAq40TriggerContext::twin_emperors_blizzard_risk;
-        creators["aq40 twin emperors has opposite aggro"] =
-            &RaidAq40TriggerContext::twin_emperors_has_opposite_aggro;
-        creators["aq40 twin emperors heal brother"] =
-            &RaidAq40TriggerContext::twin_emperors_heal_brother;
-        creators["aq40 twin emperors need separation"] =
-            &RaidAq40TriggerContext::twin_emperors_need_separation;
+        creators["aq40 twin emperors arcane burst risk"] = &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
+        creators["aq40 twin emperors blizzard risk"] = &RaidAq40TriggerContext::twin_emperors_blizzard_risk;
+        creators["aq40 twin emperors has opposite aggro"] = &RaidAq40TriggerContext::twin_emperors_has_opposite_aggro;
+        creators["aq40 twin emperors heal brother"] = &RaidAq40TriggerContext::twin_emperors_heal_brother;
+        creators["aq40 twin emperors need separation"] = &RaidAq40TriggerContext::twin_emperors_need_separation;
         creators["aq40 ouro active"] = &RaidAq40TriggerContext::ouro_active;
         creators["aq40 ouro scarabs present"] = &RaidAq40TriggerContext::ouro_scarabs_present;
         creators["aq40 ouro sweep risk"] = &RaidAq40TriggerContext::ouro_sweep_risk;

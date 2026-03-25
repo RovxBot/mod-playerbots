@@ -410,10 +410,10 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
 
     if (!cthunBody)
     {
-        // Body not in this caller's view.  Only erase the timer if no
-        // C'Thun-related unit is visible at all (encounter over).  A bot
-        // that sees tentacles but not the body must not zero the shared
-        // timer — other callers who CAN see the body will maintain it.
+    // Body not in this caller's view.  Only erase the timer if no
+    // C'Thun-related unit is visible at all (encounter over).  A bot
+    // that sees tentacles but not the body must not zero the shared
+    // timer — other callers who CAN see the body will maintain it.
         if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
                 { "eye of c'thun", "flesh tentacle", "eye tentacle",
                   "giant eye tentacle", "claw tentacle", "giant claw tentacle" }))
@@ -422,8 +422,8 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
             return 0;
         }
 
-        // Tentacles visible but body not — return the stored elapsed time
-        // so wave prediction stays consistent with bots that can see the body.
+    // Tentacles visible but body not — return the stored elapsed time
+    // so wave prediction stays consistent with bots that can see the body.
         auto itr = sCthunPhase2StartByInstance.find(instanceId);
         if (itr != sCthunPhase2StartByInstance.end())
             return getMSTime() - itr->second;
@@ -499,4 +499,4 @@ GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
 
     return candidate;
 }
-}  // namespace Aq40Helpers
+}    // namespace Aq40Helpers

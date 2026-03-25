@@ -17,16 +17,15 @@
 
 namespace Aq40BossHelper
 {
-static constexpr uint32 MAP_ID = 531;  // Temple of Ahn'Qiraj
+static constexpr uint32 MAP_ID = 531;
 
 inline bool IsInAq40(Player const* player)
 {
     return player && player->GetMapId() == MAP_ID;
 }
 
-// Returns true if any group member near the caller (~100y, same instance) is
-// currently in combat.  Scoped by proximity so that unrelated trash combat
-// elsewhere in AQ40 does not prevent per-encounter state cleanup on wipe.
+    // Returns true if any group member near the caller (~100y, same instance) is currently in combat.
+    // Scoped by proximity so that unrelated trash combat elsewhere in AQ40 does not prevent per-encounter state cleanup on wipe.
 inline bool IsNearbyGroupMemberInCombat(Player const* player, float range = 100.0f)
 {
     if (!player)
@@ -57,12 +56,10 @@ inline bool IsNearbyGroupMemberInCombat(Player const* player, float range = 100.
     return false;
 }
 
-// Returns true when an active encounter cluster exists near the caller.
-// Requires two or more in-combat group members within |range| of the caller
-// in the same instance.  Caller-relative so that distant trash combat
-// elsewhere in AQ40 does NOT preserve stale boss state after a wipe.
-// Does NOT short-circuit on the caller's own combat (a single bot on
-// trash cannot keep the flag active by itself).
+    // Returns true when an active encounter cluster exists near the caller.
+    // Requires two or more in-combat group members within |range| of the caller in the same instance.
+    // Caller-relative so that distant trash combat elsewhere in AQ40 does NOT preserve stale boss state after a wipe.
+    // Does NOT short-circuit on the caller's own combat (a single bot on trash cannot keep the flag active by itself).
 inline bool IsEncounterCombatActive(Player const* player, float range = 100.0f)
 {
     if (!player)
@@ -97,9 +94,9 @@ inline bool IsEncounterCombatActive(Player const* player, float range = 100.0f)
     return false;
 }
 
-// Returns true when |member| is in the same instance copy as |reference|.
-// Used for globally-stable role selection (tanks, warlocks) where every member
-// in the instance must agree on the same assignment regardless of position.
+    // Returns true when |member| is in the same instance copy as |reference|.
+    // Used for globally-stable role selection (tanks, warlocks) where every member
+    // in the instance must agree on the same assignment regardless of position.
 inline bool IsSameInstance(Player const* reference, Player const* member)
 {
     if (!reference || !member)
@@ -114,10 +111,9 @@ inline bool IsSameInstance(Player const* reference, Player const* member)
     return true;
 }
 
-// Returns true when |member| is near the same encounter as |reference|:
-// same instance and within encounter range.  Used for spread/cohort
-// assignment so that distant players elsewhere in the same instance copy
-// do not consume positioning slots.
+    // Returns true when |member| is near the same encounter as |reference|: same instance and within encounter range.
+    // Used for spread/cohort assignment so that distant players elsewhere in the same instance copy
+    // do not consume positioning slots.
 inline bool IsNearEncounter(Player const* reference, Player const* member, float range = 100.0f)
 {
     if (!IsSameInstance(reference, member))
@@ -127,12 +123,11 @@ inline bool IsNearEncounter(Player const* reference, Player const* member, float
     return const_cast<Player*>(reference)->GetDistance2d(const_cast<Player*>(member)) <= range;
 }
 
-// Returns true when |member| is an active encounter participant: same
-// instance copy as the caller.  Used for role resolution (tanks, warlocks)
-// where every participant in the instance must agree on the same assignment
-// regardless of position.  Instance-global so that an isolated tank cannot
-// promote itself to "primary" in a local view, and so that a tank that
-// briefly moves far from the boss remains in the candidate set.
+    // Returns true when |member| is an active encounter participant: same
+    // instance copy as the caller.  Used for role resolution (tanks, warlocks)
+    // where every participant in the instance must agree on the same assignment regardless of position.
+    // Instance-global so that an isolated tank cannot promote itself to "primary" in a local view, and so that a tank that
+    // briefly moves far from the boss remains in the candidate set.
 inline bool IsEncounterParticipant(Player const* reference, Player const* member)
 {
     return IsSameInstance(reference, member);
@@ -504,6 +499,6 @@ inline bool IsTrashEncounterActive(PlayerbotAI* botAI, GuidVector const& attacke
                              "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
                              "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
 }
-}  // namespace Aq40BossHelper
+}    // namespace Aq40BossHelper
 
 #endif

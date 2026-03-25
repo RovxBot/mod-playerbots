@@ -39,6 +39,6 @@ bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI);
 uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers);
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI);
-}  // namespace Aq40Helpers
+}    // namespace Aq40Helpers
 
 #endif

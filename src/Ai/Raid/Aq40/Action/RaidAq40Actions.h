@@ -25,7 +25,7 @@ Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindCthunTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindViscidusTarget(PlayerbotAI* botAI, GuidVector const& attackers);
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions
 
 class Aq40ChooseTargetAction : public AttackAction
 {

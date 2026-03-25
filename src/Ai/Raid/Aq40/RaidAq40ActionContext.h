@@ -35,16 +35,11 @@ public:
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors pre teleport stage"] = &RaidAq40ActionContext::twin_emperors_pre_teleport_stage;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
-        creators["aq40 twin emperors avoid arcane burst"] =
-            &RaidAq40ActionContext::twin_emperors_avoid_arcane_burst;
-        creators["aq40 twin emperors avoid blizzard"] =
-            &RaidAq40ActionContext::twin_emperors_avoid_blizzard;
-        creators["aq40 twin emperors enforce separation"] =
-            &RaidAq40ActionContext::twin_emperors_enforce_separation;
-        creators["aq40 twin emperors pet control"] =
-            &RaidAq40ActionContext::twin_emperors_pet_control;
-        creators["aq40 twin emperors move away from brother"] =
-            &RaidAq40ActionContext::twin_emperors_move_away_from_brother;
+        creators["aq40 twin emperors avoid arcane burst"] = &RaidAq40ActionContext::twin_emperors_avoid_arcane_burst;
+        creators["aq40 twin emperors avoid blizzard"] = &RaidAq40ActionContext::twin_emperors_avoid_blizzard;
+        creators["aq40 twin emperors enforce separation"] = &RaidAq40ActionContext::twin_emperors_enforce_separation;
+        creators["aq40 twin emperors pet control"] = &RaidAq40ActionContext::twin_emperors_pet_control;
+        creators["aq40 twin emperors move away from brother"] = &RaidAq40ActionContext::twin_emperors_move_away_from_brother;
         creators["aq40 ouro choose target"] = &RaidAq40ActionContext::ouro_choose_target;
         creators["aq40 ouro hold melee contact"] = &RaidAq40ActionContext::ouro_hold_melee_contact;
         creators["aq40 ouro avoid sweep"] = &RaidAq40ActionContext::ouro_avoid_sweep;

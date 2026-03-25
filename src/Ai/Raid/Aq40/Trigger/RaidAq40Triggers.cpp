@@ -95,7 +95,7 @@ Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits
 
     return sideBug;
 }
-}  // namespace
+}    // namespace
 
 bool Aq40EngageTrigger::IsActive()
 {
@@ -165,7 +165,7 @@ bool Aq40SkeramMindControlTrigger::IsActive()
         if (!unit)
             continue;
 
-        // "True Fulfillment" can force players/bots into hostile behavior.
+    // "True Fulfillment" can force players/bots into hostile behavior.
         if (unit->IsPlayer() &&
             (unit->IsCharmed() ||
              Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::SkeramTrueFulfillment }) ||
@@ -548,8 +548,8 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "princess huhuran"))
             continue;
 
-        // Phase transition baseline:
-        // spread ranged during the dangerous poison volley/enrage window.
+    // Phase transition baseline:
+    // spread ranged during the dangerous poison volley/enrage window.
         if (unit->GetHealthPct() <= 32.0f)
             return true;
 
@@ -799,8 +799,8 @@ bool Aq40OuroSweepTrigger::IsActive()
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "ouro"))
             continue;
 
-        // Detect actual Sweep cast or aura, matching the pattern used by
-        // Sartura whirlwind detection (spell + aura + name fallback).
+    // Detect actual Sweep cast or aura, matching the pattern used by
+    // Sartura whirlwind detection (spell + aura + name fallback).
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         bool const sweeping =
             (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::OuroSweep })) ||
@@ -828,8 +828,8 @@ bool Aq40OuroSandBlastRiskTrigger::IsActive()
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "ouro"))
             continue;
 
-        // Non-tanks in Ouro's frontal arc are at Sand Blast risk
-        // (pattern from ICC Marrowgar: boss->isInFront(bot)).
+    // Non-tanks in Ouro's frontal arc are at Sand Blast risk
+    // (pattern from ICC Marrowgar: boss->isInFront(bot)).
         if (unit->isInFront(bot, 10.0f) && bot->GetDistance2d(unit) <= 15.0f)
             return true;
     }

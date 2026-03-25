@@ -11,7 +11,7 @@ Unit* FindViscidusTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     return FindUnitByAnyName(botAI, attackers, { "viscidus" });
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions
 
 namespace
 {
@@ -35,7 +35,7 @@ Unit* FindViscidusGlobTarget(PlayerbotAI* botAI, GuidVector const& attackers)
     std::vector<Unit*> globs = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "glob of viscidus" });
     return FindLowestHealthUnit(globs);
 }
-}  // namespace
+}    // namespace
 
 bool Aq40ViscidusChooseTargetAction::Execute(Event /*event*/)
 {

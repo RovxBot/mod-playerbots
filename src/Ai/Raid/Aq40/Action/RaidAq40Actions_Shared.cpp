@@ -40,7 +40,7 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
            botAI->HasAura("whirlwind", unit);
 }
-}  // namespace
+}    // namespace
 
 namespace Aq40BossActions
 {
@@ -82,7 +82,7 @@ Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
     return nullptr;
 }
-}  // namespace Aq40BossActions
+}    // namespace Aq40BossActions
 
 namespace
 {
@@ -119,7 +119,7 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     distanceToCreate = largestDeficit;
     return riskiestMember;
 }
-}  // namespace
+}    // namespace
 
 bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
 {
@@ -439,8 +439,7 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
 
 bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 {
-    // Pattern lifted from BWL BwlPolymorphMindControlledTargetAction and
-    // TempestKeep KaelthasSunstriderBreakMindControlAction:
+    // Pattern lifted from BWL BwlPolymorphMindControlledTargetAction and TempestKeep KaelthasSunstriderBreakMindControlAction:
     // Detect charmed raid members and apply CC (sheep/fear) to neutralize them.
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
 
@@ -454,7 +453,7 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
         if (!player || !player->IsAlive() || player == bot)
             continue;
 
-        // BWL pattern: IsCharmed() + !IsPolymorphed() to avoid double-CC.
+    // BWL pattern: IsCharmed() + !IsPolymorphed() to avoid double-CC.
         if (!player->IsCharmed() || player->IsPolymorphed())
             continue;
 
@@ -468,7 +467,7 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 
     if (mcTarget)
     {
-        // TempestKeep pattern: try multiple CC spells by class.
+    // TempestKeep pattern: try multiple CC spells by class.
         static std::initializer_list<char const*> ccSpells = {
             "polymorph", "fear", "hibernate", "freezing trap", "repentance"
         };
@@ -497,7 +496,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
     std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
     if (!guards.empty())
     {
-        // Strategy baseline: kill the royal guards before Sartura.
+    // Strategy baseline: kill the royal guards before Sartura.
         target = guards.front();
         for (Unit* guard : guards)
         {
@@ -565,7 +564,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
     if (!spawns.empty())
     {
-        // Fankriss baseline: quickly remove Spawn adds before returning to boss.
+    // Fankriss baseline: quickly remove Spawn adds before returning to boss.
         target = spawns.front();
         for (Unit* spawn : spawns)
         {
@@ -601,7 +600,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         if (!unit)
             continue;
 
-        // Check both regular casts and channels (Mind Flay is channeled)
+    // Check both regular casts and channels (Mind Flay is channeled)
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
 
@@ -618,8 +617,8 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 
     if (!castingDanger.empty())
     {
-        // Distribute: assign each bot to a caster based on GUID modulo count,
-        // so different bots cover different Mindslayers.
+    // Distribute: assign each bot to a caster based on GUID modulo count,
+    // so different bots cover different Mindslayers.
         uint32 const idx = bot->GetGUID().GetCounter() % castingDanger.size();
         Unit* assigned = castingDanger[idx];
 
