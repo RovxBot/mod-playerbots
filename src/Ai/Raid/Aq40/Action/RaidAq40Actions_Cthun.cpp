@@ -55,7 +55,7 @@ Unit* FindCthunEye(PlayerbotAI* botAI, GuidVector const& attackers)
     return Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "eye of c'thun" });
 }
 
-void PinCthunTarget(PlayerbotAI* botAI, ActionContext* context, Unit* target)
+void PinCthunTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
 {
     if (!botAI || !context || !target)
         return;

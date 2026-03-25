@@ -47,7 +47,7 @@ bool IsTwinAssignedSideBoss(Aq40Helpers::TwinAssignments const& assignment, Unit
     return boss && assignment.sideEmperor == boss;
 }
 
-void PinTwinTarget(PlayerbotAI* botAI, ActionContext* context, Unit* target)
+void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
 {
     if (!botAI || !context || !target)
         return;
