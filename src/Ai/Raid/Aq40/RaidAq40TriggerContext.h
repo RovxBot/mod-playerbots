@@ -37,10 +37,13 @@ public:
         creators["aq40 huhuran nature resistance"] = &RaidAq40TriggerContext::huhuran_nature_resistance;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
         creators["aq40 twin emperors role mismatch"] = &RaidAq40TriggerContext::twin_emperors_role_mismatch;
+        creators["aq40 twin emperors pre teleport"] = &RaidAq40TriggerContext::twin_emperors_pre_teleport;
         creators["aq40 twin emperors arcane burst risk"] =
             &RaidAq40TriggerContext::twin_emperors_arcane_burst_risk;
         creators["aq40 twin emperors blizzard risk"] =
             &RaidAq40TriggerContext::twin_emperors_blizzard_risk;
+        creators["aq40 twin emperors has opposite aggro"] =
+            &RaidAq40TriggerContext::twin_emperors_has_opposite_aggro;
         creators["aq40 twin emperors heal brother"] =
             &RaidAq40TriggerContext::twin_emperors_heal_brother;
         creators["aq40 twin emperors need separation"] =
@@ -102,6 +105,10 @@ private:
     {
         return new Aq40TwinEmperorsRoleMismatchTrigger(botAI);
     }
+    static Trigger* twin_emperors_pre_teleport(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsPreTeleportTrigger(botAI);
+    }
     static Trigger* twin_emperors_arcane_burst_risk(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsArcaneBurstRiskTrigger(botAI);
@@ -109,6 +116,10 @@ private:
     static Trigger* twin_emperors_blizzard_risk(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsBlizzardRiskTrigger(botAI);
+    }
+    static Trigger* twin_emperors_has_opposite_aggro(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsHasOppositeAggroTrigger(botAI);
     }
     static Trigger* twin_emperors_heal_brother(PlayerbotAI* botAI)
     {

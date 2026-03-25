@@ -328,6 +328,23 @@ bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector co
     return (getMSTime() - itr->second.lastTeleportMs) <= 3500;
 }
 
+bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return false;
+
+    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinTeleportStates.end())
+        return false;
+
+    if (!itr->second.lastTeleportMs)
+        return false;
+
+    uint32 const elapsed = getMSTime() - itr->second.lastTeleportMs;
+    return elapsed >= 25000 && elapsed <= 38000;
+}
+
 bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
 {
     if (!bot || !assignment.sideEmperor)

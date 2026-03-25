@@ -231,6 +231,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsPreTeleportStageAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsPreTeleportStageAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors pre teleport stage")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinEmperorsWarlockTankAction : public AttackAction
 {
 public:
@@ -276,6 +286,16 @@ class Aq40TwinEmperorsPetControlAction : public Action
 public:
     Aq40TwinEmperorsPetControlAction(PlayerbotAI* botAI)
         : Action(botAI, "aq40 twin emperors pet control")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsMoveAwayFromBrotherAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsMoveAwayFromBrotherAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors move away from brother")
     {
     }
     bool Execute(Event event) override;

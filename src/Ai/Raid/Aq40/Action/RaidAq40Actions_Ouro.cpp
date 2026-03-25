@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "SharedDefines.h"
 #include "../RaidAq40BossHelper.h"
 
 namespace
@@ -60,6 +61,15 @@ Unit* FindNearestDirtMound(Player* bot, PlayerbotAI* botAI, GuidVector const& at
     }
 
     return closest;
+}
+
+Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, attackers);
+    if (!ouro || (ouro->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE)
+        return nullptr;
+
+    return ouro;
 }
 }  // namespace
 
@@ -172,16 +182,18 @@ bool Aq40OuroAvoidSandBlastAction::Execute(Event /*event*/)
 bool Aq40OuroAvoidSubmergeAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-    Unit* mound = FindNearestDirtMound(bot, botAI, encounterUnits);
-    if (!mound)
+    Unit* hazard = FindNearestDirtMound(bot, botAI, encounterUnits);
+    if (!hazard)
+        hazard = FindBurrowedOuro(botAI, encounterUnits);
+    if (!hazard)
         return false;
 
-    float d = bot->GetDistance2d(mound);
+    float d = bot->GetDistance2d(hazard);
     if (d > 16.0f)
         return false;
 
-    float dx = bot->GetPositionX() - mound->GetPositionX();
-    float dy = bot->GetPositionY() - mound->GetPositionY();
+    float dx = bot->GetPositionX() - hazard->GetPositionX();
+    float dy = bot->GetPositionY() - hazard->GetPositionY();
     float len = std::sqrt(dx * dx + dy * dy);
     if (len < 0.1f)
     {
@@ -191,8 +203,8 @@ bool Aq40OuroAvoidSubmergeAction::Execute(Event /*event*/)
     }
 
     float desired = 26.0f;
-    float moveX = mound->GetPositionX() + (dx / len) * desired;
-    float moveY = mound->GetPositionY() + (dy / len) * desired;
+    float moveX = hazard->GetPositionX() + (dx / len) * desired;
+    float moveY = hazard->GetPositionY() + (dy / len) * desired;
     return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }

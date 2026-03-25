@@ -94,7 +94,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Twin Emperors baseline strategy:
     // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor
     // - AQ40 resistance manager enables rshadow during the encounter
-    // - recover target assignment quickly after teleport/target drift
+    // - pre-stage before teleports, keep the emperors separated, and reserve some DPS for side bugs
     triggers.push_back(new TriggerNode("aq40 twin emperors active",
         {
             NextAction("aq40 twin emperors choose target", ACTION_RAID + 2),
@@ -102,11 +102,15 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 4),
             NextAction("aq40 twin emperors pet control", ACTION_RAID + 2),
         }));
+    triggers.push_back(new TriggerNode("aq40 twin emperors pre teleport",
+        { NextAction("aq40 twin emperors pre teleport stage", ACTION_RAID + 6) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
         {
             NextAction("aq40 twin emperors choose target", ACTION_RAID + 5),
             NextAction("aq40 twin emperors hold split", ACTION_RAID + 4),
         }));
+    triggers.push_back(new TriggerNode("aq40 twin emperors has opposite aggro",
+        { NextAction("aq40 twin emperors move away from brother", ACTION_EMERGENCY + 1) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors arcane burst risk",
         { NextAction("aq40 twin emperors avoid arcane burst", ACTION_RAID + 5) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors blizzard risk",

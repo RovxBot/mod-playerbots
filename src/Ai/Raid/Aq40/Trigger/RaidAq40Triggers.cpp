@@ -3,6 +3,7 @@
 #include <initializer_list>
 
 #include "ObjectGuid.h"
+#include "SharedDefines.h"
 #include "Spell.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
@@ -22,6 +23,15 @@ bool Aq40EncounterEngaged(PlayerbotAI* botAI, Player* bot)
     // encounter is active even though this bot briefly dropped threat.
     // Uses the same cluster check as shared state cleanup so both agree.
     return Aq40BossHelper::IsEncounterCombatActive(bot);
+}
+
+Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    Unit* ouro = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "ouro" });
+    if (!ouro || (ouro->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE)
+        return nullptr;
+
+    return ouro;
 }
 
 bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
@@ -669,6 +679,18 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : currentTarget != nullptr;
 }
 
+bool Aq40TwinEmperorsPreTeleportTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
+        return false;
+
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40Helpers::IsTwinPreTeleportWindow(bot, botAI, encounterUnits);
+}
+
 bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
 {
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
@@ -692,6 +714,33 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     }
 
     return false;
+}
+
+bool Aq40TwinEmperorsHasOppositeAggroTrigger::IsActive()
+{
+    if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor || !assignment.veknilash || !assignment.sideEmperor || !assignment.oppositeEmperor)
+        return false;
+
+    ObjectGuid const botGuid = bot->GetGUID();
+    ObjectGuid petGuid = ObjectGuid::Empty;
+    if (Pet* pet = bot->GetPet())
+        petGuid = pet->GetGUID();
+
+    Unit* sideBoss = assignment.sideEmperor;
+    Unit* oppositeBoss = assignment.oppositeEmperor;
+    if (!sideBoss || !oppositeBoss)
+        return false;
+
+    bool const hasSideAggro = sideBoss->GetTarget() == botGuid || (petGuid && sideBoss->GetTarget() == petGuid);
+    bool const hasOppositeAggro = oppositeBoss->GetTarget() == botGuid || (petGuid && oppositeBoss->GetTarget() == petGuid);
+
+    return (hasSideAggro && bot->GetDistance2d(oppositeBoss) < 90.0f) ||
+           (hasOppositeAggro && bot->GetDistance2d(sideBoss) < 90.0f);
 }
 
 bool Aq40TwinEmperorsBlizzardRiskTrigger::IsActive()
@@ -838,13 +887,13 @@ bool Aq40OuroSandBlastRiskTrigger::IsActive()
 
 bool Aq40OuroSubmergeTrigger::IsActive()
 {
-    // Bypass Aq40OuroActiveTrigger — during submerge, Ouro is underground
-    // and only dirt mounds are visible, so the active trigger (which requires
-    // ouro/scarabs) would never fire.  Do our own engagement check instead.
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (Unit* ouro = FindBurrowedOuro(botAI, encounterUnits))
+        return bot->GetDistance2d(ouro) <= 16.0f;
+
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);

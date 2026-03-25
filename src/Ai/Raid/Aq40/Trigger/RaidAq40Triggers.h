@@ -203,11 +203,31 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinEmperorsPreTeleportTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsPreTeleportTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors pre teleport")
+    {
+    }
+    bool IsActive() override;
+};
+
 class Aq40TwinEmperorsArcaneBurstRiskTrigger : public Trigger
 {
 public:
     Aq40TwinEmperorsArcaneBurstRiskTrigger(PlayerbotAI* botAI)
         : Trigger(botAI, "aq40 twin emperors arcane burst risk")
+    {
+    }
+    bool IsActive() override;
+};
+
+class Aq40TwinEmperorsHasOppositeAggroTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsHasOppositeAggroTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "aq40 twin emperors has opposite aggro")
     {
     }
     bool IsActive() override;
