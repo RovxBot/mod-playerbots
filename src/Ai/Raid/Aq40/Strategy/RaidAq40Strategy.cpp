@@ -4,9 +4,11 @@
 
 void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(new TriggerNode("aq40 bot is not in combat",
+        { NextAction("aq40 erase timers and trackers", ACTION_EMERGENCY + 1) }));
+
     triggers.push_back(new TriggerNode("aq40 resistance strategy check",
         { NextAction("aq40 manage resistance strategies", ACTION_NORMAL) }));
-    triggers.push_back(new TriggerNode("aq40 engage", { NextAction("aq40 choose target", ACTION_RAID + 1) }));
 
     // Skeram baseline strategy:
     // - quickly reacquire target after blink/teleport

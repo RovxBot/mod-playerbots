@@ -71,6 +71,13 @@ bool Aq40HuhuranChooseTargetAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* target = Aq40BossActions::FindHuhuranTarget(botAI, encounterUnits);
+    if (!target)
+        return false;
+
+    // Startup ownership: primary tank establishes the boss before the raid commits.
+    if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, true))
+        return false;
+
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
@@ -79,9 +86,12 @@ bool Aq40HuhuranChooseTargetAction::Execute(Event /*event*/)
 
 bool Aq40HuhuranPoisonSpreadAction::Execute(Event /*event*/)
 {
-    // During poison/enrage windows, non-tanks spread angularly around the boss
-    // so fewer players soak Noxious Poison (hits 15 closest).
+    // During poison/enrage windows, only the backline spreads angularly around
+    // the boss so fewer players soak Noxious Poison (hits 15 closest).
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot))
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
@@ -89,10 +99,9 @@ bool Aq40HuhuranPoisonSpreadAction::Execute(Event /*event*/)
     if (!huhuran)
         return false;
 
-    bool const isMelee = !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
-    float const desiredDistance = isMelee ? 18.0f : 28.0f;
+    float const desiredDistance = 28.0f;
     uint32 totalSlots = 0;
-    uint32 const slot = GetHuhuranSpreadOrdinal(bot, botAI, isMelee, totalSlots);
+    uint32 const slot = GetHuhuranSpreadOrdinal(bot, botAI, false, totalSlots);
     float const angle = static_cast<float>(slot) * ((2.0f * kPi) / static_cast<float>(totalSlots));
 
     float const moveX = huhuran->GetPositionX() + std::cos(angle) * desiredDistance;

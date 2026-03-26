@@ -117,6 +117,19 @@ Unit* FindTankPriorityCthunAdd(PlayerbotAI* botAI, GuidVector const& attackers)
     return FindHighestPriorityCthunAdd(botAI, attackers);
 }
 
+bool ShouldWaitForCthunPhase2Pickup(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI || Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    uint32 const elapsedMs = Aq40Helpers::GetCthunPhase2ElapsedMs(botAI, attackers);
+    if (elapsedMs > 2000)
+        return false;
+
+    Unit* giantClaw = Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "giant claw tentacle" });
+    return giantClaw && !Aq40BossHelper::IsUnitHeldByEncounterTank(bot, giantClaw);
+}
+
 Unit* FindCthunBeamSpacingRisk(Player* bot, PlayerbotAI* botAI, Unit* eye)
 {
     if (!bot || !botAI || !eye)
@@ -254,6 +267,9 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
     if (encounterUnits.empty())
         return false;
 
+    if (ShouldWaitForCthunPhase2Pickup(bot, botAI, encounterUnits))
+        return false;
+
     bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
     Unit* target = nullptr;
 
@@ -272,6 +288,12 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
         else
             target = eye ? eye : body;
     }
+
+    bool const isTankControlledAdd =
+        target && (botAI->EqualLowercaseName(target->GetName(), "giant claw tentacle") ||
+                   botAI->EqualLowercaseName(target->GetName(), "claw tentacle"));
+    if (isTankControlledAdd && Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target))
+        return false;
 
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
@@ -422,8 +444,16 @@ bool Aq40CthunStomachExitAction::Execute(Event /*event*/)
 bool Aq40CthunPhase2AddPriorityAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    if (ShouldWaitForCthunPhase2Pickup(bot, botAI, encounterUnits))
+        return false;
+
     Unit* target = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot) ?
         FindTankPriorityCthunAdd(botAI, encounterUnits) : FindHighestPriorityCthunAdd(botAI, encounterUnits);
+    bool const isTankControlledAdd =
+        target && (botAI->EqualLowercaseName(target->GetName(), "giant claw tentacle") ||
+                   botAI->EqualLowercaseName(target->GetName(), "claw tentacle"));
+    if (isTankControlledAdd && Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target))
+        return false;
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 

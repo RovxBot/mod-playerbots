@@ -8,9 +8,18 @@
 #include "ObjectGuid.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
+#include "../Util/RaidAq40Helpers.h"
 
 namespace
 {
+enum class Aq40TrashPackArchetype
+{
+    Mixed,
+    Anubisath,
+    CasterControl,
+    SwarmMelee
+};
+
 struct Aq40ManagedResistanceState
 {
     bool natureCombatEnabled = false;
@@ -39,6 +48,264 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
            Aq40SpellIds::HasAnyAura(botAI, unit,
                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
            botAI->HasAura("whirlwind", unit);
+}
+
+bool IsAq40TrashUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+        { "anubisath warder", "anubisath defender", "obsidian eradicator", "obsidian nullifier",
+          "vekniss stinger", "qiraji slayer", "qiraji champion", "qiraji mindslayer",
+          "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
+          "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
+          "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+}
+
+bool IsAq40AnubisathTrashUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+        { "anubisath warder", "anubisath defender", "anubisath sentinel" });
+}
+
+bool IsAq40CasterControlTrashUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+        { "qiraji mindslayer", "obsidian nullifier", "obsidian eradicator", "qiraji brainwasher" });
+}
+
+bool IsAq40SwarmMeleeTrashUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+        { "qiraji champion", "qiraji slayer", "qiraji battleguard", "vekniss stinger",
+          "qiraji lasher", "vekniss guardian", "vekniss warrior", "vekniss drone",
+          "vekniss soldier", "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+}
+
+Aq40TrashPackArchetype DetectAq40TrashPackArchetype(PlayerbotAI* botAI, GuidVector const& units)
+{
+    if (!botAI)
+        return Aq40TrashPackArchetype::Mixed;
+
+    uint32 anubisathCount = 0;
+    uint32 casterControlCount = 0;
+    uint32 swarmMeleeCount = 0;
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsAq40TrashUnit(botAI, unit))
+            continue;
+
+        if (IsAq40AnubisathTrashUnit(botAI, unit))
+            ++anubisathCount;
+        else if (IsAq40CasterControlTrashUnit(botAI, unit))
+            ++casterControlCount;
+        else if (IsAq40SwarmMeleeTrashUnit(botAI, unit))
+            ++swarmMeleeCount;
+    }
+
+    if (anubisathCount > 0)
+        return Aq40TrashPackArchetype::Anubisath;
+    if (casterControlCount > 0)
+        return Aq40TrashPackArchetype::CasterControl;
+    if (swarmMeleeCount > 0)
+        return Aq40TrashPackArchetype::SwarmMelee;
+    return Aq40TrashPackArchetype::Mixed;
+}
+
+uint32 GetAq40TrashTankControlPriority(PlayerbotAI* botAI, Unit* unit, Aq40TrashPackArchetype archetype)
+{
+    if (!botAI || !unit)
+        return std::numeric_limits<uint32>::max();
+
+    switch (archetype)
+    {
+        case Aq40TrashPackArchetype::Anubisath:
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath warder" }))
+                return 0;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath defender" }))
+                return 1;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath sentinel" }))
+                return 2;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji champion", "qiraji slayer", "qiraji battleguard", "vekniss stinger" }))
+                return 3;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "obsidian nullifier", "qiraji mindslayer", "obsidian eradicator", "qiraji brainwasher" }))
+                return 4;
+            break;
+        case Aq40TrashPackArchetype::CasterControl:
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "obsidian nullifier", "qiraji mindslayer" }))
+                return 0;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "obsidian eradicator", "qiraji brainwasher" }))
+                return 1;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji champion", "qiraji slayer", "qiraji battleguard", "vekniss stinger" }))
+                return 2;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath warder", "anubisath defender", "anubisath sentinel" }))
+                return 3;
+            break;
+        case Aq40TrashPackArchetype::SwarmMelee:
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji champion", "qiraji slayer", "qiraji battleguard", "vekniss stinger" }))
+                return 0;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji lasher", "vekniss guardian", "vekniss warrior" }))
+                return 1;
+            if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "vekniss drone", "vekniss soldier", "vekniss wasp" }))
+                return 2;
+            break;
+        case Aq40TrashPackArchetype::Mixed:
+            break;
+    }
+
+    if (IsAq40AnubisathTrashUnit(botAI, unit))
+        return 0;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji champion", "qiraji slayer", "qiraji battleguard", "vekniss stinger" }))
+        return 1;
+    if (IsAq40CasterControlTrashUnit(botAI, unit))
+        return 2;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji lasher", "vekniss guardian", "vekniss warrior" }))
+        return 3;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "vekniss drone", "vekniss soldier", "vekniss wasp" }))
+        return 4;
+    return 5;
+}
+
+uint32 GetAq40TrashAssistPriority(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!botAI || !unit)
+        return std::numeric_limits<uint32>::max();
+
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji mindslayer" }))
+        return 0;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "obsidian nullifier" }))
+        return 1;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "obsidian eradicator" }))
+        return 2;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji champion" }))
+        return 3;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji slayer" }))
+        return 4;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath warder" }))
+        return 5;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath defender" }))
+        return 6;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath sentinel" }))
+        return 7;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji lasher" }))
+        return 8;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "vekniss stinger" }))
+        return 9;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji brainwasher", "qiraji battleguard" }))
+        return 10;
+    if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "vekniss guardian", "vekniss warrior", "vekniss drone", "vekniss soldier", "vekniss wasp" }))
+        return 11;
+    return 12;
+}
+
+std::vector<Unit*> GetSortedAq40TrashUnits(PlayerbotAI* botAI, GuidVector const& units, bool tankPriority,
+                                          Aq40TrashPackArchetype archetype = Aq40TrashPackArchetype::Mixed)
+{
+    std::vector<Unit*> trashUnits;
+    if (!botAI)
+        return trashUnits;
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsAq40TrashUnit(botAI, unit))
+            continue;
+
+        trashUnits.push_back(unit);
+    }
+
+    std::sort(trashUnits.begin(), trashUnits.end(), [botAI, tankPriority, archetype](Unit* left, Unit* right)
+    {
+        if (!left || !right)
+            return left != nullptr;
+
+        uint32 const leftPriority = tankPriority ? GetAq40TrashTankControlPriority(botAI, left, archetype)
+                                                 : GetAq40TrashAssistPriority(botAI, left);
+        uint32 const rightPriority = tankPriority ? GetAq40TrashTankControlPriority(botAI, right, archetype)
+                                                  : GetAq40TrashAssistPriority(botAI, right);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
+        if (left->GetHealthPct() != right->GetHealthPct())
+            return left->GetHealthPct() < right->GetHealthPct();
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    return trashUnits;
+}
+
+Unit* FindAssignedAq40TrashTankTarget(Player* bot, PlayerbotAI* botAI, std::vector<Unit*> const& controlTargets)
+{
+    if (!bot || !botAI || controlTargets.empty())
+        return nullptr;
+
+    uint32 assignedIndex = 0;
+    if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0))
+        assignedIndex = 1;
+    else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1))
+        assignedIndex = 2;
+
+    if (assignedIndex < controlTargets.size())
+        return controlTargets[assignedIndex];
+
+    return controlTargets.front();
+}
+
+Unit* FindBestHeldAq40TrashTarget(Player* bot, PlayerbotAI* botAI, std::vector<Unit*> const& assistTargets)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    for (Unit* target : assistTargets)
+    {
+        if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, target))
+            return target;
+    }
+
+    return nullptr;
+}
+
+std::vector<Unit*> FindCastingAq40TrashDangerUnits(PlayerbotAI* botAI, GuidVector const& encounterUnits)
+{
+    std::vector<Unit*> castingDanger;
+    if (!botAI)
+        return castingDanger;
+
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+
+        bool const isMindBlast = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }));
+        bool const isMindFlay = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
+            (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }));
+        bool const isNullify = botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier") &&
+            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }));
+
+        if (isMindBlast || isMindFlay || isNullify)
+            castingDanger.push_back(unit);
+    }
+
+    std::sort(castingDanger.begin(), castingDanger.end(), [botAI](Unit* left, Unit* right)
+    {
+        if (!left || !right)
+            return left != nullptr;
+
+        uint32 const leftPriority = GetAq40TrashAssistPriority(botAI, left);
+        uint32 const rightPriority = GetAq40TrashAssistPriority(botAI, right);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    return castingDanger;
 }
 }    // namespace
 
@@ -263,100 +530,15 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
     return acted;
 }
 
-bool Aq40ChooseTargetAction::Execute(Event /*event*/)
+bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
 {
-    if (!Aq40BossHelper::IsInAq40(bot))
+    if (!bot || !Aq40BossHelper::IsInAq40(bot))
         return false;
 
-    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
-    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
-    if (activeUnits.empty())
-        return false;
-
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
-    Unit* target = nullptr;
-
-    if (Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "princess yauj", "vem", "lord kri", "yauj brood" }))
-        target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
-
-    // Trash pulls should stay on trash logic unless a boss is actually engaged.
-    if (!target && !Aq40BossHelper::IsBossEncounterActive(botAI, activeUnits))
-    {
-        target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
-        if (!target)
-            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, activeUnits,
-                { "vekniss stinger", "vekniss guardian", "vekniss warrior", "vekniss drone", "vekniss soldier",
-                  "vekniss wasp", "obsidian nullifier", "obsidian eradicator", "qiraji mindslayer",
-                  "qiraji champion", "qiraji slayer", "anubisath warder", "anubisath defender",
-                  "anubisath sentinel", "qiraji lasher", "qiraji brainwasher", "qiraji battleguard",
-                  "qiraji scarab", "scarab", "scorpion", "spitting scarab" });
-
-        if (!target)
-        {
-            for (ObjectGuid const guid : activeUnits)
-            {
-                target = botAI->GetUnit(guid);
-                if (target)
-                    break;
-            }
-        }
-    }
-
-    // Favor fight-ending or high-impact targets first.
-    if (!target)
-        target = Aq40BossActions::FindCthunTarget(botAI, encounterUnits);
-    if (!target)
-        target = Aq40BossActions::FindTwinEmperorsTarget(botAI, encounterUnits);
-    if (!target)
-        target = Aq40BossActions::FindHuhuranTarget(botAI, encounterUnits);
-    if (!target)
-    {
-        std::vector<Unit*> fankrissSpawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
-        if (!fankrissSpawns.empty())
-        {
-            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, encounterUnits, { "spawn of fankriss" });
-        }
-        else
-        {
-            target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
-        }
-    }
-    if (!target)
-    {
-        std::vector<Unit*> sarturaGuards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
-        if (!sarturaGuards.empty())
-        {
-            target = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, encounterUnits, { "sartura's royal guard" });
-        }
-        else
-        {
-            target = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
-        }
-    }
-    if (!target)
-        target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
-    if (!target)
-        target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
-    if (!target)
-        target = Aq40BossActions::FindViscidusTarget(botAI, encounterUnits);
-
-    if (!target)
-    {
-        for (ObjectGuid const guid : activeUnits)
-        {
-            target = botAI->GetUnit(guid);
-            if (target)
-                break;
-        }
-    }
-
-    if (!target)
-        return false;
-
-    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
-        return false;
-
-    return Attack(target);
+    bool erased = false;
+    erased = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || erased;
+    erased = Aq40Helpers::ResetEncounterState(bot) || erased;
+    return erased;
 }
 
 bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
@@ -365,6 +547,15 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target)
         return false;
+
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, context->GetValue<GuidVector>("attackers")->Get()))
+            return false;
+
+        if (!Aq40BossHelper::HasAnyNamedUnitHeldByEncounterTank(botAI, bot, encounterUnits, { "the prophet skeram" }, true))
+            return false;
+    }
 
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
@@ -434,6 +625,15 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, context->GetValue<GuidVector>("attackers")->Get()))
+            return false;
+
+        if (!Aq40BossHelper::HasAnyNamedUnitHeldByEncounterTank(botAI, bot, encounterUnits, { "the prophet skeram" }, true))
+            return false;
+    }
+
     return Attack(target);
 }
 
@@ -492,22 +692,57 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
     if (encounterUnits.empty())
         return false;
 
-    Unit* target = nullptr;
+    Unit* sartura = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
     std::vector<Unit*> guards = Aq40BossActions::FindSarturaGuards(botAI, encounterUnits);
-    if (!guards.empty())
+    std::sort(guards.begin(), guards.end(), [](Unit* left, Unit* right)
     {
-    // Strategy baseline: kill the royal guards before Sartura.
-        target = guards.front();
-        for (Unit* guard : guards)
+        if (!left || !right)
+            return left != nullptr;
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    Unit* target = nullptr;
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (Aq40BossHelper::IsEncounterPrimaryTank(bot, bot))
+            target = sartura;
+        else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0) && !guards.empty())
+            target = guards[0];
+        else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1) && guards.size() >= 2)
+            target = guards[1];
+
+        if (!target && !guards.empty())
         {
-            if (guard && target && guard->GetHealthPct() < target->GetHealthPct())
-                target = guard;
+            target = guards.front();
+            for (Unit* guard : guards)
+            {
+                if (guard && target && guard->GetHealthPct() < target->GetHealthPct())
+                    target = guard;
+            }
         }
+
+        if (!target)
+            target = sartura;
     }
     else
     {
-        target = Aq40BossActions::FindSarturaTarget(botAI, encounterUnits);
+        for (Unit* guard : guards)
+        {
+            if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, guard))
+            {
+                target = guard;
+                break;
+            }
+        }
+
+        if (!target && guards.empty() && sartura &&
+            Aq40BossHelper::IsUnitHeldByEncounterTank(bot, sartura, true))
+            target = sartura;
     }
+
+    bool const targetIsGuard = target && botAI->EqualLowercaseName(target->GetName(), "sartura's royal guard");
+    if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, !targetIsGuard))
+        return false;
 
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
@@ -564,18 +799,48 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
     if (!spawns.empty())
     {
-    // Fankriss baseline: quickly remove Spawn adds before returning to boss.
-        target = spawns.front();
-        for (Unit* spawn : spawns)
+        std::sort(spawns.begin(), spawns.end(), [](Unit* left, Unit* right)
         {
-            if (spawn && target && spawn->GetHealthPct() < target->GetHealthPct())
-                target = spawn;
+            if (!left || !right)
+                return left != nullptr;
+            return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+        });
+
+        if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        {
+            uint32 assignedIndex = 0;
+            if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0))
+                assignedIndex = 1;
+            else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1))
+                assignedIndex = 2;
+
+            if (assignedIndex < spawns.size())
+                target = spawns[assignedIndex];
         }
+
+        if (!target)
+        {
+            for (Unit* spawn : spawns)
+            {
+                if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, spawn))
+                {
+                    target = spawn;
+                    break;
+                }
+            }
+        }
+
+        if (!target)
+            target = spawns.front();
     }
     else
     {
         target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
     }
+
+    bool const targetIsSpawn = target && botAI->EqualLowercaseName(target->GetName(), "spawn of fankriss");
+    if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, !targetIsSpawn))
+        return false;
 
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
@@ -590,48 +855,61 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     if (encounterUnits.empty())
         return false;
 
-    // Collect all Mindslayers/Nullifiers currently casting dangerous spells.
-    // Distribute bots across them so each caster gets coverage instead of
-    // everyone dog-piling the same one.
-    std::vector<Unit*> castingDanger;
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
+    Aq40TrashPackArchetype const archetype = DetectAq40TrashPackArchetype(botAI, encounterUnits);
+    std::vector<Unit*> const controlTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, true, archetype);
+    std::vector<Unit*> const assistTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, false);
+    if (controlTargets.empty() || assistTargets.empty())
+        return false;
 
-    // Check both regular casts and channels (Mind Flay is channeled)
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-
-        bool const isMindBlast = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
-            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast }));
-        bool const isMindFlay = botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer") &&
-            (channel && Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }));
-        bool const isNullify = botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier") &&
-            (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }));
-
-        if (isMindBlast || isMindFlay || isNullify)
-            castingDanger.push_back(unit);
-    }
+    std::vector<Unit*> const castingDanger = FindCastingAq40TrashDangerUnits(botAI, encounterUnits);
 
     if (!castingDanger.empty())
     {
-    // Distribute: assign each bot to a caster based on GUID modulo count,
-    // so different bots cover different Mindslayers.
-        uint32 const idx = bot->GetGUID().GetCounter() % castingDanger.size();
-        Unit* assigned = castingDanger[idx];
+        Unit* assigned = nullptr;
+        if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        {
+            Unit* tankAssignment = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
+            if (tankAssignment &&
+                std::find(castingDanger.begin(), castingDanger.end(), tankAssignment) != castingDanger.end())
+                assigned = tankAssignment;
+        }
+        else
+        {
+            for (Unit* caster : castingDanger)
+            {
+                if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, caster))
+                {
+                    assigned = caster;
+                    break;
+                }
+            }
+        }
 
         if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
-            return false;
+            assigned = nullptr;
 
-        return Attack(assigned);
+        if (assigned)
+            return Attack(assigned);
     }
 
-    // Use combat-filtered units for general targeting so passive mobs
-    // (e.g. idle scarabs/scorpions) are ignored until they actually aggro.
-    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
-    Unit* target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
+    Unit* target = nullptr;
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        target = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
+    else
+        target = FindBestHeldAq40TrashTarget(bot, botAI, assistTargets);
+
+    if (!target && !Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        bool const hasAssignedTank = Aq40BossHelper::GetEncounterPrimaryTank(bot) != nullptr ||
+                                     Aq40BossHelper::GetEncounterBackupTank(bot, 0) != nullptr ||
+                                     Aq40BossHelper::GetEncounterBackupTank(bot, 1) != nullptr;
+        if (hasAssignedTank)
+            return false;
+    }
+
+    if (!target)
+        target = Aq40BossActions::FindTrashTarget(botAI, Aq40BossHelper::GetActiveCombatUnits(botAI, attackers));
+
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
@@ -672,39 +950,38 @@ bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
     GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 
-    std::vector<Unit*> castingTargets;
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        if (botAI->EqualLowercaseName(unit->GetName(), "qiraji mindslayer"))
-        {
-            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-            Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-            bool const castingMindBlast = spell &&
-                Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindBlast });
-            bool const channelingMindFlay = channel &&
-                Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay });
-
-            if (castingMindBlast || channelingMindFlay)
-                castingTargets.push_back(unit);
-        }
-        else if (botAI->EqualLowercaseName(unit->GetName(), "obsidian nullifier"))
-        {
-            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-            if (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40NullifierNullify }))
-                castingTargets.push_back(unit);
-        }
-    }
+    std::vector<Unit*> const castingTargets = FindCastingAq40TrashDangerUnits(botAI, encounterUnits);
 
     if (castingTargets.empty())
         return false;
 
-    // Distribute bots across casting targets so each one gets an interrupter.
-    uint32 const idx = bot->GetGUID().GetCounter() % castingTargets.size();
-    Unit* assigned = castingTargets[idx];
+    Unit* assigned = nullptr;
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        Aq40TrashPackArchetype const archetype = DetectAq40TrashPackArchetype(botAI, encounterUnits);
+        std::vector<Unit*> const controlTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, true, archetype);
+        Unit* tankAssignment = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
+        if (tankAssignment &&
+            std::find(castingTargets.begin(), castingTargets.end(), tankAssignment) != castingTargets.end())
+            assigned = tankAssignment;
+    }
+    else
+    {
+        for (Unit* target : castingTargets)
+        {
+            if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, target))
+            {
+                assigned = target;
+                break;
+            }
+        }
+    }
+
+    if (!assigned && Aq40BossHelper::IsEncounterTank(bot, bot))
+        assigned = castingTargets.front();
+
+    if (!assigned)
+        return false;
 
     if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
         return false;

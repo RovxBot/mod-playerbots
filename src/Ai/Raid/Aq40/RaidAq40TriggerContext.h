@@ -10,7 +10,7 @@ class RaidAq40TriggerContext : public NamedObjectContext<Trigger>
 public:
     RaidAq40TriggerContext()
     {
-        creators["aq40 engage"] = &RaidAq40TriggerContext::engage;
+        creators["aq40 bot is not in combat"] = &RaidAq40TriggerContext::bot_is_not_in_combat;
         creators["aq40 resistance strategy check"] = &RaidAq40TriggerContext::resistance_strategy_check;
         creators["aq40 skeram active"] = &RaidAq40TriggerContext::skeram_active;
         creators["aq40 skeram blinked"] = &RaidAq40TriggerContext::skeram_blinked;
@@ -60,7 +60,10 @@ public:
     }
 
 private:
-    static Trigger* engage(PlayerbotAI* botAI) { return new Aq40EngageTrigger(botAI); }
+    static Trigger* bot_is_not_in_combat(PlayerbotAI* botAI)
+    {
+        return new Aq40BotIsNotInCombatTrigger(botAI);
+    }
     static Trigger* resistance_strategy_check(PlayerbotAI* botAI)
     {
         return new Aq40ResistanceStrategyTrigger(botAI);

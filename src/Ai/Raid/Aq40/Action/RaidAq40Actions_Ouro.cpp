@@ -80,14 +80,58 @@ bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     bool const isPrimaryTank = Aq40BossHelper::IsEncounterPrimaryTank(bot, bot);
+    bool const isBackupTank0 = Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0);
+    bool const isBackupTank1 = Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1);
     Unit* target = nullptr;
+
+    std::vector<Unit*> scarabs = Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "qiraji scarab", "scarab" });
+    std::sort(scarabs.begin(), scarabs.end(), [](Unit* left, Unit* right)
+    {
+        if (!left || !right)
+            return left != nullptr;
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
     if (isPrimaryTank)
         target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
+
+    if (!target && (isBackupTank0 || isBackupTank1))
+    {
+        uint32 assignedIndex = isBackupTank0 ? 0u : 1u;
+        if (assignedIndex < scarabs.size())
+            target = scarabs[assignedIndex];
+    }
+
+    if (!target && Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (!scarabs.empty())
+            target = FindOuroScarabs(botAI, encounterUnits);
+        if (!target)
+            target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
+    }
+
     if (!target)
-        target = FindOuroScarabs(botAI, encounterUnits);
+    {
+        for (Unit* scarab : scarabs)
+        {
+            if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, scarab))
+            {
+                target = scarab;
+                break;
+            }
+        }
+    }
+
     if (!target)
-        target = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
-    // Don't fall through to dirt mounds — they are hazard markers, not DPS targets.
+    {
+        Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, encounterUnits);
+        if (ouro && Aq40BossHelper::IsUnitHeldByEncounterTank(bot, ouro, true))
+            target = ouro;
+    }
+
+    bool const targetIsBoss = target && botAI->EqualLowercaseName(target->GetName(), "ouro");
+    if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, targetIsBoss))
+        return false;
 
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;

@@ -32,6 +32,7 @@ TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
+std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
 {
@@ -459,6 +460,56 @@ bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers)
     return botAI->HasAura("weakened", cthunBody);
 }
 
+bool IsSkeramPostBlinkHoldActive(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    if (!Aq40BossHelper::IsEncounterCombatActive(bot))
+    {
+        sSkeramPostBlinkHoldUntilByInstance.erase(instanceId);
+        return false;
+    }
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
+    std::vector<Unit*> skerams = Aq40BossHelper::FindUnitsByAnyName(botAI, encounterUnits, { "the prophet skeram" });
+    if (skerams.empty())
+    {
+        sSkeramPostBlinkHoldUntilByInstance.erase(instanceId);
+        return false;
+    }
+
+    bool primaryTankOwnsSkeram = false;
+    for (Unit* skeram : skerams)
+    {
+        if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, skeram, true))
+        {
+            primaryTankOwnsSkeram = true;
+            break;
+        }
+    }
+
+    uint32 const now = getMSTime();
+    auto itr = sSkeramPostBlinkHoldUntilByInstance.find(instanceId);
+    if (!primaryTankOwnsSkeram)
+    {
+        sSkeramPostBlinkHoldUntilByInstance[instanceId] = now + 2500;
+        return true;
+    }
+
+    if (itr == sSkeramPostBlinkHoldUntilByInstance.end())
+        return false;
+
+    if (now >= itr->second)
+    {
+        sSkeramPostBlinkHoldUntilByInstance.erase(itr);
+        return false;
+    }
+
+    return true;
+}
+
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
 {
     // Primary: find by entry ID (AzerothCore C'Thun script portal entry).
@@ -498,5 +549,22 @@ GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
     }
 
     return candidate;
+}
+
+bool ResetEncounterState(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    bool erased = false;
+
+    erased = sTwinAssignments.erase(instanceId) > 0 || erased;
+    erased = sTwinTeleportStates.erase(instanceId) > 0 || erased;
+    erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
+    erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
+    erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
+
+    return erased;
 }
 }    // namespace Aq40Helpers

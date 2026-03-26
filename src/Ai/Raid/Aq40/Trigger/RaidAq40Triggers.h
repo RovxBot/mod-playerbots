@@ -5,15 +5,15 @@
 #include "../RaidAq40BossHelper.h"
 #include "Trigger.h"
 
-class Aq40EngageTrigger : public Trigger
+class Aq40BotIsNotInCombatTrigger : public Trigger
 {
 public:
-    Aq40EngageTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 engage") {}
+    Aq40BotIsNotInCombatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 bot is not in combat") {}
     bool IsActive() override;
 };
 
-    // Low-priority AQ40 housekeeping trigger used to toggle encounter-specific
-    // resistance strategies on and off as bosses change.
+// Low-priority AQ40 housekeeping trigger used to toggle encounter-specific
+// resistance strategies on and off as bosses change.
 class Aq40ResistanceStrategyTrigger : public Trigger
 {
 public:

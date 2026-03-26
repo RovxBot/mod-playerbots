@@ -223,6 +223,10 @@ float Aq40HuhuranMultiplier::GetValue(Action* action)
     if (!huhuran || Aq40BossHelper::IsEncounterTank(bot, bot))
         return 1.0f;
 
+    bool const isBackline = botAI->IsRanged(bot) || botAI->IsHeal(bot);
+    if (!isBackline)
+        return 1.0f;
+
     bool const poisonPhase = huhuran->GetHealthPct() <= 32.0f ||
                              Aq40SpellIds::HasAnyAura(botAI, huhuran, { Aq40SpellIds::HuhuranFrenzy });
     if (!poisonPhase)

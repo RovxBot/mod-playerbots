@@ -27,18 +27,21 @@ Unit* FindCthunTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindViscidusTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 }    // namespace Aq40BossActions
 
-class Aq40ChooseTargetAction : public AttackAction
-{
-public:
-    Aq40ChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 choose target") {}
-    bool Execute(Event event) override;
-};
-
 class Aq40ManageResistanceStrategiesAction : public Action
 {
 public:
     Aq40ManageResistanceStrategiesAction(PlayerbotAI* botAI)
         : Action(botAI, "aq40 manage resistance strategies")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40EraseTimersAndTrackersAction : public Action
+{
+public:
+    Aq40EraseTimersAndTrackersAction(PlayerbotAI* botAI)
+        : Action(botAI, "aq40 erase timers and trackers")
     {
     }
     bool Execute(Event event) override;

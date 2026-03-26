@@ -231,6 +231,90 @@ inline bool IsEncounterTank(Player* referencePlayer, Player* player)
            IsEncounterBackupTank(referencePlayer, player, 1);
 }
 
+inline bool IsUnitFocusedOnPlayer(Unit* unit, Player* player)
+{
+    return unit && player && (unit->GetVictim() == player || unit->GetTarget() == player->GetGUID());
+}
+
+inline bool IsUnitHeldByEncounterTank(Player* referencePlayer, Unit* unit, bool primaryOnly = false)
+{
+    if (!referencePlayer || !unit)
+        return false;
+
+    if (Player* primaryTank = GetEncounterPrimaryTank(referencePlayer))
+    {
+        if (IsUnitFocusedOnPlayer(unit, primaryTank))
+            return true;
+    }
+
+    if (primaryOnly)
+        return false;
+
+    for (uint8 index = 0; index < 2; ++index)
+    {
+        if (Player* backupTank = GetEncounterBackupTank(referencePlayer, index))
+        {
+            if (IsUnitFocusedOnPlayer(unit, backupTank))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+inline bool HasAnyNamedUnitHeldByEncounterTank(PlayerbotAI* botAI, Player* referencePlayer, GuidVector const& units,
+                                               std::initializer_list<char const*> names, bool primaryOnly = false)
+{
+    if (!botAI || !referencePlayer)
+        return false;
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        bool matches = false;
+        for (char const* name : names)
+        {
+            if (botAI->EqualLowercaseName(unit->GetName(), name))
+            {
+                matches = true;
+                break;
+            }
+        }
+        if (!matches)
+            continue;
+
+        if (IsUnitHeldByEncounterTank(referencePlayer, unit, primaryOnly))
+            return true;
+    }
+
+    return false;
+}
+
+inline bool ShouldWaitForEncounterTankAggro(Player* referencePlayer, Player* player, Unit* unit, bool primaryOnly = false)
+{
+    if (!referencePlayer || !player || !unit)
+        return false;
+
+    if (IsEncounterTank(referencePlayer, player))
+        return false;
+
+    if (IsUnitFocusedOnPlayer(unit, player))
+        return false;
+
+    bool hasAssignedTank = GetEncounterPrimaryTank(referencePlayer) != nullptr;
+    if (!primaryOnly)
+        hasAssignedTank = hasAssignedTank || GetEncounterBackupTank(referencePlayer, 0) != nullptr ||
+                          GetEncounterBackupTank(referencePlayer, 1) != nullptr;
+
+    if (!hasAssignedTank)
+        return false;
+
+    return !IsUnitHeldByEncounterTank(referencePlayer, unit, primaryOnly);
+}
+
 inline uint32 GetAliveWarlockOrdinal(Player* player)
 {
     if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())

@@ -28,6 +28,23 @@ Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
     return FindBugTrioUnit(botAI, attackers, "lord kri");
 }
+
+Unit* FindBugTrioTankOwnedTarget(PlayerbotAI* botAI, Player* bot, GuidVector const& attackers)
+{
+    Unit* yauj = FindBugTrioUnit(botAI, attackers, "princess yauj");
+    if (yauj && Aq40BossHelper::IsUnitHeldByEncounterTank(bot, yauj))
+        return yauj;
+
+    Unit* vem = FindBugTrioUnit(botAI, attackers, "vem");
+    if (vem && Aq40BossHelper::IsUnitHeldByEncounterTank(bot, vem))
+        return vem;
+
+    Unit* kri = FindBugTrioUnit(botAI, attackers, "lord kri");
+    if (kri && Aq40BossHelper::IsUnitHeldByEncounterTank(bot, kri))
+        return kri;
+
+    return nullptr;
+}
 }    // namespace Aq40BossActions
 
 namespace
@@ -58,7 +75,9 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
+    Unit* target = Aq40BossHelper::IsEncounterTank(bot, bot) ?
+        Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits) :
+        Aq40BossActions::FindBugTrioTankOwnedTarget(botAI, bot, encounterUnits);
 
     if (!target)
         return false;

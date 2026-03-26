@@ -10,7 +10,7 @@ class RaidAq40ActionContext : public NamedObjectContext<Action>
 public:
     RaidAq40ActionContext()
     {
-        creators["aq40 choose target"] = &RaidAq40ActionContext::choose_target;
+        creators["aq40 erase timers and trackers"] = &RaidAq40ActionContext::erase_timers_and_trackers;
         creators["aq40 manage resistance strategies"] = &RaidAq40ActionContext::manage_resistance_strategies;
         creators["aq40 skeram acquire platform target"] = &RaidAq40ActionContext::skeram_acquire_platform_target;
         creators["aq40 skeram interrupt"] = &RaidAq40ActionContext::skeram_interrupt;
@@ -59,7 +59,10 @@ public:
     }
 
 private:
-    static Action* choose_target(PlayerbotAI* botAI) { return new Aq40ChooseTargetAction(botAI); }
+    static Action* erase_timers_and_trackers(PlayerbotAI* botAI)
+    {
+        return new Aq40EraseTimersAndTrackersAction(botAI);
+    }
     static Action* manage_resistance_strategies(PlayerbotAI* botAI)
     {
         return new Aq40ManageResistanceStrategiesAction(botAI);

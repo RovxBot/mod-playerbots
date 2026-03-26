@@ -97,9 +97,9 @@ Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits
 }
 }    // namespace
 
-bool Aq40EngageTrigger::IsActive()
+bool Aq40BotIsNotInCombatTrigger::IsActive()
 {
-    return Aq40EncounterEngaged(botAI, bot);
+    return !bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot);
 }
 
 bool Aq40ResistanceStrategyTrigger::IsActive()
@@ -691,8 +691,11 @@ bool Aq40TwinEmperorsHasOppositeAggroTrigger::IsActive()
     bool const hasSideAggro = sideBoss->GetTarget() == botGuid || (petGuid && sideBoss->GetTarget() == petGuid);
     bool const hasOppositeAggro = oppositeBoss->GetTarget() == botGuid || (petGuid && oppositeBoss->GetTarget() == petGuid);
 
-    return (hasSideAggro && bot->GetDistance2d(oppositeBoss) < 90.0f) ||
-           (hasOppositeAggro && bot->GetDistance2d(sideBoss) < 90.0f);
+    // This trigger is only for cross-room aggro mistakes. Holding threat on the
+    // assigned boss is the expected steady-state and must not trigger the
+    // emergency separation action.
+    return (hasOppositeAggro && bot->GetDistance2d(sideBoss) < 90.0f) ||
+           (hasSideAggro && bot->GetDistance2d(oppositeBoss) < 20.0f);
 }
 
 bool Aq40TwinEmperorsBlizzardRiskTrigger::IsActive()
@@ -918,7 +921,7 @@ bool Aq40CthunPhase2Trigger::IsActive()
         return true;
 
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits,
-                                           { "c'thun", "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
+                                           { "giant eye tentacle", "giant claw tentacle", "flesh tentacle" });
 }
 
 bool Aq40CthunAddsPresentTrigger::IsActive()
@@ -990,7 +993,7 @@ bool Aq40CthunEyeCastTrigger::IsActive()
 
         bool isEyeTentacle = botAI->EqualLowercaseName(unit->GetName(), "eye tentacle") ||
                              botAI->EqualLowercaseName(unit->GetName(), "giant eye tentacle");
-        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        Spell* spell = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
         bool eyeCast = spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::CthunMindFlay });
         if (isEyeTentacle && eyeCast)
             return true;
