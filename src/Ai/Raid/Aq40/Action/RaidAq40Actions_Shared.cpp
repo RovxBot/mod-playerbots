@@ -903,14 +903,6 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     Unit* target = nullptr;
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         target = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
-    else
-        target = FindBestHeldAq40TrashTarget(bot, botAI, assistTargets);
-
-    if (!target && !Aq40BossHelper::IsEncounterTank(bot, bot))
-    {
-        if (HasAnyHeldAq40TrashTarget(bot, botAI, assistTargets))
-            return false;
-    }
 
     if (!target)
         target = Aq40BossActions::FindTrashTarget(botAI, Aq40BossHelper::GetActiveCombatUnits(botAI, attackers));
