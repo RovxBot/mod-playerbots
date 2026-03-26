@@ -266,6 +266,11 @@ Unit* FindBestHeldAq40TrashTarget(Player* bot, PlayerbotAI* botAI, std::vector<U
     return nullptr;
 }
 
+bool HasAnyHeldAq40TrashTarget(Player* bot, PlayerbotAI* botAI, std::vector<Unit*> const& targets)
+{
+    return FindBestHeldAq40TrashTarget(bot, botAI, targets) != nullptr;
+}
+
 std::vector<Unit*> FindCastingAq40TrashDangerUnits(PlayerbotAI* botAI, GuidVector const& encounterUnits)
 {
     std::vector<Unit*> castingDanger;
@@ -883,6 +888,9 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
                     break;
                 }
             }
+
+            if (!assigned && !HasAnyHeldAq40TrashTarget(bot, botAI, assistTargets))
+                assigned = castingDanger.front();
         }
 
         if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
@@ -900,10 +908,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 
     if (!target && !Aq40BossHelper::IsEncounterTank(bot, bot))
     {
-        bool const hasAssignedTank = Aq40BossHelper::GetEncounterPrimaryTank(bot) != nullptr ||
-                                     Aq40BossHelper::GetEncounterBackupTank(bot, 0) != nullptr ||
-                                     Aq40BossHelper::GetEncounterBackupTank(bot, 1) != nullptr;
-        if (hasAssignedTank)
+        if (HasAnyHeldAq40TrashTarget(bot, botAI, assistTargets))
             return false;
     }
 
@@ -974,6 +979,13 @@ bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
                 assigned = target;
                 break;
             }
+        }
+
+        if (!assigned)
+        {
+            std::vector<Unit*> const assistTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, false);
+            if (!HasAnyHeldAq40TrashTarget(bot, botAI, assistTargets))
+                assigned = castingTargets.front();
         }
     }
 
