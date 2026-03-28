@@ -41,11 +41,10 @@ bool LootRollAction::Execute(Event /*event*/)
         if (!roll)
             continue;
 
-        // Avoid server crash, key may not exit for the bot on login
-        auto it = roll->playerVote.find(bot->GetGUID());
-        if (it != roll->playerVote.end() && it->second != NOT_EMITED_YET)
+        // Avoid server crash if the vote entry is missing or already resolved.
+        auto voteItr = roll->playerVote.find(bot->GetGUID());
+        if (voteItr == roll->playerVote.end() || voteItr->second != NOT_EMITED_YET)
             continue;
-
         ObjectGuid guid = roll->itemGUID;
         uint32 itemId = roll->itemid;
         int32 randomProperty = EncodeRandomEnchantParam(roll->itemRandomPropId, roll->itemRandomSuffix);
@@ -72,7 +71,6 @@ bool LootRollAction::Execute(Event /*event*/)
 
     return false;
 }
-
 bool MasterLootRollAction::isUseful() { return !botAI->HasActivePlayerMaster(); }
 
 bool MasterLootRollAction::Execute(Event event)
@@ -124,7 +122,6 @@ bool MasterLootRollAction::Execute(Event event)
 
     return true;
 }
-
 bool RollAction::Execute(Event event)
 {
     std::string link = event.getParam();
