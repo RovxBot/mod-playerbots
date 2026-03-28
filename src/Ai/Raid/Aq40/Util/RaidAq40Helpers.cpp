@@ -316,6 +316,47 @@ bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor
     return unit->GetDistance2d(sideEmperor) <= unit->GetDistance2d(oppositeEmperor);
 }
 
+bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!botAI || !unit)
+        return false;
+
+    return Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::TwinMutateBug }) ||
+           botAI->EqualLowercaseName(unit->GetName(), "mutate bug");
+}
+
+bool IsTwinExplodeBug(PlayerbotAI* botAI, Unit* unit)
+{
+    return botAI && unit && Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::TwinExplodeBug });
+}
+
+bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* bug)
+{
+    if (!bot || !botAI || !bug || !bug->IsAlive() || !assignment.sideEmperor)
+        return false;
+
+    if (!IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+        return false;
+
+    if (IsTwinMutateBug(botAI, bug) || IsTwinExplodeBug(botAI, bug))
+        return true;
+
+    Unit* victim = bug->GetVictim();
+    if (victim)
+    {
+        if (Player* victimPlayer = victim->ToPlayer())
+        {
+            PlayerbotAI* victimAI = GET_PLAYERBOT_AI(victimPlayer);
+            if (victimPlayer == bot ||
+                Aq40BossHelper::IsDesignatedTwinWarlockTank(victimPlayer) ||
+                (victimAI && victimAI->IsHeal(victimPlayer)))
+                return true;
+        }
+    }
+
+    return bug->GetDistance2d(assignment.sideEmperor) <= 10.0f;
+}
+
 bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
     TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);

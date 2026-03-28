@@ -62,20 +62,6 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
            botAI->HasAura("whirlwind", unit);
 }
 
-bool IsTwinBugCombatRelevant(Unit* bug, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bug || !bug->IsAlive() || !assignment.sideEmperor)
-        return false;
-
-    if (!Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
-        return false;
-
-    if (bug->IsInCombat() || bug->GetVictim())
-        return true;
-
-    return bug->GetDistance2d(assignment.sideEmperor) <= 18.0f;
-}
-
 bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment)
 {
     if (!bot || !botAI || PlayerbotAI::IsTank(bot) || botAI->IsHeal(bot) || !assignment.veknilash)
@@ -91,7 +77,7 @@ bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::Tw
            bot->GetVictim() == assignment.veknilash;
 }
 
-Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits,
+Unit* FindTwinSideBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits,
                             Aq40Helpers::TwinAssignments const& assignment)
 {
     Unit* sideBug = nullptr;
@@ -100,20 +86,29 @@ Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits
         Unit* bug = botAI->GetUnit(guid);
         if (!bug ||
             !Aq40BossHelper::IsUnitNamedAny(botAI, bug, { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" }) ||
-            !IsTwinBugCombatRelevant(bug, assignment))
+            !Aq40Helpers::IsTwinCriticalSideBug(bot, botAI, assignment, bug))
             continue;
 
-        bool const isMutateBug = botAI->EqualLowercaseName(bug->GetName(), "mutate bug");
+        bool const isMutateBug = Aq40Helpers::IsTwinMutateBug(botAI, bug);
         if (!sideBug)
         {
             sideBug = bug;
             continue;
         }
 
-        bool const chosenIsMutate = botAI->EqualLowercaseName(sideBug->GetName(), "mutate bug");
+        bool const chosenIsMutate = Aq40Helpers::IsTwinMutateBug(botAI, sideBug);
         if (isMutateBug != chosenIsMutate)
         {
             if (isMutateBug)
+                sideBug = bug;
+            continue;
+        }
+
+        bool const isExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, bug);
+        bool const chosenExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, sideBug);
+        if (isExplodeBug != chosenExplodeBug)
+        {
+            if (isExplodeBug)
                 sideBug = bug;
             continue;
         }
@@ -635,14 +630,14 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 
     if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
     {
-        Unit* sideBug = FindTwinSideBugTarget(botAI, encounterUnits, assignment);
+        Unit* sideBug = FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment);
         if (!sideBug)
             return false;
 
         return currentTarget != sideBug;
     }
 
-    Unit* sideBug = FindTwinSideBugTarget(botAI, encounterUnits, assignment);
+    Unit* sideBug = FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment);
 
     if (botAI->IsRanged(bot))
     {
