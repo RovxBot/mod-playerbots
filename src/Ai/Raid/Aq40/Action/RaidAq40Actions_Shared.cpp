@@ -801,6 +801,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     Unit* target = nullptr;
+    Unit* fankriss = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
     std::vector<Unit*> spawns = Aq40BossActions::FindFankrissSpawns(botAI, encounterUnits);
     if (!spawns.empty())
     {
@@ -813,17 +814,26 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 
         if (Aq40BossHelper::IsEncounterTank(bot, bot))
         {
-            uint32 assignedIndex = 0;
-            if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0))
-                assignedIndex = 1;
-            else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1))
-                assignedIndex = 2;
+            bool const hasBossAggro = fankriss && Aq40BossHelper::IsUnitFocusedOnPlayer(fankriss, bot);
+            if (hasBossAggro)
+                target = fankriss;
+            else
+            {
+                uint32 assignedIndex = 0;
+                if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 0))
+                    assignedIndex = 1;
+                else if (Aq40BossHelper::IsEncounterBackupTank(bot, bot, 1))
+                    assignedIndex = 2;
 
-            if (assignedIndex < spawns.size())
-                target = spawns[assignedIndex];
+                if (assignedIndex < spawns.size())
+                    target = spawns[assignedIndex];
+            }
         }
-
-        if (!target)
+        else if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot))
+        {
+            target = fankriss;
+        }
+        else
         {
             for (Unit* spawn : spawns)
             {
@@ -833,14 +843,14 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
                     break;
                 }
             }
-        }
 
-        if (!target)
-            target = spawns.front();
+            if (!target)
+                target = spawns.front();
+        }
     }
     else
     {
-        target = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
+        target = fankriss;
     }
 
     bool const targetIsSpawn = target && botAI->EqualLowercaseName(target->GetName(), "spawn of fankriss");

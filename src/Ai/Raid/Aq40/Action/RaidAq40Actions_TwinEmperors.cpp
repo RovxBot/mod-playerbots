@@ -47,6 +47,53 @@ bool IsTwinAssignedSideBoss(Aq40Helpers::TwinAssignments const& assignment, Unit
     return boss && assignment.sideEmperor == boss;
 }
 
+bool IsTwinBugUnit(PlayerbotAI* botAI, Unit* bug)
+{
+    return bug && Aq40BossHelper::IsUnitNamedAny(botAI, bug,
+        { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" });
+}
+
+bool IsTwinBugCombatRelevant(Unit* bug, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bug || !bug->IsAlive() || !assignment.sideEmperor)
+        return false;
+
+    if (!Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+        return false;
+
+    if (bug->IsInCombat() || bug->GetVictim())
+        return true;
+
+    return bug->GetDistance2d(assignment.sideEmperor) <= 18.0f;
+}
+
+bool IsTwinNonTankDps(Player* bot, PlayerbotAI* botAI)
+{
+    return bot && botAI && !PlayerbotAI::IsTank(bot) && !botAI->IsHeal(bot);
+}
+
+bool HasTwinBossAggro(Player* bot, Aq40Helpers::TwinAssignments const& assignment, Unit* boss)
+{
+    if (!bot || !boss)
+        return false;
+
+    ObjectGuid const botGuid = bot->GetGUID();
+    ObjectGuid petGuid = ObjectGuid::Empty;
+    if (Pet* pet = bot->GetPet())
+        petGuid = pet->GetGUID();
+
+    return boss->GetTarget() == botGuid || (petGuid && boss->GetTarget() == petGuid) ||
+           bot->GetVictim() == boss;
+}
+
+bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!IsTwinNonTankDps(bot, botAI) || !assignment.veknilash)
+        return false;
+
+    return HasTwinBossAggro(bot, assignment, assignment.veknilash);
+}
+
 void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
 {
     if (!botAI || !context || !target)
@@ -63,8 +110,7 @@ Unit* FindTwinPriorityBugTarget(PlayerbotAI* botAI, Aq40Helpers::TwinAssignments
     Unit* preferred = nullptr;
     for (Unit* bug : bugs)
     {
-        if (!bug || !bug->IsAlive() ||
-            !Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+        if (!IsTwinBugUnit(botAI, bug) || !IsTwinBugCombatRelevant(bug, assignment))
             continue;
 
         bool const isMutateBug = botAI->EqualLowercaseName(bug->GetName(), "mutate bug");
@@ -194,6 +240,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool const isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+    bool const draggingMeleeBoss = IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment);
     Unit* sideBug = FindTwinPriorityBugTarget(botAI, assignment, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, encounterUnits);
     if (isWarlockTank)
@@ -212,6 +259,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     }
     else if (botAI->IsHeal(bot))
         return false;
+    else if (draggingMeleeBoss)
+        target = assignment.veknilash;
     else if (isMeleeDps && sideBug && ShouldReserveForTwinBug(bot, botAI, assignment, sideBug))
         target = sideBug;
     else if (isMeleeDps && IsTwinAssignedSideBoss(assignment, assignment.veknilash) && mutateBug &&
@@ -295,6 +344,12 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (!sideBoss)
         return false;
 
+    if ((isWarlockTank || isMeleeTank) &&
+        (!bot->IsWithinLOSInMap(sideBoss) || bot->GetDistance2d(sideBoss) > (isWarlockTank ? 34.0f : 12.0f)))
+    {
+        return MoveNear(sideBoss, isWarlockTank ? 24.0f : 4.0f, MovementPriority::MOVEMENT_COMBAT);
+    }
+
     Position fallbackAnchor;
     if (GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
     {
@@ -330,7 +385,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
         if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                 bot->GetPositionZ(), targetX, targetY, targetZ))
-            return false;
+            return MoveTo(sideBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
         return MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -356,6 +411,9 @@ bool Aq40TwinEmperorsPreTeleportStageAction::Execute(Event /*event*/)
     bool const isRanged = botAI->IsRanged(bot) && !isHealer;
     bool const isMeleeDps = !isWarlockTank && !isTank && !isHealer && !isRanged;
     if (!isWarlockTank && !isTank && !isHealer && !isRanged && !isMeleeDps)
+        return false;
+
+    if (isMeleeDps && IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
         return false;
 
     if (isMeleeDps)
@@ -559,7 +617,7 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
 
     if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
             bot->GetPositionZ(), targetX, targetY, targetZ))
-        return acted;
+        return MoveTo(desiredBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT) || acted;
 
     acted = MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                    MovementPriority::MOVEMENT_FORCED, true, false) || acted;

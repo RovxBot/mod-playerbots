@@ -24,6 +24,7 @@ namespace
 {
 float constexpr kPi = 3.14159265f;
 uint32 constexpr kCthunGiantWavePeriodMs = 20000;
+float constexpr kCthunSafeZTolerance = 6.0f;
 
 struct CthunSpreadState
 {
@@ -53,6 +54,35 @@ Unit* FindCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
 Unit* FindCthunEye(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     return Aq40BossActions::FindUnitByAnyName(botAI, attackers, { "eye of c'thun" });
+}
+
+bool IsCthunBossUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "c'thun", "eye of c'thun" });
+}
+
+bool ResolveSafeCthunFloorPosition(Player* bot, float targetX, float targetY, float& outX, float& outY, float& outZ)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    outX = targetX;
+    outY = targetY;
+    outZ = bot->GetPositionZ();
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), outX, outY, outZ))
+        return false;
+
+    return std::fabs(outZ - bot->GetPositionZ()) <= kCthunSafeZTolerance;
+}
+
+bool ShouldBlockUnsafeCthunBossPursuit(Player* bot, PlayerbotAI* botAI, Unit* target)
+{
+    if (!bot || !target || !IsCthunBossUnit(botAI, target))
+        return false;
+
+    return std::fabs(target->GetPositionZ() - bot->GetPositionZ()) > kCthunSafeZTolerance ||
+           !bot->IsWithinLOSInMap(target);
 }
 
 void PinCthunTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
@@ -299,6 +329,10 @@ bool Aq40CthunChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     PinCthunTarget(botAI, context, target);
+    if (!Aq40Helpers::IsCthunInStomach(bot, botAI) && !Aq40BossHelper::IsEncounterTank(bot, bot) &&
+        ShouldBlockUnsafeCthunBossPursuit(bot, botAI, target))
+        return false;
+
     return Attack(target);
 }
 
@@ -326,12 +360,16 @@ bool Aq40CthunMaintainSpreadAction::Execute(Event /*event*/)
     Position assigned = GetAssignedCthunSpreadPosition(bot, botAI, boss, isMelee);
     float moveX = assigned.GetPositionX();
     float moveY = assigned.GetPositionY();
+    float moveZ = bot->GetPositionZ();
 
     float const tolerance = isMelee ? 3.0f : 5.0f;
     if (bot->GetDistance2d(moveX, moveY) < tolerance)
         return false;
 
-    return MoveTo(bot->GetMapId(), moveX, moveY, boss->GetPositionZ(), false, false, false, true,
+    if (!ResolveSafeCthunFloorPosition(bot, moveX, moveY, moveX, moveY, moveZ))
+        return false;
+
+    return MoveTo(bot->GetMapId(), moveX, moveY, moveZ, false, false, false, true,
                   MovementPriority::MOVEMENT_COMBAT, true, false);
 }
 
@@ -378,8 +416,12 @@ bool Aq40CthunAvoidDarkGlareAction::Execute(Event /*event*/)
     float nextAngle = currentAngle + (cross >= 0.0f ? step : -step);
     float moveX = boss->GetPositionX() + std::cos(nextAngle) * radius;
     float moveY = boss->GetPositionY() + std::sin(nextAngle) * radius;
+    float moveZ = bot->GetPositionZ();
 
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
+    if (!ResolveSafeCthunFloorPosition(bot, moveX, moveY, moveX, moveY, moveZ))
+        return false;
+
+    return MoveTo(bot->GetMapId(), moveX, moveY, moveZ, false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }
 

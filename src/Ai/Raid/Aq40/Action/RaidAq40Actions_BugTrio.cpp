@@ -5,6 +5,7 @@
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../../RaidBossHelpers.h"
+#include "RtiTargetValue.h"
 
 namespace Aq40BossActions
 {
@@ -49,6 +50,12 @@ Unit* FindBugTrioTankOwnedTarget(PlayerbotAI* botAI, Player* bot, GuidVector con
 
 namespace
 {
+bool IsBugTrioKillTarget(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && unit->IsAlive() &&
+           Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "princess yauj", "vem", "lord kri" });
+}
+
 GuidVector GetBugTrioCombatUnits(PlayerbotAI* botAI)
 {
     if (!botAI)
@@ -66,6 +73,23 @@ GuidVector GetBugTrioEncounterUnits(PlayerbotAI* botAI)
     GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     return Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 }
+
+Unit* FindBugTrioSkullTarget(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    ObjectGuid const skullGuid = group->GetTargetIcon(RtiTargetValue::skullIndex);
+    if (!skullGuid)
+        return nullptr;
+
+    Unit* skullTarget = botAI->GetUnit(skullGuid);
+    return IsBugTrioKillTarget(botAI, skullTarget) ? skullTarget : nullptr;
+}
 }    // namespace
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
@@ -75,9 +99,14 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* target = Aq40BossHelper::IsEncounterTank(bot, bot) ?
-        Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits) :
-        Aq40BossActions::FindBugTrioTankOwnedTarget(botAI, bot, encounterUnits);
+    Unit* skullTarget = FindBugTrioSkullTarget(bot, botAI);
+    Unit* target = skullTarget;
+    if (!target)
+    {
+        target = Aq40BossHelper::IsEncounterTank(bot, bot) ?
+            Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits) :
+            Aq40BossActions::FindBugTrioTankOwnedTarget(botAI, bot, encounterUnits);
+    }
 
     if (!target)
         return false;
@@ -85,7 +114,9 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
-    MarkTargetWithSkull(bot, target);
+    if (Aq40BossHelper::IsEncounterTank(bot, bot) && !skullTarget)
+        MarkTargetWithSkull(bot, target);
+
     return Attack(target);
 }
 

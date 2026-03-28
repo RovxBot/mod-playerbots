@@ -377,8 +377,14 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
         if (assignment.sideEmperor->GetVictim() == member)
             return true;
 
-        if (member->GetDistance2d(assignment.sideEmperor) <= readyRange &&
-            member->GetTarget() == assignment.sideEmperor->GetGUID())
+        Unit* memberCurrentTarget = memberAI ? memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() : nullptr;
+        bool const targetingAssignedBoss =
+            member->GetVictim() == assignment.sideEmperor ||
+            memberCurrentTarget == assignment.sideEmperor ||
+            member->GetTarget() == assignment.sideEmperor->GetGUID();
+        if (targetingAssignedBoss &&
+            member->IsWithinLOSInMap(assignment.sideEmperor) &&
+            member->GetDistance2d(assignment.sideEmperor) <= (readyRange + 4.0f))
             return true;
     }
 

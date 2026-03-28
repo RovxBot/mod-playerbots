@@ -62,6 +62,35 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
            botAI->HasAura("whirlwind", unit);
 }
 
+bool IsTwinBugCombatRelevant(Unit* bug, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bug || !bug->IsAlive() || !assignment.sideEmperor)
+        return false;
+
+    if (!Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+        return false;
+
+    if (bug->IsInCombat() || bug->GetVictim())
+        return true;
+
+    return bug->GetDistance2d(assignment.sideEmperor) <= 18.0f;
+}
+
+bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bot || !botAI || PlayerbotAI::IsTank(bot) || botAI->IsHeal(bot) || !assignment.veknilash)
+        return false;
+
+    ObjectGuid const botGuid = bot->GetGUID();
+    ObjectGuid petGuid = ObjectGuid::Empty;
+    if (Pet* pet = bot->GetPet())
+        petGuid = pet->GetGUID();
+
+    return assignment.veknilash->GetTarget() == botGuid ||
+           (petGuid && assignment.veknilash->GetTarget() == petGuid) ||
+           bot->GetVictim() == assignment.veknilash;
+}
+
 Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits,
                             Aq40Helpers::TwinAssignments const& assignment)
 {
@@ -69,9 +98,9 @@ Unit* FindTwinSideBugTarget(PlayerbotAI* botAI, GuidVector const& encounterUnits
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* bug = botAI->GetUnit(guid);
-        if (!bug || !bug->IsAlive() ||
+        if (!bug ||
             !Aq40BossHelper::IsUnitNamedAny(botAI, bug, { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" }) ||
-            !Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
+            !IsTwinBugCombatRelevant(bug, assignment))
             continue;
 
         bool const isMutateBug = botAI->EqualLowercaseName(bug->GetName(), "mutate bug");
@@ -112,7 +141,7 @@ bool Aq40SkeramActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -580,6 +609,9 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.sideEmperor)
+        return false;
+
+    if (IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
         return false;
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
