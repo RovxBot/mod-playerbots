@@ -55,6 +55,7 @@ void AiObjectContext::BuildSharedContexts()
     BuildSharedTriggerContexts(sharedTriggerContexts);
     BuildSharedValueContexts(sharedValueContexts);
 }
+
 std::vector<std::string> AiObjectContext::Save()
 {
     std::vector<std::string> result;

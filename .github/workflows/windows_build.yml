@@ -1,9 +1,12 @@
 name: windows-build
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "master", "test-staging" ]
+  pull_request:
+    branches: [ "master", "test-staging" ]
 
 concurrency:
-  group: "windows-build-${{ github.workflow }}-${{ github.ref }}"
+  group: "windows-build-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:

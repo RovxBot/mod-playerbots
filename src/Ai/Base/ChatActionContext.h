@@ -120,7 +120,6 @@ public:
         creators["use"] = &ChatActionContext::use;
         creators["item count"] = &ChatActionContext::item_count;
         creators["equip"] = &ChatActionContext::equip;
-        creators["equip upgrades"] = &ChatActionContext::equip_upgrade_triggered;
         creators["unequip"] = &ChatActionContext::unequip;
         creators["sell"] = &ChatActionContext::sell;
         creators["buy"] = &ChatActionContext::buy;
@@ -251,7 +250,6 @@ private:
     static Action* maintenance(PlayerbotAI* botAI) { return new MaintenanceAction(botAI); }
     static Action* remove_glyph(PlayerbotAI* botAI) { return new RemoveGlyphAction(botAI); }
     static Action* autogear(PlayerbotAI* botAI) { return new AutoGearAction(botAI); }
-    static Action* equip_upgrade_triggered(PlayerbotAI* botAI) { return new EquipUpgradesPacketAction(botAI); }
     static Action* equip_upgrade(PlayerbotAI* botAI) { return new EquipUpgradeAction(botAI); }
     static Action* co(PlayerbotAI* botAI) { return new ChangeCombatStrategyAction(botAI); }
     static Action* nc(PlayerbotAI* botAI) { return new ChangeNonCombatStrategyAction(botAI); }
