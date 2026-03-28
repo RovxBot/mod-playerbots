@@ -31,7 +31,20 @@ Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
 Unit* FindTwinMutateBug(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    return FindUnitByAnyName(botAI, attackers, { "mutate bug" });
+    if (!botAI)
+        return nullptr;
+
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        if (Aq40Helpers::IsTwinMutateBug(botAI, unit))
+            return unit;
+    }
+
+    return nullptr;
 }
 
 std::vector<Unit*> FindTwinSideBugs(PlayerbotAI* botAI, GuidVector const& attackers)
@@ -51,20 +64,6 @@ bool IsTwinBugUnit(PlayerbotAI* botAI, Unit* bug)
 {
     return bug && Aq40BossHelper::IsUnitNamedAny(botAI, bug,
         { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" });
-}
-
-bool IsTwinBugCombatRelevant(Unit* bug, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bug || !bug->IsAlive() || !assignment.sideEmperor)
-        return false;
-
-    if (!Aq40Helpers::IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
-        return false;
-
-    if (bug->IsInCombat() || bug->GetVictim())
-        return true;
-
-    return bug->GetDistance2d(assignment.sideEmperor) <= 18.0f;
 }
 
 bool IsTwinNonTankDps(Player* bot, PlayerbotAI* botAI)
@@ -104,26 +103,35 @@ void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
     context->GetValue<ObjectGuid>("pull target")->Set(guid);
 }
 
-Unit* FindTwinPriorityBugTarget(PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment,
+Unit* FindTwinPriorityBugTarget(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment,
                                 std::vector<Unit*> const& bugs)
 {
     Unit* preferred = nullptr;
     for (Unit* bug : bugs)
     {
-        if (!IsTwinBugUnit(botAI, bug) || !IsTwinBugCombatRelevant(bug, assignment))
+        if (!IsTwinBugUnit(botAI, bug) || !Aq40Helpers::IsTwinCriticalSideBug(bot, botAI, assignment, bug))
             continue;
 
-        bool const isMutateBug = botAI->EqualLowercaseName(bug->GetName(), "mutate bug");
+        bool const isMutateBug = Aq40Helpers::IsTwinMutateBug(botAI, bug);
         if (!preferred)
         {
             preferred = bug;
             continue;
         }
 
-        bool const preferredIsMutate = botAI->EqualLowercaseName(preferred->GetName(), "mutate bug");
+        bool const preferredIsMutate = Aq40Helpers::IsTwinMutateBug(botAI, preferred);
         if (isMutateBug != preferredIsMutate)
         {
             if (isMutateBug)
+                preferred = bug;
+            continue;
+        }
+
+        bool const isExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, bug);
+        bool const preferredExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, preferred);
+        if (isExplodeBug != preferredExplodeBug)
+        {
+            if (isExplodeBug)
                 preferred = bug;
             continue;
         }
@@ -221,6 +229,33 @@ bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers:
     outPosition.Relocate(targetX, targetY, targetZ);
     return true;
 }
+
+bool GetTwinFarSidePosition(Player* bot, Unit* sideBoss, Unit* oppositeBoss, float desiredRange,
+                            float angleOffset, Position& outPosition)
+{
+    if (!bot || !sideBoss)
+        return false;
+
+    float angle = 0.0f;
+    if (oppositeBoss)
+        angle = std::atan2(sideBoss->GetPositionY() - oppositeBoss->GetPositionY(),
+                           sideBoss->GetPositionX() - oppositeBoss->GetPositionX());
+    else
+        angle = std::atan2(bot->GetPositionY() - sideBoss->GetPositionY(),
+                           bot->GetPositionX() - sideBoss->GetPositionX());
+
+    angle += angleOffset;
+
+    float targetX = sideBoss->GetPositionX() + desiredRange * std::cos(angle);
+    float targetY = sideBoss->GetPositionY() + desiredRange * std::sin(angle);
+    float targetZ = bot->GetPositionZ();
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+        return false;
+
+    outPosition.Relocate(targetX, targetY, targetZ);
+    return true;
+}
 }    // namespace
 
 bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
@@ -241,7 +276,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool const isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
     bool const draggingMeleeBoss = IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment);
-    Unit* sideBug = FindTwinPriorityBugTarget(botAI, assignment, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
+    Unit* sideBug = FindTwinPriorityBugTarget(bot, botAI, assignment, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, encounterUnits);
     if (isWarlockTank)
     {
@@ -445,14 +480,42 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return false;
 
     Unit* veklor = assignment.veklor;
-    bool acted = false;
 
-    float d = bot->GetDistance2d(veklor);
-    if (d < 20.0f || d > 32.0f)
+    // Hold a true far-side anchor away from Vek'nilash instead of a generic
+    // 24y ring position. The logs showed repeated Heal Brother casts, which
+    // means the Vek'lor tank was not preserving room separation reliably.
+    bool const blizzardOnBot = Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard });
+    float const desiredRange = blizzardOnBot ? 29.0f : 24.0f;
+    float const minRange = blizzardOnBot ? 24.0f : 21.0f;
+    float const maxRange = blizzardOnBot ? 34.0f : 30.0f;
+    float const angleOffset = blizzardOnBot ? (((bot->GetGUID().GetRawValue() & 1ULL) != 0) ? 0.45f : -0.45f) : 0.0f;
+
+    Position anchorPosition;
+    bool const hasAnchor =
+        GetTwinFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, angleOffset, anchorPosition);
+    float const rangeToVeklor = bot->GetDistance2d(veklor);
+    bool const needReposition =
+        !bot->IsWithinLOSInMap(veklor) ||
+        rangeToVeklor < minRange ||
+        rangeToVeklor > maxRange ||
+        (hasAnchor && bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 3.5f);
+
+    if (needReposition)
     {
-        acted = MoveTo(veklor, 24.0f, MovementPriority::MOVEMENT_COMBAT) || acted;
+        bot->AttackStop();
+        bot->InterruptNonMeleeSpells(true);
+
+        if (hasAnchor)
+        {
+            return MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
+                          anchorPosition.GetPositionZ(), false, false, false, true,
+                          MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
+
+        return MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
     }
 
+    bool acted = false;
     if (botAI->CanCastSpell("shadow ward", bot) && !botAI->HasAura("shadow ward", bot))
         acted = botAI->CastSpell("shadow ward", bot) || acted;
 
