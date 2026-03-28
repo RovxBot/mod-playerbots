@@ -539,7 +539,7 @@ inline GuidVector GetActiveCombatUnits(PlayerbotAI* botAI, GuidVector const& att
             continue;
 
         bool const isCombatRelevant =
-            unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || unit->GetThreatMgr().getCurrentVictim();
+            unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || unit->GetThreatMgr().GetCurrentVictim();
         if (!isCombatRelevant)
             continue;
 
