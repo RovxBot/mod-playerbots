@@ -32,6 +32,7 @@ TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
+std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
@@ -78,6 +79,26 @@ uint32 GetTwinRolePriority(Player* bot, Player* member, TwinRoleCohort cohort)
     }
 
     return std::numeric_limits<uint32>::max();
+}
+
+uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
+{
+    switch (cohort)
+    {
+        case TwinRoleCohort::WarlockTank:
+            // Best shadow-resist warlock starts on the initial Vek'lor side
+            // so the caster boss is picked up immediately on pull.
+            return (slot % 2 == 0) ? 1u : 0u;
+        case TwinRoleCohort::MeleeTank:
+            // Main tank starts on the initial Vek'nilash side, off-tank on
+            // the opposite side waiting for the first teleport pickup.
+            return slot % 2;
+        case TwinRoleCohort::Healer:
+        case TwinRoleCohort::Other:
+            return slot % 2;
+    }
+
+    return slot % 2;
 }
 
 void UpdateTwinTeleportState(Player* bot, TwinAssignments const& assignments)
@@ -181,6 +202,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         sTwinAssignments.erase(instanceId);
         sTwinTeleportStates.erase(instanceId);
         sCachedTwinSplitByX.erase(instanceId);
+        sTwinSideZeroIsLowSide.erase(instanceId);
     }
 
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
@@ -225,7 +247,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         if (assignments.find(memberGuid) != assignments.end())
             continue;
 
-        assignments[memberGuid] = assignedCount % 2;
+        assignments[memberGuid] = GetTwinRoleSideForSlot(cohort, assignedCount);
         ++assignedCount;
     }
 
@@ -265,10 +287,11 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return result;
     }
 
-    // Tanks and healers are assigned a stable geographic room side.
-    // Each side has one warlock tank and one melee tank.  When its boss
-    // is the correct type the tank is "active" — otherwise it stands back.
-    // Healers stay on their assigned side healing whoever is there.
+    // Tanks and healers are assigned stable room sides. Side 0 is locked to
+    // the initial Vek'nilash pull side and side 1 to the initial Vek'lor side
+    // so the main tank starts on melee, while the off-tank and active warlock
+    // start on caster. After teleport, tanks remain on their room side and the
+    // correct side-local pickup becomes active.
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
     // Determine which axis separates the two bosses (cache during teleport
@@ -298,9 +321,27 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     Unit* lowSide = veklorAxis < veknilashAxis ? result.veklor : result.veknilash;
     Unit* highSide = lowSide == result.veklor ? result.veknilash : result.veklor;
 
+    // Side index 0 is the initial Vek'nilash pull side; side index 1 is the
+    // initial Vek'lor side. This keeps the main tank on the melee-pull side
+    // and the off-tank/active warlock staged on the caster side from pull.
+    bool sideZeroIsLowSide = true;
+    auto sideMappingIt = sTwinSideZeroIsLowSide.find(instanceId);
+    if (sideMappingIt == sTwinSideZeroIsLowSide.end())
+    {
+        sideZeroIsLowSide = (lowSide == result.veknilash);
+        sTwinSideZeroIsLowSide[instanceId] = sideZeroIsLowSide;
+    }
+    else
+    {
+        sideZeroIsLowSide = sideMappingIt->second;
+    }
+
+    Unit* sideZeroBoss = sideZeroIsLowSide ? lowSide : highSide;
+    Unit* sideOneBoss = sideZeroIsLowSide ? highSide : lowSide;
+
     uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
-    result.sideEmperor = sideIndex == 0 ? lowSide : highSide;
-    result.oppositeEmperor = result.sideEmperor == lowSide ? highSide : lowSide;
+    result.sideEmperor = sideIndex == 0 ? sideZeroBoss : sideOneBoss;
+    result.oppositeEmperor = sideIndex == 0 ? sideOneBoss : sideZeroBoss;
     UpdateTwinTeleportState(bot, result);
     return result;
 }
@@ -610,6 +651,7 @@ bool ResetEncounterState(Player* bot)
     erased = sTwinTeleportStates.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
     erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
+    erased = sTwinSideZeroIsLowSide.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
 
     return erased;
