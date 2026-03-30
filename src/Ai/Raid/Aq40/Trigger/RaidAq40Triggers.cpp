@@ -595,15 +595,7 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
 
 bool Aq40TwinEmperorsRoomEntryTrigger::IsActive()
 {
-    if (bot->IsInCombat() || Aq40Helpers::IsTwinRaidCombatActive(bot))
-        return false;
-
-    if (Aq40Helpers::IsInTwinEmperorRoom(bot))
-        return true;
-
-    GuidVector const twinUnits = Aq40Helpers::GetTwinPrePullUnits(bot, botAI);
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, twinUnits, { "emperor vek'nilash" }) &&
-           Aq40BossHelper::HasAnyNamedUnit(botAI, twinUnits, { "emperor vek'lor" });
+    return Aq40Helpers::IsTwinPrePullReady(bot, botAI);
 }
 
 bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()

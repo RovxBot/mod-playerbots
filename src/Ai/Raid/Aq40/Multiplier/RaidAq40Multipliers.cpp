@@ -300,10 +300,7 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         return 1.0f;
 
     std::string const actionName = action->getName();
-    bool const twinPrePullStage =
-        !bot->IsInCombat() &&
-        !Aq40Helpers::IsTwinRaidCombatActive(bot) &&
-        Aq40Helpers::IsInTwinEmperorRoom(bot);
+    bool const twinPrePullStage = Aq40Helpers::IsTwinPrePullReady(bot, botAI);
     if (twinPrePullStage)
     {
         if (actionName == "aq40 twin emperors pre pull stage")
@@ -311,9 +308,7 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
         if (dynamic_cast<CombatFormationMoveAction*>(action) ||
             dynamic_cast<FollowAction*>(action) ||
-            dynamic_cast<FleeAction*>(action) ||
-            (dynamic_cast<MovementAction*>(action) &&
-             actionName != "aq40 twin emperors pre pull stage"))
+            dynamic_cast<FleeAction*>(action))
             return 0.0f;
     }
 
@@ -326,6 +321,14 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         return 1.0f;
 
     if (actionName == "aq40 choose target")
+        return 0.0f;
+
+    bool const isTwinTank =
+        Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
+        (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+    bool const twinDpsWaitWindow =
+        !isTwinTank && Aq40Helpers::IsTwinDpsWaitWindow(bot, botAI, activeUnits);
+    if (twinDpsWaitWindow && actionName == "aq40 twin emperors choose target")
         return 0.0f;
 
     bool isTwinControlAction =
@@ -342,6 +345,17 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
     if (isTwinControlAction)
         return 1.0f;
+
+    // Illidan/Council pattern: give the assigned tanks a short protected
+    // pickup window on pull and after role-changing events before non-tanks
+    // begin normal DPS. Healing remains available during the wait.
+    if (twinDpsWaitWindow)
+    {
+        if (dynamic_cast<AttackAction*>(action) ||
+            (dynamic_cast<CastSpellAction*>(action) &&
+             !dynamic_cast<CastHealingSpellAction*>(action)))
+            return 0.0f;
+    }
 
     bool const blizzardRisk = (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
                                (botAI->IsRanged(bot) || botAI->IsHeal(bot)) &&

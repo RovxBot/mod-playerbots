@@ -95,6 +95,23 @@ bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUn
     return botAI && !units.empty();
 }
 
+bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr)
+{
+    GuidVector units;
+    if (!HasTwinPrePullVisibility(bot, botAI, &units))
+    {
+        if (outUnits)
+            *outUnits = units;
+        return false;
+    }
+
+    if (outUnits)
+        *outUnits = units;
+
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'nilash" }) &&
+           Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'lor" });
+}
+
 bool IsTwinRaidCombatActiveInternal(Player* bot)
 {
     if (!bot || !bot->GetMap())
@@ -115,6 +132,34 @@ bool IsTwinRaidCombatActiveInternal(Player* bot)
         if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
             continue;
         if (!IsInTwinRoomBounds(member))
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool HasTwinDeadGroupMemberAwaitingRecovery(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || member->IsAlive())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (!IsInTwinRoomBounds(member) && !Aq40BossHelper::IsNearEncounter(bot, member))
             continue;
 
         return true;
@@ -232,29 +277,6 @@ bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
     return false;
 }
 
-Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32 sideIndex)
-{
-    if (!bot)
-        return nullptr;
-
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
-
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!IsTwinRoleMatch(cohort, member))
-            continue;
-        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
-            continue;
-
-        if (GetStableTwinRoleIndex(member, GET_PLAYERBOT_AI(member)) == sideIndex)
-            return member;
-    }
-
-    return nullptr;
-}
 }  // namespace
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
@@ -476,6 +498,23 @@ bool IsTwinRaidCombatActive(Player* bot)
     return IsTwinRaidCombatActiveInternal(bot);
 }
 
+bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI || !bot->IsAlive())
+        return false;
+
+    if (!Aq40BossHelper::IsInAq40(bot) || !IsInTwinRoomBounds(bot))
+        return false;
+
+    if (bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot))
+        return false;
+
+    if (HasTwinDeadGroupMemberAwaitingRecovery(bot))
+        return false;
+
+    return HasTwinVisibleEmperors(bot, botAI);
+}
+
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor)
 {
     if (!unit || !sideEmperor)
@@ -539,6 +578,28 @@ bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector co
         return false;
 
     return (getMSTime() - itr->second.lastTeleportMs) <= 3500;
+}
+
+bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    if (!bot || !botAI || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return false;
+
+    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinTeleportStates.end())
+        return false;
+
+    uint32 const now = getMSTime();
+    if (!itr->second.lastTeleportMs && itr->second.encounterStartMs &&
+        (now - itr->second.encounterStartMs) <= 5000)
+        return true;
+
+    if (itr->second.lastTeleportMs &&
+        (now - itr->second.lastTeleportMs) <= 4000)
+        return true;
+
+    return false;
 }
 
 bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)

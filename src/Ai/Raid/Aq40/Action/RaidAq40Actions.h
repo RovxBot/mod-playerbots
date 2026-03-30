@@ -21,7 +21,6 @@ Unit* FindFankrissTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 std::vector<Unit*> FindFankrissSpawns(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindHuhuranTarget(PlayerbotAI* botAI, GuidVector const& attackers);
-Unit* FindTwinEmperorsTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindCthunTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindViscidusTarget(PlayerbotAI* botAI, GuidVector const& attackers);
