@@ -299,16 +299,41 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
+    std::string const actionName = action->getName();
+    bool const twinPrePullStage = Aq40Helpers::IsTwinPrePullReady(bot, botAI);
+    if (twinPrePullStage)
+    {
+        if (actionName == "aq40 twin emperors pre pull stage")
+            return 4.0f;
+
+        if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+            dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action))
+            return 0.0f;
+    }
+
+    GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    bool const twinCombatActive =
+        Aq40Helpers::IsTwinRaidCombatActive(bot) &&
+        Aq40Helpers::IsInTwinEmperorRoom(bot);
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }) &&
+        !twinCombatActive)
         return 1.0f;
 
-    std::string const actionName = action->getName();
     if (actionName == "aq40 choose target")
+        return 0.0f;
+
+    bool const isTwinTank =
+        Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
+        (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+    bool const twinDpsWaitWindow =
+        !isTwinTank && Aq40Helpers::IsTwinDpsWaitWindow(bot, botAI, activeUnits);
+    if (twinDpsWaitWindow && actionName == "aq40 twin emperors choose target")
         return 0.0f;
 
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
+        actionName == "aq40 twin emperors pre pull stage" ||
         actionName == "aq40 twin emperors hold split" ||
         actionName == "aq40 twin emperors pre teleport stage" ||
         actionName == "aq40 twin emperors warlock tank" ||
@@ -320,6 +345,17 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
     if (isTwinControlAction)
         return 1.0f;
+
+    // Illidan/Council pattern: give the assigned tanks a short protected
+    // pickup window on pull and after role-changing events before non-tanks
+    // begin normal DPS. Healing remains available during the wait.
+    if (twinDpsWaitWindow)
+    {
+        if (dynamic_cast<AttackAction*>(action) ||
+            (dynamic_cast<CastSpellAction*>(action) &&
+             !dynamic_cast<CastHealingSpellAction*>(action)))
+            return 0.0f;
+    }
 
     bool const blizzardRisk = (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
                                (botAI->IsRanged(bot) || botAI->IsHeal(bot)) &&

@@ -20,11 +20,15 @@ using TwinRoleAssignmentMap = std::unordered_map<uint64, uint32>;
 using TwinCohortAssignments = std::unordered_map<int, TwinRoleAssignmentMap>;
 using TwinInstanceAssignments = std::unordered_map<uint32, TwinCohortAssignments>;
 
-float constexpr kTwinRoomCenterX = -8961.7f;
-float constexpr kTwinRoomCenterY = 1273.65f;
-float constexpr kTwinRoomCenterZ = -112.25f;
-float constexpr kTwinRoomStageRadius = 115.0f;
+// Ground Twin Emps room geometry in repo travel-node data:
+// - The Master's Eye = mid-room anchor
+// - Emperor Vek'lor / Vek'nilash = initial boss-side references
+float constexpr kTwinRoomCenterX = -8953.3f;
+float constexpr kTwinRoomCenterY = 1233.64f;
+float constexpr kTwinRoomCenterZ = -99.718f;
+float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
+float constexpr kTwinPrePullDetectionRange = 320.0f;
 
 struct TwinTeleportState
 {
@@ -45,6 +49,123 @@ std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
 {
     return Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { name });
+}
+
+bool IsInTwinRoomBounds(Player* bot)
+{
+    if (!bot || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    return bot->GetDistance(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ) <= kTwinRoomStageRadius &&
+           std::abs(bot->GetPositionZ() - kTwinRoomCenterZ) <= kTwinRoomStageZTolerance;
+}
+
+GuidVector CollectTwinVisibleUnits(Player* bot, PlayerbotAI* botAI)
+{
+    GuidVector units;
+    if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
+        return units;
+
+    GuidVector const& possibleTargetsNoLos =
+        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (ObjectGuid const guid : possibleTargetsNoLos)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (!Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "emperor vek'nilash", "emperor vek'lor" }))
+            continue;
+
+        if (bot->GetDistance2d(unit) > kTwinPrePullDetectionRange)
+            continue;
+
+        units.push_back(guid);
+    }
+
+    return units;
+}
+
+bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr)
+{
+    GuidVector units = CollectTwinVisibleUnits(bot, botAI);
+    if (outUnits)
+        *outUnits = units;
+
+    return botAI && !units.empty();
+}
+
+bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr)
+{
+    GuidVector units;
+    if (!HasTwinPrePullVisibility(bot, botAI, &units))
+    {
+        if (outUnits)
+            *outUnits = units;
+        return false;
+    }
+
+    if (outUnits)
+        *outUnits = units;
+
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'nilash" }) &&
+           Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'lor" });
+}
+
+bool IsTwinRaidCombatActiveInternal(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInCombat())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (!IsInTwinRoomBounds(member))
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool HasTwinDeadGroupMemberAwaitingRecovery(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || member->IsAlive())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (!IsInTwinRoomBounds(member) && !Aq40BossHelper::IsNearEncounter(bot, member))
+            continue;
+
+        return true;
+    }
+
+    return false;
 }
 
 uint32 GetGroupMemberOrder(Player* bot, Player* member)
@@ -114,7 +235,7 @@ void UpdateTwinTeleportState(Player* bot, TwinAssignments const& assignments)
         return;
 
     TwinTeleportState& state = sTwinTeleportStates[bot->GetMap()->GetInstanceId()];
-    if (!state.encounterStartMs && Aq40BossHelper::IsNearbyGroupMemberInCombat(bot))
+    if (!state.encounterStartMs && IsTwinRaidCombatActiveInternal(bot))
         state.encounterStartMs = getMSTime();
 
     Position const veklorPosition = assignments.veklor->GetPosition();
@@ -156,29 +277,6 @@ bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
     return false;
 }
 
-Player* FindTwinAssignedPlayerForSide(Player* bot, TwinRoleCohort cohort, uint32 sideIndex)
-{
-    if (!bot)
-        return nullptr;
-
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
-
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!IsTwinRoleMatch(cohort, member))
-            continue;
-        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
-            continue;
-
-        if (GetStableTwinRoleIndex(member, GET_PLAYERBOT_AI(member)) == sideIndex)
-            return member;
-    }
-
-    return nullptr;
-}
 }  // namespace
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
@@ -203,14 +301,15 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
 
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
-    bool const encounterActive = Aq40BossHelper::IsEncounterCombatActive(bot);
+    bool const encounterActive = Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot);
+    bool const twinVisiblePrePull = botAI && HasTwinPrePullVisibility(bot, botAI);
     if (!encounterActive)
     {
         // Preserve side assignments while the raid is staged inside the Twin room
         // so the pre-pull tank split survives until the actual pull.
         sTwinTeleportStates.erase(instanceId);
 
-        if (!IsInTwinEmperorRoom(bot))
+        if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull)
         {
             sTwinAssignments.erase(instanceId);
             sCachedTwinSplitByX.erase(instanceId);
@@ -364,25 +463,26 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
 
 GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI)
 {
-    GuidVector units;
-    if (!bot || !botAI || !IsInTwinEmperorRoom(bot))
+    return CollectTwinVisibleUnits(bot, botAI);
+}
+
+GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    GuidVector units = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
+    if (!bot || !botAI)
         return units;
 
-    GuidVector const& possibleTargetsNoLos =
-        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
-    for (ObjectGuid const guid : possibleTargetsNoLos)
+    GuidVector visibleTwins;
+    if (!HasTwinPrePullVisibility(bot, botAI, &visibleTwins))
+        return units;
+
+    if (!bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot) && !IsTwinRaidCombatActiveInternal(bot))
+        return units;
+
+    for (ObjectGuid const guid : visibleTwins)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
-            continue;
-
-        if (!Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "emperor vek'nilash", "emperor vek'lor" }))
-            continue;
-
-        if (bot->GetDistance2d(unit) > 150.0f)
-            continue;
-
-        units.push_back(guid);
+        if (std::find(units.begin(), units.end(), guid) == units.end())
+            units.push_back(guid);
     }
 
     return units;
@@ -390,11 +490,29 @@ GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI)
 
 bool IsInTwinEmperorRoom(Player* bot)
 {
-    if (!bot || !Aq40BossHelper::IsInAq40(bot))
+    return IsInTwinRoomBounds(bot);
+}
+
+bool IsTwinRaidCombatActive(Player* bot)
+{
+    return IsTwinRaidCombatActiveInternal(bot);
+}
+
+bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI || !bot->IsAlive())
         return false;
 
-    return bot->GetDistance(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ) <= kTwinRoomStageRadius &&
-           std::abs(bot->GetPositionZ() - kTwinRoomCenterZ) <= kTwinRoomStageZTolerance;
+    if (!Aq40BossHelper::IsInAq40(bot) || !IsInTwinRoomBounds(bot))
+        return false;
+
+    if (bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot))
+        return false;
+
+    if (HasTwinDeadGroupMemberAwaitingRecovery(bot))
+        return false;
+
+    return HasTwinVisibleEmperors(bot, botAI);
 }
 
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor)
@@ -462,6 +580,28 @@ bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector co
     return (getMSTime() - itr->second.lastTeleportMs) <= 3500;
 }
 
+bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    if (!bot || !botAI || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return false;
+
+    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinTeleportStates.end())
+        return false;
+
+    uint32 const now = getMSTime();
+    if (!itr->second.lastTeleportMs && itr->second.encounterStartMs &&
+        (now - itr->second.encounterStartMs) <= 5000)
+        return true;
+
+    if (itr->second.lastTeleportMs &&
+        (now - itr->second.lastTeleportMs) <= 4000)
+        return true;
+
+    return false;
+}
+
 bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
     TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
@@ -504,8 +644,14 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
         if (GetStableTwinRoleIndex(member, memberAI) != assignment.sideIndex)
             continue;
 
-        if (assignment.sideEmperor->GetVictim() == member)
+        bool const bossTargetingAssignedTank =
+            assignment.sideEmperor->GetVictim() == member ||
+            assignment.sideEmperor->GetTarget() == member->GetGUID();
+        if (bossTargetingAssignedTank)
             return true;
+
+        if (needWarlockTank)
+            continue;
 
         Unit* memberCurrentTarget = memberAI ? memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() : nullptr;
         bool const targetingAssignedBoss =
