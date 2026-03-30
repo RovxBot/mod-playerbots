@@ -94,9 +94,12 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
 
     // Twin Emperors baseline strategy:
+    // - stage the raid on room entry so pull positions are ready before combat starts
     // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor
     // - AQ40 resistance manager enables rshadow during the encounter
     // - pre-stage before teleports, keep the emperors separated, and reserve some DPS for side bugs
+    triggers.push_back(new TriggerNode("aq40 twin emperors room entry",
+        { NextAction("aq40 twin emperors pre pull stage", ACTION_RAID + 8) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors active",
         {
             NextAction("aq40 twin emperors choose target", ACTION_RAID + 2),

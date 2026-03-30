@@ -593,6 +593,16 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" });
 }
 
+bool Aq40TwinEmperorsRoomEntryTrigger::IsActive()
+{
+    if (!Aq40Helpers::IsInTwinEmperorRoom(bot) || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
+        return false;
+
+    GuidVector const twinUnits = Aq40Helpers::GetTwinPrePullUnits(bot, botAI);
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, twinUnits, { "emperor vek'nilash" }) &&
+           Aq40BossHelper::HasAnyNamedUnit(botAI, twinUnits, { "emperor vek'lor" });
+}
+
 bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 {
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
