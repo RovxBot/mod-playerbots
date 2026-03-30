@@ -183,6 +183,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinEmperorsRoomEntryTrigger : public Trigger
+{
+public:
+    Aq40TwinEmperorsRoomEntryTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin emperors room entry") {}
+    bool IsActive() override;
+};
+
 class Aq40TwinEmperorsRoleMismatchTrigger : public Trigger
 {
 public:

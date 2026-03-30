@@ -215,6 +215,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsPrePullStageAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsPrePullStageAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors pre pull stage")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinEmperorsPreTeleportStageAction : public MovementAction
 {
 public:

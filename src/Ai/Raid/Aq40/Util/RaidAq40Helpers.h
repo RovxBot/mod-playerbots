@@ -25,11 +25,14 @@ struct TwinAssignments
     Unit* oppositeEmperor = nullptr;
     Unit* veklor = nullptr;
     Unit* veknilash = nullptr;
+    uint32 sideIndex = 0;
 };
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI);
 uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI);
 TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI);
+bool IsInTwinEmperorRoom(Player* bot);
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor);
 bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit);
 bool IsTwinExplodeBug(PlayerbotAI* botAI, Unit* unit);
