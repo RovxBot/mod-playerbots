@@ -323,10 +323,10 @@ bool GetTwinInnerSidePosition(Player* bot, Unit* sideBoss, Unit* oppositeBoss, f
     return true;
 }
 
-bool ExecuteTwinStagePositioning(MovementAction* action, Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
-                                 GuidVector const& encounterUnits, bool requireTeleportWindow)
+bool GetTwinStagePositioning(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits,
+                             bool requireTeleportWindow, Position& outPosition, MovementPriority& outPriority)
 {
-    if (!action || !bot || !botAI || !context || encounterUnits.empty())
+    if (!bot || !botAI || encounterUnits.empty())
         return false;
 
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
@@ -349,23 +349,23 @@ bool ExecuteTwinStagePositioning(MovementAction* action, Player* bot, PlayerbotA
 
     MovementPriority const priority =
         (!requireTeleportWindow && !bot->IsInCombat()) ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT;
+    outPriority = priority;
 
     if (isMeleeDps)
     {
         if (bot->GetDistance(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ) <= 12.0f)
             return false;
 
-        return action->MoveTo(bot->GetMapId(), kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ, false, false, false,
-                              true, priority, true, false);
+        outPosition.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
+        return true;
     }
 
     Position fallbackAnchor;
     if (!GetTwinFallbackAnchorPosition(bot, botAI, assignment, true, fallbackAnchor))
         return false;
 
-    return action->MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
-                          fallbackAnchor.GetPositionZ(), false, false, false, true,
-                          priority, true, false);
+    outPosition = fallbackAnchor;
+    return true;
 }
 }    // namespace
 
@@ -570,7 +570,13 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 bool Aq40TwinEmperorsPreTeleportStageAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-    return ExecuteTwinStagePositioning(this, bot, botAI, context, encounterUnits, true);
+    Position movePosition;
+    MovementPriority movePriority = MovementPriority::MOVEMENT_COMBAT;
+    if (!GetTwinStagePositioning(bot, botAI, encounterUnits, true, movePosition, movePriority))
+        return false;
+
+    return MoveTo(bot->GetMapId(), movePosition.GetPositionX(), movePosition.GetPositionY(), movePosition.GetPositionZ(),
+                  false, false, false, true, movePriority, true, false);
 }
 
 bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
@@ -579,7 +585,13 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinPrePullUnits(bot, botAI);
-    return ExecuteTwinStagePositioning(this, bot, botAI, context, encounterUnits, false);
+    Position movePosition;
+    MovementPriority movePriority = MovementPriority::MOVEMENT_FORCED;
+    if (!GetTwinStagePositioning(bot, botAI, encounterUnits, false, movePosition, movePriority))
+        return false;
+
+    return MoveTo(bot->GetMapId(), movePosition.GetPositionX(), movePosition.GetPositionY(), movePosition.GetPositionZ(),
+                  false, false, false, true, movePriority, true, false);
 }
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
