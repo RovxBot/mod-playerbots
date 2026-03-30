@@ -586,17 +586,20 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 
 bool Aq40TwinEmperorsActiveTrigger::IsActive()
 {
-    if (!Aq40EncounterEngaged(botAI, bot))
+    if (!Aq40EncounterEngaged(botAI, bot) && !Aq40Helpers::IsTwinRaidCombatActive(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" });
 }
 
 bool Aq40TwinEmperorsRoomEntryTrigger::IsActive()
 {
-    if (!Aq40Helpers::IsInTwinEmperorRoom(bot) || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
+    if (bot->IsInCombat() || Aq40Helpers::IsTwinRaidCombatActive(bot))
         return false;
+
+    if (Aq40Helpers::IsInTwinEmperorRoom(bot))
+        return true;
 
     GuidVector const twinUnits = Aq40Helpers::GetTwinPrePullUnits(bot, botAI);
     return Aq40BossHelper::HasAnyNamedUnit(botAI, twinUnits, { "emperor vek'nilash" }) &&
@@ -611,7 +614,7 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (botAI->IsHeal(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.sideEmperor)
         return false;
@@ -676,7 +679,7 @@ bool Aq40TwinEmperorsPreTeleportTrigger::IsActive()
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     return Aq40Helpers::IsTwinPreTeleportWindow(bot, botAI, encounterUnits);
 }
 
@@ -688,7 +691,7 @@ bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -710,7 +713,7 @@ bool Aq40TwinEmperorsHasOppositeAggroTrigger::IsActive()
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor || !assignment.veknilash || !assignment.sideEmperor || !assignment.oppositeEmperor)
         return false;
@@ -743,7 +746,7 @@ bool Aq40TwinEmperorsBlizzardRiskTrigger::IsActive()
     if ((!botAI->IsRanged(bot) && !botAI->IsHeal(bot)) || Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
         return false;
@@ -767,7 +770,7 @@ bool Aq40TwinEmperorsHealBrotherTrigger::IsActive()
     if (!isWarlockTank && !isMeleeTank)
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor || !assignment.veknilash)
         return false;
@@ -788,7 +791,7 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Unit* veklor = nullptr;
     Unit* veknilash = nullptr;
     for (ObjectGuid const guid : encounterUnits)

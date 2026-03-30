@@ -299,16 +299,38 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
+    std::string const actionName = action->getName();
+    bool const twinPrePullStage =
+        !bot->IsInCombat() &&
+        !Aq40Helpers::IsTwinRaidCombatActive(bot) &&
+        Aq40Helpers::IsInTwinEmperorRoom(bot);
+    if (twinPrePullStage)
+    {
+        if (actionName == "aq40 twin emperors pre pull stage")
+            return 4.0f;
+
+        if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+            dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action) ||
+            (dynamic_cast<MovementAction*>(action) &&
+             actionName != "aq40 twin emperors pre pull stage"))
+            return 0.0f;
+    }
+
+    GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    bool const twinCombatActive =
+        Aq40Helpers::IsTwinRaidCombatActive(bot) &&
+        Aq40Helpers::IsInTwinEmperorRoom(bot);
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }) &&
+        !twinCombatActive)
         return 1.0f;
 
-    std::string const actionName = action->getName();
     if (actionName == "aq40 choose target")
         return 0.0f;
 
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
+        actionName == "aq40 twin emperors pre pull stage" ||
         actionName == "aq40 twin emperors hold split" ||
         actionName == "aq40 twin emperors pre teleport stage" ||
         actionName == "aq40 twin emperors warlock tank" ||
