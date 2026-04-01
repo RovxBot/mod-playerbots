@@ -100,7 +100,11 @@ bool ShouldDelayTwinPreTeleportStage(Player* bot, PlayerbotAI* botAI, Aq40Helper
     if (bot->GetDistance2d(assignment.veklor) <= (castingArcaneBurst ? 22.0f : 18.0f))
         return true;
 
-    return castingBlizzard && bot->GetDistance2d(assignment.veklor) <= 36.0f;
+    // Only delay for bots already standing in a Blizzard (aura check above).
+    // The previous blanket "Vek'lor casting Blizzard within 36y" check blocked
+    // nearly every ranged/healer from pre-staging, causing mass positioning
+    // failures after teleports.
+    return false;
 }
 
 bool IsTwinBugUnit(PlayerbotAI* botAI, Unit* bug)
@@ -708,6 +712,11 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
         GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
     {
+        // Pre-cast Shadow Ward while waiting so the first Shadow Bolt after
+        // Vek'lor teleports in is absorbed.  Fire-and-forget before positioning.
+        if (isWarlockTank && !botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            botAI->CastSpell("shadow ward", bot);
+
         return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
                       fallbackAnchor.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -947,13 +956,25 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return bot->GetVictim() == veklor ? false : Attack(veklor);
     }
 
+    // Curse of Doom generates substantial one-time threat and contributes
+    // meaningful DPS on Vek'lor.  Cast it once after establishing aggro,
+    // per the classic strategy guide recommendation.
+    if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
+        return botAI->CastSpell("curse of doom", veklor);
+
     if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
         return botAI->CastSpell("shadow ward", bot);
 
     if (botAI->CanCastSpell("searing pain", veklor))
         return botAI->CastSpell("searing pain", veklor);
 
-    return (AI_VALUE(Unit*, "current target") == veklor && bot->GetVictim() == veklor) ? false : Attack(veklor);
+    if (AI_VALUE(Unit*, "current target") != veklor || bot->GetVictim() != veklor)
+        return Attack(veklor);
+
+    // Return true in steady state to keep this action in control.
+    // Returning false would drop to class AI, which doesn't prioritise
+    // searing pain and lets warlock threat on Vek'lor stall.
+    return true;
 }
 
 bool Aq40TwinEmperorsWarlockTankAction::isUseful()
@@ -999,7 +1020,9 @@ bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
                       MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    return MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+    // Far-side position failed collision check (Vek'lor near walls).
+    // Fall back to a simple directional escape away from the boss.
+    return MoveAway(veklor, dangerRange + 5.0f);
 }
 
 bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
@@ -1078,7 +1101,11 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
 
     if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
             bot->GetPositionZ(), targetX, targetY, targetZ))
-        return MoveNear(assignment.veklor, botAI->IsHeal(bot) ? 30.0f : 32.0f, MovementPriority::MOVEMENT_COMBAT);
+    {
+        // Arc-spread position hit a wall.  Move directly away from Vek'lor
+        // so the bot escapes the Blizzard AoE instead of orbiting inside it.
+        return MoveAway(assignment.veklor, botAI->IsHeal(bot) ? 30.0f : 32.0f);
+    }
 
     bot->AttackStop();
     bot->InterruptNonMeleeSpells(true);
@@ -1209,7 +1236,7 @@ bool Aq40TwinEmperorsMoveAwayFromBrotherAction::Execute(Event /*event*/)
                       false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    Unit* moveAwayFrom = oppositeBossOnBot ? assignment.sideEmperor : assignment.oppositeEmperor;
+    Unit* moveAwayFrom = oppositeBossOnBot ? assignment.oppositeEmperor : assignment.sideEmperor;
     float const currentDistance = bot->GetDistance2d(moveAwayFrom);
     float const emergencyStep = std::max(12.0f, 45.0f - currentDistance);
     return MoveAway(moveAwayFrom, emergencyStep);
