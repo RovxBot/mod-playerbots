@@ -305,6 +305,11 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     {
         if (actionName == "aq40 twin emperors pre pull stage")
             return 4.0f;
+
+        // Suppress FollowAction during pre-pull staging to prevent bots from
+        // oscillating between their staged position and their follow target.
+        if (dynamic_cast<FollowAction*>(action))
+            return 0.0f;
     }
 
     GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));

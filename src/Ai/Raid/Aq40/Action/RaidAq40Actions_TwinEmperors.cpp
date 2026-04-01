@@ -709,17 +709,22 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         (isMeleeTank && sideBoss != assignment.veknilash);
 
     Position fallbackAnchor;
-    if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
-        GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
+    if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank))
     {
         // Pre-cast Shadow Ward while waiting so the first Shadow Bolt after
         // Vek'lor teleports in is absorbed.  Fire-and-forget before positioning.
         if (isWarlockTank && !botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
             botAI->CastSpell("shadow ward", bot);
 
-        return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
-                      fallbackAnchor.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT, true, false);
+        if (GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
+        {
+            return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
+                          fallbackAnchor.GetPositionZ(), false, false, false, true,
+                          MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
+
+        // Already at fallback anchor — hold position and wait for boss teleport.
+        return true;
     }
 
     if (!waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
@@ -869,7 +874,7 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
     Position movePosition;
     MovementPriority movePriority = MovementPriority::MOVEMENT_FORCED;
     if (!GetTwinStagePositioning(bot, botAI, encounterUnits, false, movePosition, movePriority))
-        return false;
+        return true;  // Already at staged position — hold here
 
     return MoveTo(bot->GetMapId(), movePosition.GetPositionX(), movePosition.GetPositionY(), movePosition.GetPositionZ(),
                   false, false, false, true, movePriority, true, false);
@@ -877,16 +882,7 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 
 bool Aq40TwinEmperorsPrePullStageAction::isUseful()
 {
-    if (!Aq40Helpers::IsTwinPrePullReady(bot, botAI))
-        return false;
-
-    if (bot->IsMounted())
-        return true;
-
-    GuidVector encounterUnits = Aq40Helpers::GetTwinPrePullUnits(bot, botAI);
-    Position movePosition;
-    MovementPriority movePriority = MovementPriority::MOVEMENT_FORCED;
-    return GetTwinStagePositioning(bot, botAI, encounterUnits, false, movePosition, movePriority);
+    return Aq40Helpers::IsTwinPrePullReady(bot, botAI);
 }
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
@@ -901,6 +897,9 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 
     Unit* veklor = assignment.veklor;
 
+    if (AI_VALUE(Unit*, "current target") != veklor)
+        PinTwinTarget(botAI, context, veklor);
+
     // Hold a true far-side anchor away from Vek'nilash instead of a generic
     // 24y ring position. The logs showed repeated Heal Brother casts, which
     // means the Vek'lor tank was not preserving room separation reliably.
@@ -914,51 +913,33 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     bool const hasAnchor =
         GetTwinFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, angleOffset, anchorPosition);
     float const rangeToVeklor = bot->GetDistance2d(veklor);
-    bool const needReposition =
-        !bot->IsWithinLOSInMap(veklor) ||
-        rangeToVeklor < minRange ||
-        rangeToVeklor > maxRange ||
-        (hasAnchor && bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 3.5f);
+    bool const hasLOS = bot->IsWithinLOSInMap(veklor);
     bool const hasThreat = HasTwinBossAggro(bot, veklor);
-    bool const canOpenWithSearingPain = bot->IsWithinLOSInMap(veklor) && botAI->CanCastSpell("searing pain", veklor);
 
-    if (!hasThreat && canOpenWithSearingPain)
-    {
-        if (AI_VALUE(Unit*, "current target") != veklor)
-            PinTwinTarget(botAI, context, veklor);
-
+    // Priority 1: Establish threat — searing pain is the only ability that
+    // matters before we have aggro.
+    if (!hasThreat && hasLOS && botAI->CanCastSpell("searing pain", veklor))
         return botAI->CastSpell("searing pain", veklor);
-    }
 
-    if (needReposition)
+    // Priority 2: Hard reposition — only when out of LOS or grossly out of
+    // range.  Avoid interrupting casts for minor positional drift.
+    bool const hardReposition = !hasLOS || rangeToVeklor < minRange || rangeToVeklor > maxRange;
+    if (hardReposition)
     {
         bot->AttackStop();
         bot->InterruptNonMeleeSpells(true);
 
         if (hasAnchor)
-        {
-            return MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
-                          anchorPosition.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT, true, false);
-        }
+            MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
+                   anchorPosition.GetPositionZ(), false, false, false, true,
+                   MovementPriority::MOVEMENT_COMBAT, true, false);
+        else
+            MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
-        return MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+        return true;  // Always claim the action during repositioning
     }
 
-    if (AI_VALUE(Unit*, "current target") != veklor)
-        PinTwinTarget(botAI, context, veklor);
-
-    if (!hasThreat)
-    {
-        if (botAI->CanCastSpell("searing pain", veklor))
-            return botAI->CastSpell("searing pain", veklor);
-
-        return bot->GetVictim() == veklor ? false : Attack(veklor);
-    }
-
-    // Curse of Doom generates substantial one-time threat and contributes
-    // meaningful DPS on Vek'lor.  Cast it once after establishing aggro,
-    // per the classic strategy guide recommendation.
+    // Priority 3: Maintain spells — threat generation + utility between GCDs
     if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
         return botAI->CastSpell("curse of doom", veklor);
 
@@ -968,8 +949,14 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (botAI->CanCastSpell("searing pain", veklor))
         return botAI->CastSpell("searing pain", veklor);
 
-    if (AI_VALUE(Unit*, "current target") != veklor || bot->GetVictim() != veklor)
-        return Attack(veklor);
+    // Priority 4: Soft reposition — drift toward anchor between casts (GCD)
+    if (hasAnchor && bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 6.0f)
+        MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
+               anchorPosition.GetPositionZ(), false, false, false, true,
+               MovementPriority::MOVEMENT_COMBAT, true, false);
+
+    if (!hasThreat && bot->GetVictim() != veklor)
+        Attack(veklor);
 
     // Return true in steady state to keep this action in control.
     // Returning false would drop to class AI, which doesn't prioritise
