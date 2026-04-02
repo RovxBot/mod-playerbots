@@ -321,6 +321,33 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     TwinRoleAssignmentMap& assignments = sTwinAssignments[instanceId][static_cast<int>(cohort)];
     uint64 const botGuid = bot->GetGUID().GetRawValue();
 
+    // Purge stale entries for players who are no longer in this cohort
+    // (e.g. warlocks that died and are no longer designated tanks).
+    // Without this, dead warlock GUIDs stay cached and prevent the
+    // replacement warlock from getting the correct side assignment.
+    {
+        std::vector<uint64> staleGuids;
+        for (auto const& [guid, _] : assignments)
+        {
+            bool found = false;
+            for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (member && member->GetGUID().GetRawValue() == guid &&
+                    IsTwinRoleMatch(cohort, member) &&
+                    Aq40BossHelper::IsEncounterParticipant(bot, member))
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                staleGuids.push_back(guid);
+        }
+        for (uint64 guid : staleGuids)
+            assignments.erase(guid);
+    }
+
     if (assignments.find(botGuid) != assignments.end())
         return assignments[botGuid];
 
@@ -381,20 +408,28 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
-    // Determine which axis separates the two bosses (cache during teleport
-    // to avoid flicker as the bosses pass through the center).
+    // Determine which axis separates the two bosses.  The axis is cached at
+    // encounter start and only recalculated when the bosses are very far apart
+    // (safely separated).  Recalculating at shorter distances caused the axis
+    // to flip when boss positions drifted, which reversed the side mapping and
+    // broke all tank assignments mid-fight.
     float separation = result.veklor->GetDistance2d(result.veknilash);
     bool splitByX;
     auto axisIt = sCachedTwinSplitByX.find(instanceId);
-    if (separation > 15.0f)
+    if (axisIt != sCachedTwinSplitByX.end())
     {
-        splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
-                   std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
-        sCachedTwinSplitByX[instanceId] = splitByX;
-    }
-    else if (axisIt != sCachedTwinSplitByX.end())
-    {
-        splitByX = axisIt->second;
+        // Use cached axis.  Only recalculate when bosses are very far apart
+        // and clearly on their correct sides (post-teleport settled).
+        if (separation > 60.0f)
+        {
+            splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
+                       std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
+            sCachedTwinSplitByX[instanceId] = splitByX;
+        }
+        else
+        {
+            splitByX = axisIt->second;
+        }
     }
     else
     {

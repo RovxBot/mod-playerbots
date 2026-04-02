@@ -540,14 +540,24 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         if (IsTwinAssignedSideBoss(assignment, assignment.veklor))
             target = assignment.veklor;
         else
+        {
+            // Side doesn't have Vek'lor — stop attacking the old target so
+            // the class AI doesn't chase the wrong boss across the room.
+            bot->AttackStop();
+            context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
             return false;
+        }
     }
     else if (isMeleeTank)
     {
         if (IsTwinAssignedSideBoss(assignment, assignment.veknilash))
             target = assignment.veknilash;
         else
+        {
+            bot->AttackStop();
+            context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
             return false;
+        }
     }
     else if (botAI->IsHeal(bot))
         return false;
@@ -630,12 +640,24 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         (isMeleeTank && sideBoss != assignment.veknilash);
 
     Position fallbackAnchor;
-    if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
-        GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
+    if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank))
     {
-        return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
-                      fallbackAnchor.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT, true, false);
+        // Stop attacking the old boss so the class AI doesn't chase it
+        // across the room while we reposition for the teleport pickup.
+        bot->AttackStop();
+
+        // Pre-cast Shadow Ward while waiting so the first Shadow Bolt after
+        // Vek'lor teleports in is absorbed.  Fire-and-forget before positioning.
+        if (isWarlockTank && !botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            botAI->CastSpell("shadow ward", bot);
+
+        if (GetTwinFallbackAnchorPosition(bot, botAI, assignment, false, fallbackAnchor))
+            return MoveTo(bot->GetMapId(), fallbackAnchor.GetPositionX(), fallbackAnchor.GetPositionY(),
+                          fallbackAnchor.GetPositionZ(), false, false, false, true,
+                          MovementPriority::MOVEMENT_COMBAT, true, false);
+
+        // Already at fallback anchor — hold position and wait for boss teleport.
+        return true;
     }
 
     if (!waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
@@ -773,8 +795,20 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, context->GetValue<GuidVector>("attackers")->Get());
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
+    if (!assignment.veklor)
         return false;
+
+    // Safety net: if the side mapping doesn't think Vek'lor is on our side
+    // but we ARE the designated warlock tank and Vek'lor is within cast range,
+    // proceed anyway.  This prevents side-mapping edge cases from permanently
+    // dropping Searing Pain threat on Vek'lor.
+    if (!IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+    {
+        if (!assignment.veklor->IsAlive() ||
+            !bot->IsWithinLOSInMap(assignment.veklor) ||
+            bot->GetDistance2d(assignment.veklor) > 40.0f)
+            return false;
+    }
 
     Unit* veklor = assignment.veklor;
 
