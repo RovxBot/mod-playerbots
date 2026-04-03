@@ -749,7 +749,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
     if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, !targetIsGuard))
         return false;
 
-    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
+    if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
     return Attack(target);
@@ -857,7 +857,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, !targetIsSpawn))
         return false;
 
-    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
+    if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
     return Attack(target);
@@ -903,7 +903,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
                 assigned = castingDanger.front();
         }
 
-        if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
+        if (!assigned || AI_VALUE(Unit*, "current target") == assigned)
             assigned = nullptr;
 
         if (assigned)
@@ -917,7 +917,11 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         target = Aq40BossActions::FindTrashTarget(botAI, Aq40BossHelper::GetActiveCombatUnits(botAI, attackers));
 
-    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
+    // Only call Attack() when we actually need to switch targets.  Requiring
+    // GetVictim() == target caused Attack() to re-fire every tick for melee
+    // bots that hadn't reached the mob yet — consuming the engine's single
+    // action slot and permanently blocking reach-melee from running.
+    if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
     return Attack(target);
