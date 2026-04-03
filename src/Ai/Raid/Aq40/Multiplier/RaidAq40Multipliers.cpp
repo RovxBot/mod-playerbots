@@ -313,11 +313,12 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     }
 
     GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
-    bool const twinCombatActive =
-        Aq40Helpers::IsTwinRaidCombatActive(bot) &&
-        Aq40Helpers::IsInTwinEmperorRoom(bot);
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }) &&
-        !twinCombatActive)
+    // Only activate Twin Emperors suppression when the bosses are actually
+    // present in the encounter units.  The previous twinCombatActive fallback
+    // (any group member fighting in the twin room) also triggered during trash
+    // packs, suppressing reach-melee, dps-assist, charge, etc. for ALL bots
+    // and leaving melee standing at range unable to engage.
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
         return 1.0f;
 
     if (actionName == "aq40 choose target")
