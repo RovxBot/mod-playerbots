@@ -27,6 +27,7 @@ struct Aq40ManagedResistanceState
     bool shamanNatureCombatEnabled = false;
     bool shadowCombatEnabled = false;
     bool shadowNonCombatEnabled = false;
+    bool warlockShadowBuffApplied = false;
 };
 
 std::unordered_map<uint64, Aq40ManagedResistanceState> sManagedResistanceStateByBot;
@@ -586,12 +587,91 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
         }
     }
 
+    if (bot->getClass() == CLASS_WARLOCK)
+    {
+        if (needShadowResistance)
+        {
+            if (!managedState.warlockShadowBuffApplied &&
+                !botAI->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot))
+            {
+                Aura* const aura = bot->AddAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot);
+                if (aura)
+                {
+                    managedState.warlockShadowBuffApplied = true;
+                    acted = true;
+                }
+            }
+        }
+        else if (managedState.warlockShadowBuffApplied)
+        {
+            bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
+            managedState.warlockShadowBuffApplied = false;
+            acted = true;
+        }
+    }
+
     if (!managedState.natureCombatEnabled && !managedState.natureNonCombatEnabled &&
         !managedState.shamanNatureCombatEnabled &&
-        !managedState.shadowCombatEnabled && !managedState.shadowNonCombatEnabled)
+        !managedState.shadowCombatEnabled && !managedState.shadowNonCombatEnabled &&
+        !managedState.warlockShadowBuffApplied)
         sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue());
 
     return acted;
+}
+
+bool Aq40ManageResistanceStrategiesAction::isUseful()
+{
+    if (!bot)
+        return false;
+
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector const activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    bool const inAq40 = Aq40BossHelper::IsInAq40(bot);
+    bool const needNatureResistance =
+        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    bool const needShadowResistance =
+        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "emperor vek'nilash", "emperor vek'lor" });
+
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        bool const hasNatureStrategyCombat = botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT);
+        bool const hasNatureStrategyNonCombat = botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT);
+        return (needNatureResistance &&
+                (!hasNatureStrategyCombat || !hasNatureStrategyNonCombat || !botAI->HasAura("aspect of the wild", bot))) ||
+               (!needNatureResistance && (hasNatureStrategyCombat || hasNatureStrategyNonCombat));
+    }
+
+    if (bot->getClass() == CLASS_SHAMAN)
+    {
+        bool const hasNatureTotemStrategyCombat = botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT);
+        return (needNatureResistance &&
+                (!hasNatureTotemStrategyCombat || !botAI->HasAura("nature resistance totem", bot))) ||
+               (!needNatureResistance && hasNatureTotemStrategyCombat);
+    }
+
+    if (bot->getClass() == CLASS_PRIEST || bot->getClass() == CLASS_PALADIN)
+    {
+        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
+        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+        bool const missingShadowBuff =
+            (bot->getClass() == CLASS_PRIEST) ?
+                (!botAI->HasAura("shadow protection", bot) && !botAI->HasAura("prayer of shadow protection", bot)) :
+                !botAI->HasAura("shadow resistance aura", bot);
+
+        return (needShadowResistance &&
+                (!hasShadowStrategyCombat || !hasShadowStrategyNonCombat || missingShadowBuff)) ||
+               (!needShadowResistance && (hasShadowStrategyCombat || hasShadowStrategyNonCombat));
+    }
+
+    if (bot->getClass() == CLASS_WARLOCK)
+    {
+        bool const hasBuff = botAI->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot);
+        return (needShadowResistance && !hasBuff) || (!needShadowResistance && hasBuff);
+    }
+
+    return false;
 }
 
 bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
@@ -600,6 +680,8 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
         return false;
 
     bool erased = false;
+    if (bot->getClass() == CLASS_WARLOCK)
+        bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
     erased = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || erased;
     erased = Aq40Helpers::ResetEncounterState(bot) || erased;
     return erased;

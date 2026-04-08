@@ -685,9 +685,6 @@ bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments co
         if (bossTargetingAssignedTank)
             return true;
 
-        if (needWarlockTank)
-            continue;
-
         Unit* memberCurrentTarget = memberAI ? memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() : nullptr;
         bool const targetingAssignedBoss =
             member->GetVictim() == assignment.sideEmperor ||

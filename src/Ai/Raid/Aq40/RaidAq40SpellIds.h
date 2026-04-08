@@ -38,6 +38,7 @@ static constexpr uint32 TwinMutateBug = 802;
 static constexpr uint32 TwinExplodeBug = 804;
 static constexpr uint32 TwinHealBrother = 7393;
 static constexpr uint32 TwinBlizzard = 26607;
+static constexpr uint32 TwinWarlockShadowResistBuff = 27683;  // Prayer of Shadow Protection — free SR for warlock tanks
 static constexpr uint32 OuroSweep = 26103;
 static constexpr uint32 OuroSandBlast = 26102;
 static constexpr uint32 OuroGroundRupture = 26100;

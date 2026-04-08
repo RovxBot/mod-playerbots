@@ -434,15 +434,23 @@ bool GetTwinFarSidePosition(Player* bot, Unit* sideBoss, Unit* oppositeBoss, flo
 
     angle += angleOffset;
 
-    float targetX = sideBoss->GetPositionX() + desiredRange * std::cos(angle);
-    float targetY = sideBoss->GetPositionY() + desiredRange * std::sin(angle);
-    float targetZ = bot->GetPositionZ();
-    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
-            bot->GetPositionZ(), targetX, targetY, targetZ))
-        return false;
+    // Try the exact angle first, then small offsets if collision blocks the path.
+    static constexpr float kRetryOffsets[] = { 0.0f, 0.3f, -0.3f, 0.6f, -0.6f };
+    for (float off : kRetryOffsets)
+    {
+        float tryAngle = angle + off;
+        float targetX = sideBoss->GetPositionX() + desiredRange * std::cos(tryAngle);
+        float targetY = sideBoss->GetPositionY() + desiredRange * std::sin(tryAngle);
+        float targetZ = bot->GetPositionZ();
+        if (bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                bot->GetPositionZ(), targetX, targetY, targetZ))
+        {
+            outPosition.Relocate(targetX, targetY, targetZ);
+            return true;
+        }
+    }
 
-    outPosition.Relocate(targetX, targetY, targetZ);
-    return true;
+    return false;
 }
 
 bool GetTwinInnerSidePosition(Player* bot, Unit* sideBoss, Unit* oppositeBoss, float desiredRange,
@@ -870,6 +878,9 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
         return botAI->CastSpell("shadow ward", bot);
 
+    if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
+        return botAI->CastSpell("curse of doom", veklor);
+
     if (botAI->CanCastSpell("searing pain", veklor))
         return botAI->CastSpell("searing pain", veklor);
 
@@ -1026,7 +1037,10 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
 
     if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
             bot->GetPositionZ(), targetX, targetY, targetZ))
-        return MoveTo(desiredBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT) || acted;
+    {
+        float const awayDist = std::max(12.0f, 60.0f - bot->GetDistance2d(otherBoss));
+        return MoveAway(otherBoss, awayDist) || acted;
+    }
 
     acted = MoveTo(bot->GetMapId(), targetX, targetY, targetZ, false, false, false, true,
                    MovementPriority::MOVEMENT_FORCED, true, false) || acted;
