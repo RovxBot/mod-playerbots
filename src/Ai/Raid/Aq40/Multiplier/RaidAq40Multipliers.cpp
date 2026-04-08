@@ -21,9 +21,16 @@
 
 namespace
 {
-bool GetAq40TrashDanger(PlayerbotAI* botAI, Player* bot, GuidVector const& encounterUnits)
+// Returns true only for the approved AQ40 trash movement cases:
+// - Mindslayer Mind Flay (ranged/healers within 30y)
+// - Defender Thunderclap (ranged/healers within 24y)
+// Eradicator Shock Blast and Warder Fire Nova are intentionally excluded.
+bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& encounterUnits)
 {
     if (!botAI || !bot)
+        return false;
+
+    if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
         return false;
 
     for (ObjectGuid const guid : encounterUnits)
@@ -33,16 +40,15 @@ bool GetAq40TrashDanger(PlayerbotAI* botAI, Player* bot, GuidVector const& encou
             continue;
 
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!spell)
-            continue;
-
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40EradicatorShockBlast }) &&
-            bot->GetDistance2d(unit) < 20.0f)
+        if (spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }) &&
+            bot->GetDistance2d(unit) < 24.0f)
             return true;
 
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }) &&
-            bot->GetDistance2d(unit) < 24.0f)
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }) &&
+            bot->GetDistance2d(unit) < 30.0f)
             return true;
     }
 
@@ -80,7 +86,24 @@ float Aq40GenericMultiplier::GetValue(Action* action)
         if (actionName == "aq40 trash avoid dangerous aoe")
             return 4.0f;
 
-        return 0.0f;
+        // Suppress movement that could break plague separation for all roles.
+        if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+            dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action))
+            return 0.0f;
+
+        // Melee bots cannot attack during plague — closing distance violates separation.
+        if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
+        {
+            if (dynamic_cast<AttackAction*>(action) ||
+                dynamic_cast<ReachTargetAction*>(action) ||
+                dynamic_cast<CastReachTargetSpellAction*>(action) ||
+                dynamic_cast<MovementAction*>(action))
+                return 0.0f;
+        }
+
+        // Ranged and healers can keep casting/healing from their current position.
+        return 1.0f;
     }
 
     if (!Aq40BossHelper::IsEncounterTank(bot, bot))
@@ -89,7 +112,7 @@ float Aq40GenericMultiplier::GetValue(Action* action)
         if (!encounterUnits.empty() &&
             !Aq40BossHelper::IsBossEncounterActive(botAI, encounterUnits) &&
             Aq40BossHelper::IsTrashEncounterActive(botAI, encounterUnits) &&
-            GetAq40TrashDanger(botAI, bot, encounterUnits))
+            IsAq40TrashMovementCase(botAI, bot, encounterUnits))
         {
             if (actionName == "aq40 trash avoid dangerous aoe")
                 return 3.5f;

@@ -391,6 +391,65 @@ Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float
     distanceToCreate = largestDeficit;
     return riskiestMember;
 }
+
+struct Aq40TankRetreatResult
+{
+    bool valid = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+// Compute a short retreat position toward the encounter tank, away from a danger source.
+// Returns invalid if no tank is available or the candidate would push the bot farther from
+// the tank (deeper into the room).  Callers should hold position when invalid.
+Aq40TankRetreatResult ComputeTankRetreatPosition(Player* bot, Unit* danger, float clearDistance)
+{
+    Aq40TankRetreatResult result;
+    if (!bot || !danger)
+        return result;
+
+    Player* tank = Aq40BossHelper::GetEncounterPrimaryTank(bot);
+    if (!tank)
+        tank = Aq40BossHelper::GetEncounterBackupTank(bot, 0);
+    if (!tank)
+        return result;
+
+    // Direction from danger toward the tank (retreat direction).
+    float dx = tank->GetPositionX() - danger->GetPositionX();
+    float dy = tank->GetPositionY() - danger->GetPositionY();
+    float mag = std::sqrt(dx * dx + dy * dy);
+    if (mag < 0.001f)
+        return result;
+
+    dx /= mag;
+    dy /= mag;
+
+    // Short corrective step, capped at 8y to avoid large scatter.
+    float const step = std::min(clearDistance, 8.0f);
+    float candidateX = bot->GetPositionX() + dx * step;
+    float candidateY = bot->GetPositionY() + dy * step;
+    float candidateZ = bot->GetPositionZ();
+
+    // Safety: reject if the candidate is farther from the tank than we currently are.
+    float const currentDistToTank = bot->GetDistance2d(tank);
+    float const candidateDistToTank = std::sqrt(
+        (candidateX - tank->GetPositionX()) * (candidateX - tank->GetPositionX()) +
+        (candidateY - tank->GetPositionY()) * (candidateY - tank->GetPositionY()));
+    if (candidateDistToTank > currentDistToTank + 1.0f)
+        return result;
+
+    // Validate collision.
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                        bot->GetPositionZ(), candidateX, candidateY, candidateZ))
+        return result;
+
+    result.valid = true;
+    result.x = candidateX;
+    result.y = candidateY;
+    result.z = candidateZ;
+    return result;
+}
 }    // namespace
 
 bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
@@ -1012,24 +1071,32 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
+    // Plague separation path — applies to all non-tank roles.
+    // Only stop attacks and move when separation is actually needed;
+    // ranged/healers keep casting/healing when already at safe distance.
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
     {
+        float separationNeeded = 0.0f;
+        Unit* separationRisk = FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded);
+        if (!separationRisk || separationNeeded <= 0.0f)
+            return false;
+
         bot->AttackStop();
         bot->InterruptNonMeleeSpells(true);
         context->GetValue<Unit*>("current target")->Set(nullptr);
         bot->SetTarget(ObjectGuid::Empty);
         bot->SetSelection(ObjectGuid());
 
-        float separationNeeded = 0.0f;
-        if (Unit* separationRisk = FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded))
-            return MoveAway(separationRisk, separationNeeded);
-
-        return false;
+        return MoveAway(separationRisk, separationNeeded);
     }
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    // Only ranged and healers reposition for trash AoE; melee stay on target.
+    if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* danger = nullptr;
-    float dangerRange = 0.0f;
+    float highestThreatGap = 0.0f;
 
     for (ObjectGuid const guid : encounterUnits)
     {
@@ -1037,35 +1104,87 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
         if (!unit)
             continue;
 
+        // Defender Thunderclap: 24y danger radius
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!spell)
-            continue;
-
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40EradicatorShockBlast }))
+        if (spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }))
         {
-            danger = unit;
-            dangerRange = 12.0f;
-            break;
+            float const gap = 24.0f - bot->GetDistance2d(unit);
+            if (gap > highestThreatGap)
+            {
+                highestThreatGap = gap;
+                danger = unit;
+            }
         }
 
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }))
+        // Mindslayer Mind Flay: 30y danger radius
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }))
         {
-            danger = unit;
-            dangerRange = 16.0f;
-            break;
+            float const gap = 30.0f - bot->GetDistance2d(unit);
+            if (gap > highestThreatGap)
+            {
+                highestThreatGap = gap;
+                danger = unit;
+            }
         }
     }
 
-    if (!danger)
+    if (!danger || highestThreatGap <= 0.0f)
         return false;
 
-    float currentDistance = bot->GetDistance2d(danger);
-    float desiredDistance = dangerRange + 8.0f;
-    if (currentDistance >= desiredDistance)
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
+
+    // Retreat toward the encounter tank instead of directly away from the mob,
+    // preventing bots from running deeper into uncleared rooms.
+    Aq40TankRetreatResult retreat = ComputeTankRetreatPosition(bot, danger, highestThreatGap + 2.0f);
+    if (retreat.valid)
+        return MoveTo(bot->GetMapId(), retreat.x, retreat.y, retreat.z,
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
+
+    // No safe tank-relative position — hold current position rather than scattering.
+    return false;
+}
+
+bool Aq40TrashAvoidDangerousAoeAction::isUseful()
+{
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
         return false;
 
-    return MoveAway(danger, desiredDistance - currentDistance);
+    if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
+    {
+        float separationNeeded = 0.0f;
+        return FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded) != nullptr &&
+               separationNeeded > 0.0f;
+    }
+
+    // Only ranged and healers reposition for trash AoE.
+    if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }) &&
+            bot->GetDistance2d(unit) < 24.0f)
+            return true;
+
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }) &&
+            bot->GetDistance2d(unit) < 30.0f)
+            return true;
+    }
+
+    return false;
 }
 
 bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)

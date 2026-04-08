@@ -382,6 +382,10 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
         return true;
 
+    // Only ranged and healers reposition for trash AoE; melee stay on target.
+    if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
+        return false;
+
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     for (ObjectGuid const guid : encounterUnits)
     {
@@ -389,17 +393,18 @@ bool Aq40TrashDangerousAoeTrigger::IsActive()
         if (!unit)
             continue;
 
+        // Defender Thunderclap: reposition ranged/healers within 24y
         Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!spell)
-            continue;
-
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40EradicatorShockBlast }) &&
-            bot->GetDistance2d(unit) <= 20.0f)
+        if (spell &&
+            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }) &&
+            bot->GetDistance2d(unit) <= 24.0f)
             return true;
 
-        if (Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::Aq40WarderFireNova, Aq40SpellIds::Aq40DefenderThunderclap }) &&
-            bot->GetDistance2d(unit) <= 24.0f)
+        // Mindslayer Mind Flay: reposition ranged/healers within 30y
+        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel &&
+            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }) &&
+            bot->GetDistance2d(unit) <= 30.0f)
             return true;
     }
 
