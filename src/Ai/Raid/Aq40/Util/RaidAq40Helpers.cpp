@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "GameObject.h"
+#include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
@@ -19,6 +20,11 @@ namespace
 using TwinRoleAssignmentMap = std::unordered_map<uint64, uint32>;
 using TwinCohortAssignments = std::unordered_map<int, TwinRoleAssignmentMap>;
 using TwinInstanceAssignments = std::unordered_map<uint32, TwinCohortAssignments>;
+struct TwinKnownBossGuids
+{
+    ObjectGuid veklorGuid = ObjectGuid::Empty;
+    ObjectGuid veknilashGuid = ObjectGuid::Empty;
+};
 
 // Ground Twin Emps room geometry in repo travel-node data:
 // - The Master's Eye = mid-room anchor
@@ -41,14 +47,77 @@ struct TwinTeleportState
 
 TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
+std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
+bool IsTwinRaidCombatActiveInternal(Player* bot);
+
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
 {
     return Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { name });
+}
+
+Unit* ResolveTwinUnitFromGuid(Player* bot, ObjectGuid const& guid)
+{
+    if (!bot || !guid)
+        return nullptr;
+
+    Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
+    if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+        return nullptr;
+
+    return unit;
+}
+
+void UpdateTwinBossCache(Player* bot, PlayerbotAI* botAI, GuidVector const& units)
+{
+    if (!bot || !botAI || !bot->GetMap())
+        return;
+
+    TwinKnownBossGuids& knownBosses = sTwinKnownTwinBosses[bot->GetMap()->GetInstanceId()];
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "emperor vek'lor" }))
+            knownBosses.veklorGuid = guid;
+        else if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "emperor vek'nilash" }))
+            knownBosses.veknilashGuid = guid;
+    }
+}
+
+void AppendKnownTwinBosses(Player* bot, GuidVector& units)
+{
+    if (!bot || !bot->GetMap())
+        return;
+
+    auto const itr = sTwinKnownTwinBosses.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinKnownTwinBosses.end())
+        return;
+
+    for (ObjectGuid const guid : { itr->second.veklorGuid, itr->second.veknilashGuid })
+    {
+        if (!guid || std::find(units.begin(), units.end(), guid) != units.end())
+            continue;
+
+        if (ResolveTwinUnitFromGuid(bot, guid))
+            units.push_back(guid);
+    }
+}
+
+void SeedTwinCombatTimer(Player* bot)
+{
+    if (!bot || !bot->GetMap() || !IsTwinRaidCombatActiveInternal(bot))
+        return;
+
+    TwinTeleportState& state = sTwinTeleportStates[bot->GetMap()->GetInstanceId()];
+    if (!state.encounterStartMs)
+        state.encounterStartMs = getMSTime();
 }
 
 bool IsInTwinRoomBounds(Player* bot)
@@ -314,6 +383,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
             sTwinAssignments.erase(instanceId);
             sCachedTwinSplitByX.erase(instanceId);
             sTwinSideZeroIsLowSide.erase(instanceId);
+            sTwinKnownTwinBosses.erase(instanceId);
         }
     }
 
@@ -400,8 +470,29 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
 TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
     TwinAssignments result;
+    if (bot && botAI)
+        UpdateTwinBossCache(bot, botAI, attackers);
+
     result.veklor = FindTwinUnit(botAI, attackers, "emperor vek'lor");
     result.veknilash = FindTwinUnit(botAI, attackers, "emperor vek'nilash");
+    if ((!result.veklor || !result.veknilash) && bot && botAI)
+    {
+        GuidVector const visibleTwins = CollectTwinVisibleUnits(bot, botAI);
+        UpdateTwinBossCache(bot, botAI, visibleTwins);
+    }
+
+    if ((!result.veklor || !result.veknilash) && bot && bot->GetMap())
+    {
+        auto const knownBosses = sTwinKnownTwinBosses.find(bot->GetMap()->GetInstanceId());
+        if (knownBosses != sTwinKnownTwinBosses.end())
+        {
+            if (!result.veklor)
+                result.veklor = ResolveTwinUnitFromGuid(bot, knownBosses->second.veklorGuid);
+            if (!result.veknilash)
+                result.veknilash = ResolveTwinUnitFromGuid(bot, knownBosses->second.veknilashGuid);
+        }
+    }
+
     if (!result.veklor || !result.veknilash)
         return result;
 
@@ -498,7 +589,9 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
 
 GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI)
 {
-    return CollectTwinVisibleUnits(bot, botAI);
+    GuidVector units = CollectTwinVisibleUnits(bot, botAI);
+    UpdateTwinBossCache(bot, botAI, units);
+    return units;
 }
 
 GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -508,11 +601,16 @@ GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector con
         return units;
 
     GuidVector visibleTwins;
-    if (!HasTwinPrePullVisibility(bot, botAI, &visibleTwins))
+    HasTwinPrePullVisibility(bot, botAI, &visibleTwins);
+    UpdateTwinBossCache(bot, botAI, units);
+    UpdateTwinBossCache(bot, botAI, visibleTwins);
+
+    bool const twinRoomVisibility = IsInTwinRoomBounds(bot) && !visibleTwins.empty();
+    if (!bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot) &&
+        !IsTwinRaidCombatActiveInternal(bot) && !twinRoomVisibility)
         return units;
 
-    if (!bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot) && !IsTwinRaidCombatActiveInternal(bot))
-        return units;
+    AppendKnownTwinBosses(bot, units);
 
     for (ObjectGuid const guid : visibleTwins)
     {
@@ -617,17 +715,20 @@ bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector co
 
 bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    if (!bot || !botAI || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+    (void)attackers;
+
+    if (!bot || !botAI || !bot->GetMap())
         return false;
 
-    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
+    SeedTwinCombatTimer(bot);
+
+    auto itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
     if (itr == sTwinTeleportStates.end())
         return false;
 
     uint32 const now = getMSTime();
     if (!itr->second.lastTeleportMs && itr->second.encounterStartMs &&
-        (now - itr->second.encounterStartMs) <= 5000)
+        (now - itr->second.encounterStartMs) <= 6000)
         return true;
 
     if (itr->second.lastTeleportMs &&
@@ -635,6 +736,12 @@ bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& atta
         return true;
 
     return false;
+}
+
+bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    return assignments.veklor && assignments.veknilash;
 }
 
 bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -875,11 +982,97 @@ bool ResetEncounterState(Player* bot)
 
     erased = sTwinAssignments.erase(instanceId) > 0 || erased;
     erased = sTwinTeleportStates.erase(instanceId) > 0 || erased;
+    erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
     erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
     erased = sTwinSideZeroIsLowSide.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
 
     return erased;
+}
+
+bool HasPersistentEncounterState(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    return sTwinAssignments.find(instanceId) != sTwinAssignments.end() ||
+           sTwinTeleportStates.find(instanceId) != sTwinTeleportStates.end() ||
+           sTwinKnownTwinBosses.find(instanceId) != sTwinKnownTwinBosses.end() ||
+           sCthunPhase2StartByInstance.find(instanceId) != sCthunPhase2StartByInstance.end() ||
+           sCachedTwinSplitByX.find(instanceId) != sCachedTwinSplitByX.end() ||
+           sTwinSideZeroIsLowSide.find(instanceId) != sTwinSideZeroIsLowSide.end() ||
+           sSkeramPostBlinkHoldUntilByInstance.find(instanceId) != sSkeramPostBlinkHoldUntilByInstance.end();
+}
+
+bool HasManagedResistanceStrategy(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:
+            return botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT) ||
+                   botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT);
+        case CLASS_SHAMAN:
+            return botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT);
+        case CLASS_PRIEST:
+        case CLASS_PALADIN:
+            return botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT) ||
+                   botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+        default:
+            return false;
+    }
+}
+
+bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    GuidVector const activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    bool const needNatureResistance =
+        Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    bool const needShadowResistance =
+        Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
+            { "emperor vek'nilash", "emperor vek'lor" });
+
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:
+        case CLASS_SHAMAN:
+            return needNatureResistance || HasManagedResistanceStrategy(bot, botAI);
+        case CLASS_PRIEST:
+        case CLASS_PALADIN:
+            return needShadowResistance || HasManagedResistanceStrategy(bot, botAI);
+        default:
+            return false;
+    }
+}
+
+bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    if (HasManagedResistanceStrategy(bot, botAI))
+        return true;
+
+    if (!HasPersistentEncounterState(bot))
+        return false;
+
+    if (IsTwinPrePullReady(bot, botAI))
+        return false;
+
+    if (IsInTwinRoomBounds(bot) && HasTwinVisibleEmperors(bot, botAI))
+        return false;
+
+    if (IsTwinRaidCombatActiveInternal(bot))
+        return false;
+
+    return true;
 }
 }    // namespace Aq40Helpers

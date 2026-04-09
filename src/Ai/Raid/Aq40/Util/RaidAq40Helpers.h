@@ -44,12 +44,17 @@ bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& atta
 bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI);
 uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers);
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI);
 bool IsSkeramPostBlinkHoldActive(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool HasManagedResistanceStrategy(Player* bot, PlayerbotAI* botAI);
+bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI);
+bool HasPersistentEncounterState(Player* bot);
 bool ResetEncounterState(Player* bot);
 }    // namespace Aq40Helpers
 

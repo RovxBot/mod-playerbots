@@ -6,6 +6,7 @@
 
 #include "AttackAction.h"
 #include "MovementActions.h"
+#include "../RaidAq40BossHelper.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 
@@ -33,6 +34,7 @@ public:
         : Action(botAI, "aq40 manage resistance strategies")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -129,6 +131,7 @@ class Aq40TrashChooseTargetAction : public AttackAction
 {
 public:
     Aq40TrashChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 trash choose target") {}
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -149,6 +152,7 @@ public:
         : MovementAction(botAI, "aq40 trash avoid dangerous aoe")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -204,6 +208,7 @@ public:
         : AttackAction(botAI, "aq40 twin emperors choose target")
     {
     }
+    bool isUseful() override { return !botAI->IsHeal(bot); }
     bool Execute(Event event) override;
 };
 
@@ -221,6 +226,7 @@ public:
         : MovementAction(botAI, "aq40 twin emperors pre pull stage")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -231,6 +237,7 @@ public:
         : MovementAction(botAI, "aq40 twin emperors pre teleport stage")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -241,6 +248,7 @@ public:
         : AttackAction(botAI, "aq40 twin emperors warlock tank")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
@@ -271,6 +279,11 @@ public:
         : AttackAction(botAI, "aq40 twin emperors enforce separation")
     {
     }
+    bool isUseful() override
+    {
+        return Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
+               (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+    }
     bool Execute(Event event) override;
 };
 
@@ -281,6 +294,7 @@ public:
         : Action(botAI, "aq40 twin emperors pet control")
     {
     }
+    bool isUseful() override { return bot->GetPet() != nullptr; }
     bool Execute(Event event) override;
 };
 
@@ -309,6 +323,7 @@ public:
         : MovementAction(botAI, "aq40 ouro hold melee contact")
     {
     }
+    bool isUseful() override { return Aq40BossHelper::IsEncounterTank(bot, bot); }
     bool Execute(Event event) override;
 };
 

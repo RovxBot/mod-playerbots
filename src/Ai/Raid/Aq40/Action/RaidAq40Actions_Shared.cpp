@@ -1007,17 +1007,17 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
 {
     GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
-    if (encounterUnits.empty())
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    if (activeUnits.empty())
         return false;
 
-    Aq40TrashPackArchetype const archetype = DetectAq40TrashPackArchetype(botAI, encounterUnits);
-    std::vector<Unit*> const controlTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, true, archetype);
-    std::vector<Unit*> const assistTargets = GetSortedAq40TrashUnits(botAI, encounterUnits, false);
+    Aq40TrashPackArchetype const archetype = DetectAq40TrashPackArchetype(botAI, activeUnits);
+    std::vector<Unit*> const controlTargets = GetSortedAq40TrashUnits(botAI, activeUnits, true, archetype);
+    std::vector<Unit*> const assistTargets = GetSortedAq40TrashUnits(botAI, activeUnits, false);
     if (controlTargets.empty() || assistTargets.empty())
         return false;
 
-    std::vector<Unit*> const castingDanger = FindCastingAq40TrashDangerUnits(botAI, encounterUnits);
+    std::vector<Unit*> const castingDanger = FindCastingAq40TrashDangerUnits(botAI, activeUnits);
 
     if (!castingDanger.empty())
     {
@@ -1056,7 +1056,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
         target = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
 
     if (!target)
-        target = Aq40BossActions::FindTrashTarget(botAI, Aq40BossHelper::GetActiveCombatUnits(botAI, attackers));
+        target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
 
     // Only call Attack() when we actually need to switch targets.  Requiring
     // GetVictim() == target caused Attack() to re-fire every tick for melee
@@ -1065,7 +1065,40 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
+    float desiredRange = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 24.0f : 4.0f;
+    float engageSlack = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 4.0f : 2.0f;
+    if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
+        return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+
     return Attack(target);
+}
+
+bool Aq40TrashChooseTargetAction::isUseful()
+{
+    GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    if (activeUnits.empty())
+        return false;
+
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (!currentTarget || !currentTarget->IsAlive())
+        return true;
+
+    if (!Aq40BossHelper::IsUnitNamedAny(botAI, currentTarget,
+            { "anubisath warder", "anubisath defender", "obsidian eradicator", "obsidian nullifier",
+              "vekniss stinger", "qiraji slayer", "qiraji champion", "qiraji mindslayer",
+              "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
+              "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
+              "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" }))
+        return true;
+
+    for (ObjectGuid const guid : activeUnits)
+    {
+        if (guid == currentTarget->GetGUID())
+            return false;
+    }
+
+    return true;
 }
 
 bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)

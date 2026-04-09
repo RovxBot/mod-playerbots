@@ -77,6 +77,20 @@ bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::Tw
            bot->GetVictim() == assignment.veknilash;
 }
 
+bool IsTwinPrimaryTankOnActiveBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bot)
+        return false;
+
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return assignment.sideEmperor && assignment.sideEmperor == assignment.veklor;
+
+    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
+        return assignment.sideEmperor && assignment.sideEmperor == assignment.veknilash;
+
+    return false;
+}
+
 Unit* FindTwinSideBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits,
                             Aq40Helpers::TwinAssignments const& assignment)
 {
@@ -123,12 +137,16 @@ Unit* FindTwinSideBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& e
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
 {
-    return !bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot);
+    if (!bot || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
+        return false;
+
+    return Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI);
 }
 
 bool Aq40ResistanceStrategyTrigger::IsActive()
 {
-    return true;
+    GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
+    return Aq40Helpers::IsResistanceManagementNeeded(bot, botAI, attackers);
 }
 
 bool Aq40SkeramActiveTrigger::IsActive()
@@ -625,6 +643,9 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget)
     {
+        if (isWarlockTank || isMeleeTank)
+            return IsTwinPrimaryTankOnActiveBoss(bot, assignment);
+
         if (!isWarlockTank && !isMeleeTank &&
             inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
             return false;
@@ -633,10 +654,10 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     }
 
     if (isWarlockTank)
-        return assignment.sideEmperor == assignment.veklor ? currentTarget != assignment.veklor : currentTarget != nullptr;
+        return assignment.sideEmperor == assignment.veklor ? currentTarget != assignment.veklor : false;
 
     if (isMeleeTank)
-        return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : currentTarget != nullptr;
+        return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : false;
 
     if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
     {
@@ -671,9 +692,6 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 bool Aq40TwinEmperorsPreTeleportTrigger::IsActive()
 {
     if (!Aq40TwinEmperorsActiveTrigger(botAI).IsActive())
-        return false;
-
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
@@ -804,21 +822,8 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* veklor = nullptr;
-    Unit* veknilash = nullptr;
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'lor"))
-            veklor = unit;
-        else if (botAI->EqualLowercaseName(unit->GetName(), "emperor vek'nilash"))
-            veknilash = unit;
-    }
-
-    if (!veklor || !veknilash)
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor || !assignment.veknilash)
         return false;
 
     // Use role-based boss matching so separation enforcement works immediately
@@ -828,11 +833,11 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
     if (!isWarlockTank && !isMeleeTank)
         return false;
 
-    Unit* roleBoss = isWarlockTank ? veklor : veknilash;
+    Unit* roleBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
     if (!roleBoss || !bot->IsWithinLOSInMap(roleBoss) || bot->GetDistance2d(roleBoss) > 45.0f)
         return false;
 
-    return veklor->GetDistance2d(veknilash) < 60.0f;
+    return assignment.veklor->GetDistance2d(assignment.veknilash) < 60.0f;
 }
 
 bool Aq40OuroActiveTrigger::IsActive()
@@ -841,7 +846,7 @@ bool Aq40OuroActiveTrigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro", "qiraji scarab", "scarab" });
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "ouro" });
 }
 
 bool Aq40OuroScarabsTrigger::IsActive()

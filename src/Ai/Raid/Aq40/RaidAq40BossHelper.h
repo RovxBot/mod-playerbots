@@ -326,7 +326,12 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
 
     uint32 const instanceId = player->GetMap() ? player->GetMap()->GetInstanceId() : 0;
     static std::unordered_map<uint32, std::array<uint64, 2>> sTwinWarlockAssignmentsByInstance;
-    if (!IsEncounterCombatActive(player))
+    // Only clear cached assignments when the player has left the Twin Emperors
+    // encounter area.  During pre-pull staging combat is not yet active but
+    // assignments must remain stable to prevent warlock tank oscillation.
+    bool const inTwinArea = player->GetMapId() == MAP_ID &&
+        player->GetDistance(-8953.3f, 1233.64f, -99.718f) < 100.0f;
+    if (!IsEncounterCombatActive(player) && !inTwinArea)
         sTwinWarlockAssignmentsByInstance.erase(instanceId);
 
     std::vector<Player*> warlocks;

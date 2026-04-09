@@ -329,18 +329,19 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         if (actionName == "aq40 twin emperors pre pull stage")
             return 4.0f;
 
-        if (dynamic_cast<CombatFormationMoveAction*>(action) ||
-            dynamic_cast<FollowAction*>(action) ||
-            dynamic_cast<FleeAction*>(action))
+        // Suppress FollowAction during pre-pull staging to prevent bots from
+        // oscillating between their staged position and their follow target.
+        if (dynamic_cast<FollowAction*>(action))
             return 0.0f;
     }
 
     GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     // Only activate Twin Emperors suppression when the bosses are actually
-    // present in the encounter units.  The previous twinCombatActive fallback
-    // (any group member fighting in the twin room) also triggered during trash
-    // packs, suppressing reach-melee, dps-assist, charge, etc. for ALL bots
-    // and leaving melee standing at range unable to engage.
+    // present in the encounter units.  The previous twinCombatActive /
+    // localTwinCombat fallback (any group member fighting in the twin room,
+    // or bot itself in combat) also triggered during trash packs, suppressing
+    // reach-melee, dps-assist, charge, etc. for ALL bots and leaving melee
+    // standing at range unable to engage.
     if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
         return 1.0f;
 
@@ -408,8 +409,10 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     // the dedicated pet control action which sets the correct react state.
     if (dynamic_cast<PetAttackAction*>(action))
         return 0.0f;
+    if (dynamic_cast<FollowAction*>(action))
+        return 1.0f;
+
     if (dynamic_cast<CombatFormationMoveAction*>(action) ||
-        dynamic_cast<FollowAction*>(action) ||
         dynamic_cast<FleeAction*>(action))
         return 0.0f;
 
