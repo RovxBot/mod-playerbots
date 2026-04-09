@@ -745,16 +745,23 @@ bool Aq40TwinEmperorsBlizzardRiskTrigger::IsActive()
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
-        return false;
 
+    // Always trigger when the bot physically has the Blizzard debuff, even if
+    // sideEmperor is stale after a teleport.  Only check the side mapping for
+    // proximity-based (predictive) detection.
     if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }))
         return true;
 
+    if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
+        return false;
+
     Spell* spell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    // 28y matches the actual Blizzard effect radius.  The previous 36y radius
+    // suppressed movement for nearly the entire Vek'lor side during every cast,
+    // preventing healers from reaching tanks and ranged from dodging Arcane Burst.
     return spell &&
            Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinBlizzard }) &&
-           bot->GetDistance2d(assignment.veklor) <= 36.0f;
+           bot->GetDistance2d(assignment.veklor) <= 28.0f;
 }
 
 bool Aq40TwinEmperorsHealBrotherTrigger::IsActive()
@@ -770,6 +777,14 @@ bool Aq40TwinEmperorsHealBrotherTrigger::IsActive()
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor || !assignment.veknilash)
+        return false;
+
+    // Use role-based boss matching instead of IsTwinPrimaryTankOnActiveBoss.
+    // The sideEmperor mapping can lag behind after a teleport swap, which
+    // previously caused neither tank to qualify for separation enforcement
+    // during the most critical post-swap window.
+    Unit* roleBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
+    if (!roleBoss || !bot->IsWithinLOSInMap(roleBoss) || bot->GetDistance2d(roleBoss) > 45.0f)
         return false;
 
     Spell* veklorSpell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
@@ -804,6 +819,17 @@ bool Aq40TwinEmperorsNeedSeparationTrigger::IsActive()
     }
 
     if (!veklor || !veknilash)
+        return false;
+
+    // Use role-based boss matching so separation enforcement works immediately
+    // after a teleport swap, before the sideEmperor mapping has updated.
+    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
+    bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    if (!isWarlockTank && !isMeleeTank)
+        return false;
+
+    Unit* roleBoss = isWarlockTank ? veklor : veknilash;
+    if (!roleBoss || !bot->IsWithinLOSInMap(roleBoss) || bot->GetDistance2d(roleBoss) > 45.0f)
         return false;
 
     return veklor->GetDistance2d(veknilash) < 60.0f;

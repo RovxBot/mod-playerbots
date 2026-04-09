@@ -274,10 +274,12 @@ bool ShouldReserveForTwinBug(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinA
         if ((isRanged && !memberIsRanged) || (isMeleeDps && !memberIsMeleeDps))
             continue;
 
-        GuidVector attackers = memberAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
-        GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(member, memberAI, attackers);
-        Aq40Helpers::TwinAssignments memberAssignment = Aq40Helpers::GetTwinAssignments(member, memberAI, encounterUnits);
-        if (memberAssignment.sideEmperor != assignment.sideEmperor)
+        // Use physical proximity to determine if the member is on the same
+        // side rather than comparing sideEmperor pointers.  During teleport
+        // windows each bot resolves assignments independently, so the
+        // pointers can disagree and falsely filter out members who are
+        // actually killing the bug.
+        if (!Aq40Helpers::IsLikelyOnSameTwinSide(member, assignment.sideEmperor, assignment.oppositeEmperor))
             continue;
 
         if (member->GetVictim() == sideBug || memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() == sideBug)
@@ -510,6 +512,23 @@ bool GetTwinStagePositioning(Player* bot, PlayerbotAI* botAI, GuidVector const& 
 
     if (isMeleeDps)
     {
+        // During pre-teleport staging, position melee DPS near Vek'nilash on
+        // the far side (away from Vek'lor) so they can continue attacking
+        // instead of running to room centre and dealing zero damage.
+        // Room centre is only used for pre-pull staging (no combat yet).
+        if (requireTeleportWindow && assignment.veknilash)
+        {
+            Position meleeAnchor;
+            if (GetTwinFarSidePosition(bot, assignment.veknilash, assignment.veklor, 8.0f, 0.0f, meleeAnchor))
+            {
+                if (bot->GetExactDist2d(meleeAnchor.GetPositionX(), meleeAnchor.GetPositionY()) <= 3.0f)
+                    return false;
+
+                outPosition = meleeAnchor;
+                return true;
+            }
+        }
+
         if (bot->GetDistance(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ) <= 12.0f)
             return false;
 
@@ -650,6 +669,17 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     Position fallbackAnchor;
     if (waitingOnTeleportPickup && (isWarlockTank || isMeleeTank))
     {
+        // Check if the boss we actually want has already teleported in and is
+        // within engage range.  If so, skip the hold entirely so higher-priority
+        // actions (WarlockTank / ChooseTarget) can immediately pick it up.
+        // This closes the 1-2 tick idle gap where the tank sits at AttackStop
+        // while the side mapping catches up after a teleport.
+        Unit* wantedBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
+        if (wantedBoss && wantedBoss->IsAlive() &&
+            bot->IsWithinLOSInMap(wantedBoss) &&
+            bot->GetDistance2d(wantedBoss) <= (isWarlockTank ? 40.0f : 12.0f))
+            return false;
+
         // Stop attacking the old boss so the class AI doesn't chase it
         // across the room while we reposition for the teleport pickup.
         bot->AttackStop();
@@ -664,8 +694,9 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
                           fallbackAnchor.GetPositionZ(), false, false, false, true,
                           MovementPriority::MOVEMENT_COMBAT, true, false);
 
-        // Already at fallback anchor — hold position and wait for boss teleport.
-        return true;
+        // Already at fallback anchor — return false so utility actions
+        // (Shadow Ward, healthstone, etc.) can fire while we wait.
+        return false;
     }
 
     if (!waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
@@ -887,6 +918,27 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     return (AI_VALUE(Unit*, "current target") == veklor && bot->GetVictim() == veklor) ? false : Attack(veklor);
 }
 
+bool Aq40TwinEmperorsWarlockTankAction::isUseful()
+{
+    if (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor)
+        return false;
+
+    if (IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+        return true;
+
+    // Safety net: mirror Execute()'s fallback — allow the action when the
+    // side mapping disagrees but Vek'lor is alive and within cast range.
+    // Without this the warlock tank goes idle during teleport recovery.
+    return assignment.veklor->IsAlive() &&
+           bot->IsWithinLOSInMap(assignment.veklor) &&
+           bot->GetDistance2d(assignment.veklor) <= 40.0f;
+}
+
 bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
 {
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
@@ -918,10 +970,15 @@ bool Aq40TwinEmperorsAvoidBlizzardAction::Execute(Event /*event*/)
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, context->GetValue<GuidVector>("attackers")->Get());
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor || assignment.sideEmperor != assignment.veklor)
+
+    // Always process when the bot has the Blizzard debuff, even if sideEmperor
+    // is stale after a teleport.  Only require the side mapping for predictive
+    // avoidance (no aura yet).
+    bool const hasBlizzardAura = Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard });
+    if (!hasBlizzardAura && (!assignment.veklor || assignment.sideEmperor != assignment.veklor))
         return false;
 
-    if (!Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }))
+    if (!hasBlizzardAura)
     {
         Spell* spell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         if (!(spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinBlizzard })))
@@ -1010,11 +1067,10 @@ bool Aq40TwinEmperorsEnforceSeparationAction::Execute(Event /*event*/)
     if (!isWarlockTank && !isMeleeTank)
         return false;
 
+    // Determine desired boss by role directly rather than relying on
+    // IsTwinPrimaryTankOnActiveBoss, which depends on the sideEmperor
+    // mapping and can fail right after a teleport swap.
     Unit* desiredBoss = isWarlockTank ? assignment.veklor : assignment.veknilash;
-    // Only enforce separation when actively tanking (correct boss on our side).
-    if (assignment.sideEmperor != desiredBoss)
-        return false;
-
     Unit* otherBoss = isWarlockTank ? assignment.veknilash : assignment.veklor;
     if (!desiredBoss || !otherBoss)
         return false;
