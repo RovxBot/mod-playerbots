@@ -351,10 +351,22 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     bool const isTwinTank =
         Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
         (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+    Aq40Helpers::TwinEncounterState const twinState = Aq40Helpers::GetTwinEncounterState(bot, botAI, activeUnits);
     bool const twinDpsWaitWindow =
         !isTwinTank && Aq40Helpers::IsTwinDpsWaitWindow(bot, botAI, activeUnits);
-    if (twinDpsWaitWindow && actionName == "aq40 twin emperors choose target")
-        return 0.0f;
+    bool const twinPickupRecovery =
+        twinState == Aq40Helpers::TwinEncounterState::OpenerHold ||
+        twinState == Aq40Helpers::TwinEncounterState::TeleportRecovery;
+
+    if (twinPickupRecovery)
+    {
+        if (actionName == "aq40 twin emperors warlock tank")
+            return 2.8f;
+        if (actionName == "aq40 twin emperors hold split")
+            return 2.4f;
+        if (actionName == "aq40 twin emperors choose target")
+            return 2.1f;
+    }
 
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||

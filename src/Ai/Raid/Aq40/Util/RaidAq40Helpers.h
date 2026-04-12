@@ -19,6 +19,15 @@ enum class TwinRoleCohort : uint8
     Other = 3,
 };
 
+enum class TwinEncounterState : uint8
+{
+    PrePullStage = 0,
+    OpenerHold = 1,
+    SteadySplit = 2,
+    PreTeleportStage = 3,
+    TeleportRecovery = 4,
+};
+
 struct TwinAssignments
 {
     Unit* sideEmperor = nullptr;
@@ -40,10 +49,15 @@ bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor
 bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit);
 bool IsTwinExplodeBug(PlayerbotAI* botAI, Unit* unit);
 bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* bug);
+TwinEncounterState GetTwinEncounterState(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool IsTwinReadyForPreTeleportStage(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI);

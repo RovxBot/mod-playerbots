@@ -346,6 +346,96 @@ bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
     return false;
 }
 
+bool HasTwinBossAggro(Player* member, Unit* boss)
+{
+    if (!member || !boss)
+        return false;
+
+    ObjectGuid const memberGuid = member->GetGUID();
+    ObjectGuid petGuid = ObjectGuid::Empty;
+    if (Pet* pet = member->GetPet())
+        petGuid = pet->GetGUID();
+
+    return boss->GetVictim() == member ||
+           boss->GetTarget() == memberGuid ||
+           (petGuid && boss->GetTarget() == petGuid) ||
+           member->GetVictim() == boss;
+}
+
+uint32 GetTwinBossSideIndex(TwinAssignments const& assignment, Unit* boss)
+{
+    if (!boss)
+        return 0u;
+
+    if (assignment.sideEmperor == boss)
+        return assignment.sideIndex;
+
+    if (assignment.oppositeEmperor == boss)
+        return assignment.sideIndex == 0u ? 1u : 0u;
+
+    return boss == assignment.veklor ? 1u : 0u;
+}
+
+bool IsTwinOuterAnchorPosition(Player* member, Unit* boss, Unit* oppositeBoss)
+{
+    if (!member || !boss)
+        return false;
+
+    if (oppositeBoss && !IsLikelyOnSameTwinSide(member, boss, oppositeBoss))
+        return false;
+
+    if (!oppositeBoss)
+        return true;
+
+    float const offsetX = member->GetPositionX() - boss->GetPositionX();
+    float const offsetY = member->GetPositionY() - boss->GetPositionY();
+    float const awayX = boss->GetPositionX() - oppositeBoss->GetPositionX();
+    float const awayY = boss->GetPositionY() - oppositeBoss->GetPositionY();
+    return (offsetX * awayX + offsetY * awayY) >= 0.0f;
+}
+
+bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assignment, Unit* boss)
+{
+    if (!member || !member->IsAlive() || !boss || !boss->IsAlive())
+        return false;
+
+    Unit* oppositeBoss = boss == assignment.veklor ? assignment.veknilash : assignment.veklor;
+    if (!member->IsWithinLOSInMap(boss) || !HasTwinBossAggro(member, boss))
+        return false;
+
+    float const distance = member->GetDistance2d(boss);
+    float const minRange = boss == assignment.veklor ? 18.0f : 1.5f;
+    // Vek'nilash max range raised from 10y to 15y so that Uppercut knockback
+    // does not immediately flip the pickup flag false and freeze all DPS.
+    float const maxRange = boss == assignment.veklor ? 36.0f : 15.0f;
+    if (distance < minRange || distance > maxRange)
+        return false;
+
+    // During teleport recovery the tank may approach from any direction
+    // (running across the room).  Requiring the outer-anchor dot-product
+    // check would fail if the tank arrives on the "inner" side (between the
+    // two bosses).  Once the tank has LOS + aggro + correct range the
+    // pickup is established; outer positioning is a steady-state maintenance
+    // concern that enforce-separation will handle.
+    if (distance <= (boss == assignment.veklor ? 30.0f : 8.0f))
+        return true;
+
+    return IsTwinOuterAnchorPosition(member, boss, oppositeBoss);
+}
+
+bool IsTwinHealBrotherCastActive(TwinAssignments const& assignment)
+{
+    if (!assignment.veklor || !assignment.veknilash)
+        return false;
+
+    Spell* veklorSpell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    Spell* veknilashSpell = assignment.veknilash->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return (veklorSpell &&
+            Aq40SpellIds::MatchesAnySpellId(veklorSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother })) ||
+           (veknilashSpell &&
+            Aq40SpellIds::MatchesAnySpellId(veknilashSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }));
+}
+
 }  // namespace
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
@@ -700,42 +790,58 @@ bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments cons
     return bug->GetDistance2d(assignment.sideEmperor) <= 10.0f;
 }
 
-bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+TwinEncounterState GetTwinEncounterState(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
+    if (!bot || !botAI)
+        return TwinEncounterState::SteadySplit;
+
+    if (IsTwinPrePullReady(bot, botAI))
+        return TwinEncounterState::PrePullStage;
+
     TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
-        return false;
+    if (!bot->GetMap() || !assignments.veklor || !assignments.veknilash)
+        return TwinEncounterState::SteadySplit;
+
+    SeedTwinCombatTimer(bot);
 
     auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
-    if (itr == sTwinTeleportStates.end() || !itr->second.lastTeleportMs)
-        return false;
+    if (itr == sTwinTeleportStates.end())
+        return TwinEncounterState::SteadySplit;
 
-    return (getMSTime() - itr->second.lastTeleportMs) <= 3500;
+    bool const warlockPickupEstablished = IsTwinWarlockPickupEstablished(bot, botAI, assignments);
+    bool const meleePickupEstablished = IsTwinMeleePickupEstablished(bot, botAI, assignments);
+    bool const healthySeparation = assignments.veklor->GetDistance2d(assignments.veknilash) >= 60.0f;
+    bool const stableEncounter =
+        warlockPickupEstablished && meleePickupEstablished && healthySeparation &&
+        !IsTwinHealBrotherCastActive(assignments);
+    uint32 const now = getMSTime();
+
+    if (itr->second.lastTeleportMs &&
+        (now - itr->second.lastTeleportMs) <= 10000 &&
+        !stableEncounter)
+        return TwinEncounterState::TeleportRecovery;
+
+    if (!itr->second.lastTeleportMs &&
+        itr->second.encounterStartMs &&
+        (now - itr->second.encounterStartMs) <= 10000 &&
+        !stableEncounter)
+        return TwinEncounterState::OpenerHold;
+
+    if (IsTwinPreTeleportWindow(bot, botAI, attackers) && stableEncounter)
+        return TwinEncounterState::PreTeleportStage;
+
+    return TwinEncounterState::SteadySplit;
+}
+
+bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    return GetTwinEncounterState(bot, botAI, attackers) == TwinEncounterState::TeleportRecovery;
 }
 
 bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    (void)attackers;
-
-    if (!bot || !botAI || !bot->GetMap())
-        return false;
-
-    SeedTwinCombatTimer(bot);
-
-    auto itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
-    if (itr == sTwinTeleportStates.end())
-        return false;
-
-    uint32 const now = getMSTime();
-    if (!itr->second.lastTeleportMs && itr->second.encounterStartMs &&
-        (now - itr->second.encounterStartMs) <= 6000)
-        return true;
-
-    if (itr->second.lastTeleportMs &&
-        (now - itr->second.lastTeleportMs) <= 4000)
-        return true;
-
-    return false;
+    TwinEncounterState const state = GetTwinEncounterState(bot, botAI, attackers);
+    return state == TwinEncounterState::OpenerHold || state == TwinEncounterState::TeleportRecovery;
 }
 
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -762,46 +868,97 @@ bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& 
     return elapsed >= 25000 && elapsed <= 38000;
 }
 
-bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+bool IsTwinReadyForPreTeleportStage(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    if (!bot || !assignment.sideEmperor)
+    if (!bot || !botAI)
+        return false;
+
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    if (!assignments.veklor || !assignments.veknilash)
+        return false;
+
+    if (!IsTwinPreTeleportWindow(bot, botAI, attackers))
+        return false;
+
+    TwinEncounterState const state = GetTwinEncounterState(bot, botAI, attackers);
+    if (state == TwinEncounterState::TeleportRecovery ||
+        state == TwinEncounterState::OpenerHold)
+        return false;
+
+    return IsTwinWarlockPickupEstablished(bot, botAI, assignments) &&
+           IsTwinMeleePickupEstablished(bot, botAI, assignments) &&
+           assignments.veklor->GetDistance2d(assignments.veknilash) >= 60.0f &&
+           !IsTwinHealBrotherCastActive(assignments);
+}
+
+bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    if (!bot || !botAI || !assignment.veklor)
         return false;
 
     Group const* group = bot->GetGroup();
     if (!group)
         return false;
 
-    bool const needWarlockTank = assignment.veklor && assignment.sideEmperor == assignment.veklor;
-    TwinRoleCohort const requiredCohort = needWarlockTank ? TwinRoleCohort::WarlockTank : TwinRoleCohort::MeleeTank;
-    float const readyRange = needWarlockTank ? 34.0f : 8.0f;
-
+    // Check ALL designated warlock tanks against Vek'lor directly rather than
+    // filtering by side index.  After a teleport the cached side mapping can
+    // invert (Vek'lor now sits on the formerly-Vek'nilash side), which makes
+    // GetTwinBossSideIndex return the wrong value and causes this function to
+    // skip the warlock that actually has aggro.  Boss identity is stable;
+    // room-side mapping is transient.
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !IsTwinRoleMatch(requiredCohort, member))
+        if (!member || !member->IsAlive() || !Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
             continue;
 
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-
-        if (GetStableTwinRoleIndex(member, memberAI) != assignment.sideIndex)
-            continue;
-
-        bool const bossTargetingAssignedTank =
-            assignment.sideEmperor->GetVictim() == member ||
-            assignment.sideEmperor->GetTarget() == member->GetGUID();
-        if (bossTargetingAssignedTank)
-            return true;
-
-        Unit* memberCurrentTarget = memberAI ? memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() : nullptr;
-        bool const targetingAssignedBoss =
-            member->GetVictim() == assignment.sideEmperor ||
-            memberCurrentTarget == assignment.sideEmperor ||
-            member->GetTarget() == assignment.sideEmperor->GetGUID();
-        if (targetingAssignedBoss &&
-            member->IsWithinLOSInMap(assignment.sideEmperor) &&
-            member->GetDistance2d(assignment.sideEmperor) <= (readyRange + 4.0f))
+        if (IsTwinPickupMemberEstablished(member, assignment, assignment.veklor))
             return true;
     }
+
+    return false;
+}
+
+bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    if (!bot || !botAI || !assignment.veknilash)
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // Check ALL melee tanks against Vek'nilash directly, same rationale as
+    // IsTwinWarlockPickupEstablished — boss identity is stable across
+    // teleports; room-side mapping is not.
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || PlayerbotAI::IsRanged(member))
+            continue;
+
+        if (IsTwinPickupMemberEstablished(member, assignment, assignment.veknilash))
+            return true;
+    }
+
+    return false;
+}
+
+bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    return IsTwinAssignedTankReady(bot, botAI, assignment, assignment.sideEmperor);
+}
+
+bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss)
+{
+    if (!bot || !botAI || !boss)
+        return false;
+
+    if (boss == assignment.veklor)
+        return IsTwinWarlockPickupEstablished(bot, botAI, assignment);
+
+    if (boss == assignment.veknilash)
+        return IsTwinMeleePickupEstablished(bot, botAI, assignment);
 
     return false;
 }

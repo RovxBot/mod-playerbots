@@ -695,7 +695,7 @@ bool Aq40TwinEmperorsPreTeleportTrigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
-    return Aq40Helpers::IsTwinPreTeleportWindow(bot, botAI, encounterUnits);
+    return Aq40Helpers::IsTwinReadyForPreTeleportStage(bot, botAI, encounterUnits);
 }
 
 bool Aq40TwinEmperorsArcaneBurstRiskTrigger::IsActive()
