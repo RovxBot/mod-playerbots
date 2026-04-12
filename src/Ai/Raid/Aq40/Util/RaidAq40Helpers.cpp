@@ -1022,6 +1022,8 @@ bool HasManagedResistanceStrategy(Player* bot, PlayerbotAI* botAI)
         case CLASS_PALADIN:
             return botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT) ||
                    botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+        case CLASS_WARLOCK:
+            return bot->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff);
         default:
             return false;
     }
@@ -1058,10 +1060,13 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (!bot || !botAI)
         return false;
 
-    if (HasManagedResistanceStrategy(bot, botAI))
+    bool const hasManagedResistanceStrategy = HasManagedResistanceStrategy(bot, botAI);
+    bool const hasPersistentEncounterState = HasPersistentEncounterState(bot);
+
+    if (hasManagedResistanceStrategy)
         return true;
 
-    if (!HasPersistentEncounterState(bot))
+    if (!hasPersistentEncounterState)
         return false;
 
     if (IsTwinPrePullReady(bot, botAI))

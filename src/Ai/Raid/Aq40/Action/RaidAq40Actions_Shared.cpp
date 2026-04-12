@@ -31,6 +31,78 @@ struct Aq40ManagedResistanceState
 };
 
 std::unordered_map<uint64, Aq40ManagedResistanceState> sManagedResistanceStateByBot;
+std::unordered_map<uint64, bool> sAq40CleanupReportedDirtyByBot;
+
+bool ClearManagedAq40ResistanceStrategies(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    bool cleaned = false;
+
+    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
+    }
+
+    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT))
+    {
+        botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_NON_COMBAT);
+        cleaned = true;
+    }
+
+    if (botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-nature resistance", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
+    }
+
+    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
+    }
+
+    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
+    {
+        botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
+        cleaned = true;
+    }
+
+    if (bot->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff))
+    {
+        bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
+        cleaned = true;
+    }
+
+    cleaned = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || cleaned;
+    return cleaned;
+}
+
+void LogAq40CleanupTransition(Player* bot, bool wasDirty)
+{
+    if (!bot)
+        return;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto itr = sAq40CleanupReportedDirtyByBot.find(botGuid);
+    bool const previousDirty = itr != sAq40CleanupReportedDirtyByBot.end() && itr->second;
+
+    if (wasDirty)
+    {
+        if (!previousDirty)
+            LOG_INFO("playerbots", "AQ40 cleanup: bot={} cleaned stale recovery state and can resume follow", bot->GetName());
+
+        sAq40CleanupReportedDirtyByBot[botGuid] = true;
+        return;
+    }
+
+    if (previousDirty)
+        LOG_INFO("playerbots", "AQ40 cleanup: bot={} recovery state already clean", bot->GetName());
+
+    sAq40CleanupReportedDirtyByBot[botGuid] = false;
+}
 
 bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
 {
@@ -679,12 +751,15 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
     if (!bot || !Aq40BossHelper::IsInAq40(bot))
         return false;
 
-    bool erased = false;
-    if (bot->getClass() == CLASS_WARLOCK)
-        bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
-    erased = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || erased;
-    erased = Aq40Helpers::ResetEncounterState(bot) || erased;
-    return erased;
+    if (!Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI))
+        return false;
+
+    bool const hadManagedResistance = ClearManagedAq40ResistanceStrategies(bot, botAI);
+    bool const hadPersistentEncounterState = Aq40Helpers::ResetEncounterState(bot);
+    bool const recoveredDirtyState = hadManagedResistance || hadPersistentEncounterState;
+
+    LogAq40CleanupTransition(bot, recoveredDirtyState);
+    return true;
 }
 
 bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
