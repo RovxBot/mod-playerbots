@@ -669,6 +669,34 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return result;
     }
 
+    // Use identity-based boss assignment for tanks so that sideEmperor is
+    // always the boss they are supposed to engage, regardless of which
+    // physical room-side that boss is currently on.  The previous room-side
+    // mapping inverted after every teleport swap (bosses exchange positions
+    // but sTwinSideZeroIsLowSide never updates), causing tanks to position
+    // near the wrong boss while ChooseTarget sent them toward the correct
+    // one — producing the back-and-forth oscillation.
+    //
+    // Healers keep the stable-index room-side mapping because they need to
+    // spread across both sides independently of boss identity.
+    if (cohort == TwinRoleCohort::WarlockTank)
+    {
+        result.sideEmperor = result.veklor;
+        result.oppositeEmperor = result.veknilash;
+        result.sideIndex = getBossSideIndex(result.veklor);
+        UpdateTwinTeleportState(bot, result);
+        return result;
+    }
+    if (cohort == TwinRoleCohort::MeleeTank)
+    {
+        result.sideEmperor = result.veknilash;
+        result.oppositeEmperor = result.veklor;
+        result.sideIndex = getBossSideIndex(result.veknilash);
+        UpdateTwinTeleportState(bot, result);
+        return result;
+    }
+
+    // Healers: use stable room-side index so they spread across both sides.
     uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
     result.sideIndex = sideIndex;
     result.sideEmperor = sideIndex == 0 ? sideZeroBoss : sideOneBoss;

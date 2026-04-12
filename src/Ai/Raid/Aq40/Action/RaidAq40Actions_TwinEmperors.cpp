@@ -61,6 +61,8 @@ std::vector<Unit*> FindTwinSideBugs(PlayerbotAI* botAI, GuidVector const& attack
 namespace
 {
 std::unordered_map<uint64, uint32> sTwinPrePullStageRetryUntil;
+std::unordered_map<uint64, uint32> sTwinHoldSplitRetryUntil;
+uint32 constexpr kTwinHoldSplitRetryThrottleMs = 1200;
 
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
 {
@@ -941,7 +943,41 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (std::abs(distance - desiredRange) <= 3.0f)
         return false;
 
-    return MoveTo(sideBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+    if (MoveTo(sideBoss, desiredRange, MovementPriority::MOVEMENT_COMBAT))
+    {
+        sTwinHoldSplitRetryUntil.erase(bot->GetGUID().GetRawValue());
+        return true;
+    }
+
+    // Room-center safety net: if every positioning attempt above returned false
+    // (collision failures, unreachable bosses, etc.), move toward the room center
+    // rather than returning false.  Returning false leaves this action as FAILED;
+    // when the multiplier also suppresses all generic movement the bot enters an
+    // unrecoverable "no actions executed" dead state and stands idle for the
+    // entire encounter.  Room center is a temporary waypoint — subsequent ticks
+    // will recalculate and move toward the correct split position.
+    //
+    // Throttle retries so the bot doesn't spam MoveTo every 100ms during
+    // teleport recovery when all positioning calculations fail repeatedly.
+    uint64 const holdGuid = bot->GetGUID().GetRawValue();
+    uint32 const holdNow = getMSTime();
+    auto const holdRetryIt = sTwinHoldSplitRetryUntil.find(holdGuid);
+    if (holdRetryIt != sTwinHoldSplitRetryUntil.end() && holdNow < holdRetryIt->second)
+        return true;  // Waiting on retry throttle — claim success to avoid dead state
+
+    if (bot->GetExactDist2d(kTwinRoomCenterX, kTwinRoomCenterY) > 8.0f)
+    {
+        if (MoveTo(bot->GetMapId(), kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ,
+                   false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false))
+        {
+            sTwinHoldSplitRetryUntil.erase(holdGuid);
+            return true;
+        }
+    }
+
+    // All movement failed — set retry throttle and return true to prevent dead state.
+    sTwinHoldSplitRetryUntil[holdGuid] = holdNow + kTwinHoldSplitRetryThrottleMs;
+    return true;
 }
 
 bool Aq40TwinEmperorsPreTeleportStageAction::Execute(Event /*event*/)
@@ -1400,6 +1436,15 @@ bool Aq40TwinEmperorsMoveAwayFromBrotherAction::Execute(Event /*event*/)
         assignment.oppositeEmperor->GetTarget() == botGuid || (petGuid && assignment.oppositeEmperor->GetTarget() == petGuid);
     if (!sideBossOnBot && !oppositeBossOnBot)
         return false;
+
+    // If the bot is already on the correct far side of its assigned boss
+    // (well separated from the opposite boss), report success without
+    // further movement.  This prevents the EMERGENCY+1 priority trigger
+    // from repeatedly claiming the tick and blocking all other actions
+    // when aggro persists but positioning is already safe.
+    Unit* otherBoss = oppositeBossOnBot ? assignment.oppositeEmperor : assignment.sideEmperor;
+    if (otherBoss && bot->GetDistance2d(otherBoss) >= 55.0f)
+        return true;
 
     if (petGuid)
         botAI->PetFollow();
