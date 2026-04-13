@@ -75,6 +75,7 @@ bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector co
 bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI);
 bool HasPersistentEncounterState(Player* bot);
 bool ResetEncounterState(Player* bot);
+bool IsAnyGroupMemberInTwinRoom(Player* bot);
 }    // namespace Aq40Helpers
 
 #endif

@@ -209,6 +209,32 @@ bool IsTwinRaidCombatActiveInternal(Player* bot)
     return false;
 }
 
+bool IsAnyGroupMemberInTwinRoomInternal(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return IsInTwinRoomBounds(bot);
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+        if (IsInTwinRoomBounds(member))
+            return true;
+    }
+
+    return false;
+}
+
 bool HasTwinDeadGroupMemberAwaitingRecovery(Player* bot)
 {
     if (!bot || !bot->GetMap())
@@ -362,20 +388,6 @@ bool HasTwinBossAggro(Player* member, Unit* boss)
            member->GetVictim() == boss;
 }
 
-uint32 GetTwinBossSideIndex(TwinAssignments const& assignment, Unit* boss)
-{
-    if (!boss)
-        return 0u;
-
-    if (assignment.sideEmperor == boss)
-        return assignment.sideIndex;
-
-    if (assignment.oppositeEmperor == boss)
-        return assignment.sideIndex == 0u ? 1u : 0u;
-
-    return boss == assignment.veklor ? 1u : 0u;
-}
-
 bool IsTwinOuterAnchorPosition(Player* member, Unit* boss, Unit* oppositeBoss)
 {
     if (!member || !boss)
@@ -468,7 +480,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         // so the pre-pull tank split survives until the actual pull.
         sTwinTeleportStates.erase(instanceId);
 
-        if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull)
+        if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull && !IsAnyGroupMemberInTwinRoomInternal(bot))
         {
             sTwinAssignments.erase(instanceId);
             sCachedTwinSplitByX.erase(instanceId);
@@ -1272,6 +1284,13 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (!hasPersistentEncounterState)
         return false;
 
+    // Do not run cleanup while any group member is staged inside the Twin
+    // Emperors room.  Individual bots outside the room must not wipe the
+    // shared instance caches that bots inside the room are actively using
+    // for pre-pull positioning.
+    if (IsAnyGroupMemberInTwinRoomInternal(bot))
+        return false;
+
     if (IsTwinPrePullReady(bot, botAI))
         return false;
 
@@ -1282,5 +1301,10 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
         return false;
 
     return true;
+}
+
+bool IsAnyGroupMemberInTwinRoom(Player* bot)
+{
+    return IsAnyGroupMemberInTwinRoomInternal(bot);
 }
 }    // namespace Aq40Helpers

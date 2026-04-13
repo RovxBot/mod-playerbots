@@ -761,7 +761,11 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
         return false;
 
     bool const hadManagedResistance = ClearManagedAq40ResistanceStrategies(bot, botAI);
-    bool const hadPersistentEncounterState = Aq40Helpers::ResetEncounterState(bot);
+    // Only wipe instance-level encounter caches when no group member is inside
+    // the Twin Emperors room.  Bots outside the room running cleanup must not
+    // destroy assignments that bots inside are actively using for pre-pull staging.
+    bool const hadPersistentEncounterState =
+        !Aq40Helpers::IsAnyGroupMemberInTwinRoom(bot) && Aq40Helpers::ResetEncounterState(bot);
     bool const recoveredDirtyState = hadManagedResistance || hadPersistentEncounterState;
 
     LogAq40CleanupTransition(bot, recoveredDirtyState);

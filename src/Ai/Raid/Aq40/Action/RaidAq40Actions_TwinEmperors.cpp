@@ -851,6 +851,16 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (!waitingOnTeleportPickup && (isWarlockTank || isMeleeTank) &&
         (!bot->IsWithinLOSInMap(sideBoss) || bot->GetDistance2d(sideBoss) > (isWarlockTank ? 34.0f : 12.0f)))
     {
+        // Do not chase the designated boss across the room when it has
+        // teleported to the far side.  Only approach if the boss is on our
+        // physical side (closer to us than to the opposite boss).
+        if (oppositeBoss && !Aq40Helpers::IsLikelyOnSameTwinSide(bot, sideBoss, oppositeBoss))
+        {
+            bot->AttackStop();
+            if (isWarlockTank && !botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+                botAI->CastSpell("shadow ward", bot);
+            return true;
+        }
         return MoveNear(sideBoss, isWarlockTank ? 24.0f : 4.0f, MovementPriority::MOVEMENT_COMBAT);
     }
 
@@ -1116,6 +1126,19 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
             !bot->IsWithinLOSInMap(assignment.veklor) ||
             bot->GetDistance2d(assignment.veklor) > 40.0f)
             return false;
+    }
+
+    // During teleport recovery / opener hold, if Vek'lor is on the far side
+    // of the room (closer to the opposite boss than to us), do NOT chase it
+    // across the room.  The warlock tank on that physical side will handle
+    // pickup.  Pre-cast Shadow Ward while holding position so we are ready
+    // when Vek'lor teleports back to our side.
+    if (IsTwinPickupHoldState(twinState) && assignment.veknilash &&
+        !Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.veklor, assignment.veknilash))
+    {
+        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            botAI->CastSpell("shadow ward", bot);
+        return true;
     }
 
     Unit* veklor = assignment.veklor;
