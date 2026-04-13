@@ -746,6 +746,12 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
     return false;
 }
 
+bool Aq40EraseTimersAndTrackersAction::isUseful()
+{
+    return bot && bot->IsAlive() && Aq40BossHelper::IsInAq40(bot) &&
+           Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI);
+}
+
 bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
 {
     if (!bot || !Aq40BossHelper::IsInAq40(bot))

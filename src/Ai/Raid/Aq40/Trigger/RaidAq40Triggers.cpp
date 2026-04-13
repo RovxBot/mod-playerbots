@@ -137,7 +137,7 @@ Unit* FindTwinSideBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& e
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
 {
-    if (!bot || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
+    if (!bot || !bot->IsAlive() || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
         return false;
 
     return Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI);

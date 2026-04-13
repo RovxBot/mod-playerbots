@@ -684,6 +684,15 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         result.sideEmperor = result.veklor;
         result.oppositeEmperor = result.veknilash;
         result.sideIndex = getBossSideIndex(result.veklor);
+
+        // Determine if this is the backup warlock tank.  Backup tanks
+        // (slot 1) stage on the opposite room-side so they are ready to
+        // pick up Vek'lor immediately after a teleport swap.
+        uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
+        uint32 const veklorRoomSide = getBossSideIndex(result.veklor);
+        result.tankStageSide = stableIdx;
+        result.isTankBackup = (stableIdx != veklorRoomSide);
+
         UpdateTwinTeleportState(bot, result);
         return result;
     }
@@ -692,6 +701,15 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         result.sideEmperor = result.veknilash;
         result.oppositeEmperor = result.veklor;
         result.sideIndex = getBossSideIndex(result.veknilash);
+
+        // Determine if this is the off-tank.  Off-tanks (slot 1) stage
+        // on the opposite room-side so they are ready to pick up
+        // Vek'nilash immediately after a teleport swap.
+        uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
+        uint32 const veknilashRoomSide = getBossSideIndex(result.veknilash);
+        result.tankStageSide = stableIdx;
+        result.isTankBackup = (stableIdx != veknilashRoomSide);
+
         UpdateTwinTeleportState(bot, result);
         return result;
     }

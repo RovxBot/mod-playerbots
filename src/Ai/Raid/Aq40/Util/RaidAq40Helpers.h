@@ -35,6 +35,11 @@ struct TwinAssignments
     Unit* veklor = nullptr;
     Unit* veknilash = nullptr;
     uint32 sideIndex = 0;
+    // For tanks: which room-side the tank is assigned to stage on.
+    // Primary tanks (slot 0) stage near their boss; backup tanks (slot 1)
+    // stage on the opposite side to catch their boss after teleport.
+    uint32 tankStageSide = 0;
+    bool isTankBackup = false;
 };
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI);

@@ -397,7 +397,27 @@ bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers:
     Position oppositeBossPosition;
     bool haveOppositeBossPosition = false;
     bool onVeklorSide = false;
-    if (assignment.sideEmperor == assignment.veklor && assignment.veklor)
+
+    // Backup tanks stage on the opposite room-side from their boss so they
+    // are pre-positioned to pick up after a teleport swap.  For backup tanks
+    // we swap which boss position drives their staging.
+    bool const tankBackup = (isWarlockTank || isMeleeTank) && assignment.isTankBackup;
+    if (tankBackup)
+    {
+        // Backup tank stages near the opposite emperor (the one they can't
+        // damage but whose room-side they wait on).
+        if (assignment.oppositeEmperor)
+        {
+            onVeklorSide = (assignment.oppositeEmperor == assignment.veklor);
+            sideBossPosition = assignment.oppositeEmperor->GetPosition();
+            haveSideBossPosition = true;
+        }
+        else
+        {
+            onVeklorSide = isMeleeTank;  // melee backup waits on Vek'lor side
+        }
+    }
+    else if (assignment.sideEmperor == assignment.veklor && assignment.veklor)
     {
         onVeklorSide = true;
         sideBossPosition = assignment.veklor->GetPosition();
@@ -745,6 +765,16 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
     Unit* sideBoss = assignment.sideEmperor;
     Unit* oppositeBoss = assignment.oppositeEmperor;
+
+    // Backup tanks stage on the opposite room-side from their designated
+    // boss so they are already in position when a teleport swap happens.
+    // For hold-split positioning, swap their side/opposite references.
+    if ((isWarlockTank || isMeleeTank) && assignment.isTankBackup)
+    {
+        sideBoss = assignment.oppositeEmperor;
+        oppositeBoss = assignment.sideEmperor;
+    }
+
     if (isRangedDps)
     {
         sideBoss = assignment.veklor;
@@ -1114,12 +1144,15 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     // securing Vek'lor. Utility and filler come later.
     if (!pickupEstablished || IsTwinPickupHoldState(twinState))
     {
-        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
-            return botAI->CastSpell("shadow ward", bot);
-
         bool const hardPickupReposition = !hasLOS || rangeToVeklor < minRange || rangeToVeklor > maxRange;
         if (hardPickupReposition)
         {
+            // Pre-cast Shadow Ward while repositioning so the first Shadow
+            // Bolt is absorbed — this doesn't cost threat time since we
+            // can't cast Searing Pain out of range anyway.
+            if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+                botAI->CastSpell("shadow ward", bot);
+
             bot->AttackStop();
             bot->InterruptNonMeleeSpells(true);
 
@@ -1133,11 +1166,14 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
             return true;
         }
 
+        // In range and LOS — prioritize threat generation over utility.
+        // Searing Pain first to establish aggro ASAP; Shadow Ward can wait
+        // until after the first GCD.
         if (botAI->CanCastSpell("searing pain", veklor))
             return botAI->CastSpell("searing pain", veklor);
 
-        if (!hasThreat && bot->GetVictim() != veklor)
-            Attack(veklor);
+        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            return botAI->CastSpell("shadow ward", bot);
 
         return true;
     }

@@ -45,6 +45,7 @@ public:
         : Action(botAI, "aq40 erase timers and trackers")
     {
     }
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
