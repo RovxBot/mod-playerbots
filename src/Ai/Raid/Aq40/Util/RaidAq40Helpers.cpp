@@ -54,6 +54,47 @@ std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
 bool IsTwinRaidCombatActiveInternal(Player* bot);
+bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
+
+bool IsTwinBossUnit(PlayerbotAI* botAI, Unit* unit)
+{
+    return botAI && unit && Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+        { "emperor vek'nilash", "emperor vek'lor" });
+}
+
+GuidVector BuildTwinObservedUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers,
+                                  GuidVector* outVisibleTwins = nullptr)
+{
+    GuidVector units = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
+    if (!bot || !botAI)
+        return units;
+
+    GuidVector visibleTwins;
+    HasTwinPrePullVisibility(bot, botAI, &visibleTwins);
+    UpdateTwinBossCache(bot, botAI, units);
+    UpdateTwinBossCache(bot, botAI, visibleTwins);
+    AppendKnownTwinBosses(bot, units);
+
+    for (ObjectGuid const guid : visibleTwins)
+    {
+        if (std::find(units.begin(), units.end(), guid) == units.end())
+            units.push_back(guid);
+    }
+
+    if (outVisibleTwins)
+        *outVisibleTwins = visibleTwins;
+
+    return units;
+}
+
+bool IsTwinRealPlayer(Player* player)
+{
+    if (!player)
+        return false;
+
+    PlayerbotAI* playerAI = GET_PLAYERBOT_AI(player);
+    return !playerAI || playerAI->IsRealPlayer();
+}
 
 Unit* FindTwinUnit(PlayerbotAI* botAI, GuidVector const& attackers, char const* name)
 {
@@ -155,7 +196,7 @@ GuidVector CollectTwinVisibleUnits(Player* bot, PlayerbotAI* botAI)
     return units;
 }
 
-bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr)
+bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits)
 {
     GuidVector units = CollectTwinVisibleUnits(bot, botAI);
     if (outUnits)
@@ -748,25 +789,11 @@ GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector con
     if (!bot || !botAI)
         return units;
 
-    GuidVector visibleTwins;
-    HasTwinPrePullVisibility(bot, botAI, &visibleTwins);
-    UpdateTwinBossCache(bot, botAI, units);
-    UpdateTwinBossCache(bot, botAI, visibleTwins);
-
-    bool const twinRoomVisibility = IsInTwinRoomBounds(bot) && !visibleTwins.empty();
-    if (!bot->IsInCombat() && !Aq40BossHelper::IsEncounterCombatActive(bot) &&
-        !IsTwinRaidCombatActiveInternal(bot) && !twinRoomVisibility)
+    if (!IsTwinPlayerPullAuthorized(bot, botAI, attackers) &&
+        !IsTwinCombatInProgress(bot, botAI, attackers))
         return units;
 
-    AppendKnownTwinBosses(bot, units);
-
-    for (ObjectGuid const guid : visibleTwins)
-    {
-        if (std::find(units.begin(), units.end(), guid) == units.end())
-            units.push_back(guid);
-    }
-
-    return units;
+    return BuildTwinObservedUnits(bot, botAI, attackers);
 }
 
 bool IsInTwinEmperorRoom(Player* bot)
@@ -777,6 +804,77 @@ bool IsInTwinEmperorRoom(Player* bot)
 bool IsTwinRaidCombatActive(Player* bot)
 {
     return IsTwinRaidCombatActiveInternal(bot);
+}
+
+bool IsTwinPlayerPullAuthorized(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI || !bot->GetMap())
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    GuidVector observedUnits = BuildTwinObservedUnits(bot, botAI, attackers);
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !IsTwinRealPlayer(member))
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+            continue;
+
+        if (Unit* victim = member->GetVictim())
+        {
+            if (IsTwinBossUnit(botAI, victim))
+                return true;
+        }
+
+        Pet* pet = member->GetPet();
+        if (pet && pet->GetVictim() && IsTwinBossUnit(botAI, pet->GetVictim()))
+            return true;
+
+        ObjectGuid const memberGuid = member->GetGUID();
+        ObjectGuid const memberTargetGuid = member->GetTarget();
+        ObjectGuid petGuid = pet ? pet->GetGUID() : ObjectGuid::Empty;
+        for (ObjectGuid const guid : observedUnits)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsTwinBossUnit(botAI, unit))
+                continue;
+
+            if (member->IsInCombat() && memberTargetGuid == unit->GetGUID())
+                return true;
+
+            if (unit->GetTarget() == memberGuid || (petGuid && unit->GetTarget() == petGuid) ||
+                unit->GetVictim() == member || (pet && unit->GetVictim() == pet))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsTwinCombatInProgress(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI)
+        return false;
+
+    GuidVector observedUnits = BuildTwinObservedUnits(bot, botAI, attackers);
+    for (ObjectGuid const guid : observedUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsTwinBossUnit(botAI, unit))
+            continue;
+
+        if (unit->IsInCombat() || unit->GetVictim() || unit->GetTarget())
+            return true;
+    }
+
+    return false;
 }
 
 bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
@@ -837,15 +935,12 @@ bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments cons
     {
         if (Player* victimPlayer = victim->ToPlayer())
         {
-            PlayerbotAI* victimAI = GET_PLAYERBOT_AI(victimPlayer);
-            if (victimPlayer == bot ||
-                Aq40BossHelper::IsDesignatedTwinWarlockTank(victimPlayer) ||
-                (victimAI && victimAI->IsHeal(victimPlayer)))
+            if (victimPlayer == bot || Aq40BossHelper::IsEncounterParticipant(bot, victimPlayer))
                 return true;
         }
     }
 
-    return bug->GetDistance2d(assignment.sideEmperor) <= 10.0f;
+    return false;
 }
 
 TwinEncounterState GetTwinEncounterState(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)

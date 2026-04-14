@@ -216,6 +216,16 @@ void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
     context->GetValue<ObjectGuid>("pull target")->Set(guid);
 }
 
+void ClearTwinTargetPin(Player* bot, PlayerbotAI* botAI, AiObjectContext* context)
+{
+    if (!bot || !botAI || !context)
+        return;
+
+    botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({});
+    context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
+    bot->SetTarget(ObjectGuid::Empty);
+}
+
 Unit* FindTwinPriorityBugTarget(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment,
                                 std::vector<Unit*> const& bugs)
 {
@@ -243,45 +253,6 @@ Unit* FindTwinPriorityBugTarget(Player* bot, PlayerbotAI* botAI, Aq40Helpers::Tw
         bool const isExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, bug);
         bool const preferredExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, preferred);
         if (isExplodeBug != preferredExplodeBug)
-        {
-            if (isExplodeBug)
-                preferred = bug;
-            continue;
-        }
-
-        if (bug->GetHealthPct() < preferred->GetHealthPct())
-            preferred = bug;
-    }
-
-    return preferred;
-}
-
-Unit* FindTwinPetBugTarget(PlayerbotAI* botAI, std::vector<Unit*> const& bugs)
-{
-    Unit* preferred = nullptr;
-    for (Unit* bug : bugs)
-    {
-        if (!IsTwinBugUnit(botAI, bug) || !bug->IsAlive())
-            continue;
-
-        if (!preferred)
-        {
-            preferred = bug;
-            continue;
-        }
-
-        bool const isMutateBug = Aq40Helpers::IsTwinMutateBug(botAI, bug);
-        bool const preferredIsMutate = Aq40Helpers::IsTwinMutateBug(botAI, preferred);
-        if (isMutateBug != preferredIsMutate)
-        {
-            if (isMutateBug)
-                preferred = bug;
-            continue;
-        }
-
-        bool const isExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, bug);
-        bool const preferredIsExplode = Aq40Helpers::IsTwinExplodeBug(botAI, preferred);
-        if (isExplodeBug != preferredIsExplode)
         {
             if (isExplodeBug)
                 preferred = bug;
@@ -635,6 +606,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool const isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+    bool const isHunterBugController = bot->getClass() == CLASS_HUNTER;
     bool const draggingMeleeBoss = IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment);
     Unit* sideBug = FindTwinPriorityBugTarget(bot, botAI, assignment, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, encounterUnits);
@@ -651,6 +623,18 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         target = assignment.veknilash;
     else if (botAI->IsHeal(bot))
         return false;
+    else if (isHunterBugController)
+    {
+        if (sideBug)
+            target = sideBug;
+        else
+        {
+            ClearTwinTargetPin(bot, botAI, context);
+            if (bot->GetVictim())
+                bot->AttackStop();
+            return true;
+        }
+    }
     else if (draggingMeleeBoss)
         target = assignment.veknilash;
     else if (isMeleeDps && sideBug && ShouldReserveForTwinBug(bot, botAI, assignment, sideBug))
@@ -1459,9 +1443,33 @@ bool Aq40TwinEmperorsPetControlAction::Execute(Event /*event*/)
     if (!assignment.veklor || !assignment.veknilash)
         return false;
 
-    Unit* petTarget = FindTwinPetBugTarget(botAI, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
+    bool const isHunterPetController = bot->getClass() == CLASS_HUNTER;
+    Unit* petTarget = FindTwinPriorityBugTarget(bot, botAI, assignment,
+        Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     if (!petTarget)
-        petTarget = assignment.veknilash;
+    {
+        if (!isHunterPetController)
+            petTarget = assignment.veknilash;
+        else
+        {
+            if (pet->GetVictim() || pet->GetTarget())
+            {
+                pet->AttackStop();
+                pet->SetTarget(ObjectGuid::Empty);
+                pet->SetReactState(REACT_PASSIVE);
+                return true;
+            }
+
+            if (pet->GetReactState() != REACT_PASSIVE)
+            {
+                pet->SetReactState(REACT_PASSIVE);
+                return true;
+            }
+
+            return false;
+        }
+    }
+
     if (!petTarget || !petTarget->IsAlive())
         return false;
 

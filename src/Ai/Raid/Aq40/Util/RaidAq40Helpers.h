@@ -49,6 +49,8 @@ GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI);
 GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsInTwinEmperorRoom(Player* bot);
 bool IsTwinRaidCombatActive(Player* bot);
+bool IsTwinPlayerPullAuthorized(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool IsTwinCombatInProgress(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI);
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor);
 bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit);

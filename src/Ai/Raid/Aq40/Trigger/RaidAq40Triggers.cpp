@@ -609,10 +609,12 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 
 bool Aq40TwinEmperorsActiveTrigger::IsActive()
 {
-    if (!Aq40EncounterEngaged(botAI, bot) && !Aq40Helpers::IsTwinRaidCombatActive(bot))
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    if (!Aq40Helpers::IsTwinPlayerPullAuthorized(bot, botAI, attackers) &&
+        !Aq40Helpers::IsTwinCombatInProgress(bot, botAI, attackers))
         return false;
 
-    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, attackers);
     return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" });
 }
 
@@ -639,12 +641,16 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    bool const isHunterBugController = bot->getClass() == CLASS_HUNTER;
     bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, encounterUnits);
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget)
     {
         if (isWarlockTank || isMeleeTank)
             return IsTwinPrimaryTankOnActiveBoss(bot, assignment);
+
+        if (isHunterBugController)
+            return FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment) != nullptr;
 
         if (!isWarlockTank && !isMeleeTank &&
             inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
@@ -674,6 +680,14 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     {
         if (assignment.sideEmperor != assignment.veklor)
             return currentTarget != nullptr;
+
+        if (isHunterBugController)
+        {
+            if (sideBug)
+                return currentTarget != sideBug;
+
+            return currentTarget != nullptr;
+        }
 
         if (sideBug)
             return currentTarget != sideBug;
