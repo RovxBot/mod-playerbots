@@ -55,6 +55,8 @@ std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
 bool IsTwinRaidCombatActiveInternal(Player* bot);
 bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
+void UpdateTwinBossCache(Player* bot, PlayerbotAI* botAI, GuidVector const& units);
+void AppendKnownTwinBosses(Player* bot, GuidVector& units);
 
 bool IsTwinBossUnit(PlayerbotAI* botAI, Unit* unit)
 {
