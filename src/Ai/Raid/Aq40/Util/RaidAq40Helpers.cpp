@@ -29,9 +29,9 @@ struct TwinKnownBossGuids
 // Ground Twin Emps room geometry in repo travel-node data:
 // - The Master's Eye = mid-room anchor
 // - Emperor Vek'lor / Vek'nilash = initial boss-side references
-float constexpr kTwinRoomCenterX = -8953.3f;
-float constexpr kTwinRoomCenterY = 1233.64f;
-float constexpr kTwinRoomCenterZ = -99.718f;
+float constexpr kTwinRoomCenterX = -8954.855f;
+float constexpr kTwinRoomCenterY = 1235.7107f;
+float constexpr kTwinRoomCenterZ = -112.62047f;
 float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
 float constexpr kTwinPrePullDetectionRange = 320.0f;
@@ -415,7 +415,7 @@ bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
     return false;
 }
 
-bool HasTwinBossAggro(Player* member, Unit* boss)
+bool HasTwinBossAggroInternal(Player* member, Unit* boss)
 {
     if (!member || !boss)
         return false;
@@ -455,7 +455,7 @@ bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assign
         return false;
 
     Unit* oppositeBoss = boss == assignment.veklor ? assignment.veknilash : assignment.veklor;
-    if (!member->IsWithinLOSInMap(boss) || !HasTwinBossAggro(member, boss))
+    if (!member->IsWithinLOSInMap(boss) || !HasTwinBossAggroInternal(member, boss))
         return false;
 
     float const distance = member->GetDistance2d(boss);
@@ -492,6 +492,33 @@ bool IsTwinHealBrotherCastActive(TwinAssignments const& assignment)
 }
 
 }  // namespace
+
+bool HasTwinBossAggro(Player* member, Unit* boss)
+{
+    return HasTwinBossAggroInternal(member, boss);
+}
+
+bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    if (!bot || !botAI || PlayerbotAI::IsTank(bot) || botAI->IsHeal(bot) || !assignment.veknilash)
+        return false;
+
+    return HasTwinBossAggroInternal(bot, assignment.veknilash);
+}
+
+bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment)
+{
+    if (!bot)
+        return false;
+
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return assignment.veklor && !assignment.isTankBackup;
+
+    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
+        return assignment.veknilash && !assignment.isTankBackup;
+
+    return false;
+}
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
 {
@@ -704,6 +731,9 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return 0u;
     };
 
+    result.veklorSideIndex = getBossSideIndex(result.veklor);
+    result.veknilashSideIndex = getBossSideIndex(result.veknilash);
+
     // DPS always attacks its assigned emperor, but readiness checks still need
     // the current room-side index for that emperor so they wait on the correct pickup tank.
     if (cohort == TwinRoleCohort::Other)
@@ -738,13 +768,13 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     {
         result.sideEmperor = result.veklor;
         result.oppositeEmperor = result.veknilash;
-        result.sideIndex = getBossSideIndex(result.veklor);
+        result.sideIndex = result.veklorSideIndex;
 
         // Determine if this is the backup warlock tank.  Backup tanks
         // (slot 1) stage on the opposite room-side so they are ready to
         // pick up Vek'lor immediately after a teleport swap.
         uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
-        uint32 const veklorRoomSide = getBossSideIndex(result.veklor);
+        uint32 const veklorRoomSide = result.veklorSideIndex;
         result.tankStageSide = stableIdx;
         result.isTankBackup = (stableIdx != veklorRoomSide);
 
@@ -755,13 +785,13 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     {
         result.sideEmperor = result.veknilash;
         result.oppositeEmperor = result.veklor;
-        result.sideIndex = getBossSideIndex(result.veknilash);
+        result.sideIndex = result.veknilashSideIndex;
 
         // Determine if this is the off-tank.  Off-tanks (slot 1) stage
         // on the opposite room-side so they are ready to pick up
         // Vek'nilash immediately after a teleport swap.
         uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
-        uint32 const veknilashRoomSide = getBossSideIndex(result.veknilash);
+        uint32 const veknilashRoomSide = result.veknilashSideIndex;
         result.tankStageSide = stableIdx;
         result.isTankBackup = (stableIdx != veknilashRoomSide);
 
@@ -1067,6 +1097,10 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
         if (!member || !member->IsAlive() || !Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
             continue;
 
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.veklorSideIndex)
+            continue;
+
         if (IsTwinPickupMemberEstablished(member, assignment, assignment.veklor))
             return true;
     }
@@ -1092,16 +1126,15 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || PlayerbotAI::IsRanged(member))
             continue;
 
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.veknilashSideIndex)
+            continue;
+
         if (IsTwinPickupMemberEstablished(member, assignment, assignment.veknilash))
             return true;
     }
 
     return false;
-}
-
-bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
-{
-    return IsTwinAssignedTankReady(bot, botAI, assignment, assignment.sideEmperor);
 }
 
 bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss)

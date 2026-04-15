@@ -61,78 +61,6 @@ bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
            botAI->HasAura("whirlwind", unit);
 }
-
-bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bot || !botAI || PlayerbotAI::IsTank(bot) || botAI->IsHeal(bot) || !assignment.veknilash)
-        return false;
-
-    ObjectGuid const botGuid = bot->GetGUID();
-    ObjectGuid petGuid = ObjectGuid::Empty;
-    if (Pet* pet = bot->GetPet())
-        petGuid = pet->GetGUID();
-
-    return assignment.veknilash->GetTarget() == botGuid ||
-           (petGuid && assignment.veknilash->GetTarget() == petGuid) ||
-           bot->GetVictim() == assignment.veknilash;
-}
-
-bool IsTwinPrimaryTankOnActiveBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bot)
-        return false;
-
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
-        return assignment.sideEmperor && assignment.sideEmperor == assignment.veklor;
-
-    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
-        return assignment.sideEmperor && assignment.sideEmperor == assignment.veknilash;
-
-    return false;
-}
-
-Unit* FindTwinSideBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits,
-                            Aq40Helpers::TwinAssignments const& assignment)
-{
-    Unit* sideBug = nullptr;
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* bug = botAI->GetUnit(guid);
-        if (!bug ||
-            !Aq40BossHelper::IsUnitNamedAny(botAI, bug, { "mutate bug", "qiraji scarab", "qiraji scorpion", "scarab", "scorpion" }) ||
-            !Aq40Helpers::IsTwinCriticalSideBug(bot, botAI, assignment, bug))
-            continue;
-
-        bool const isMutateBug = Aq40Helpers::IsTwinMutateBug(botAI, bug);
-        if (!sideBug)
-        {
-            sideBug = bug;
-            continue;
-        }
-
-        bool const chosenIsMutate = Aq40Helpers::IsTwinMutateBug(botAI, sideBug);
-        if (isMutateBug != chosenIsMutate)
-        {
-            if (isMutateBug)
-                sideBug = bug;
-            continue;
-        }
-
-        bool const isExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, bug);
-        bool const chosenExplodeBug = Aq40Helpers::IsTwinExplodeBug(botAI, sideBug);
-        if (isExplodeBug != chosenExplodeBug)
-        {
-            if (isExplodeBug)
-                sideBug = bug;
-            continue;
-        }
-
-        if (bug->GetHealthPct() < sideBug->GetHealthPct())
-            sideBug = bug;
-    }
-
-    return sideBug;
-}
 }    // namespace
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
@@ -636,24 +564,33 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (!assignment.sideEmperor)
         return false;
 
-    if (IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
+    if (Aq40Helpers::IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
         return false;
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool const isHunterBugController = bot->getClass() == CLASS_HUNTER;
     bool const inRecoveryWindow = Aq40Helpers::IsTwinTeleportRecoveryWindow(bot, botAI, encounterUnits);
+    Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
+    Unit* recoveryBoss = assignment.sideEmperor;
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget)
     {
         if (isWarlockTank || isMeleeTank)
-            return IsTwinPrimaryTankOnActiveBoss(bot, assignment);
+            return Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
 
         if (isHunterBugController)
-            return FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment) != nullptr;
+        {
+            if (inRecoveryWindow && recoveryBoss &&
+                !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment, recoveryBoss))
+                return mutateBug != nullptr;
+
+            return mutateBug != nullptr || assignment.veklor != nullptr;
+        }
 
         if (!isWarlockTank && !isMeleeTank &&
-            inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
+            recoveryBoss && inRecoveryWindow &&
+            !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment, recoveryBoss))
             return false;
 
         return true;
@@ -665,37 +602,28 @@ bool Aq40TwinEmperorsRoleMismatchTrigger::IsActive()
     if (isMeleeTank)
         return assignment.sideEmperor == assignment.veknilash ? currentTarget != assignment.veknilash : false;
 
-    if (inRecoveryWindow && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment))
+    if (recoveryBoss && inRecoveryWindow &&
+        !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment, recoveryBoss))
     {
-        Unit* sideBug = FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment);
-        if (!sideBug)
-            return false;
+        if (isHunterBugController && mutateBug)
+            return currentTarget != mutateBug;
 
-        return currentTarget != sideBug;
+        return false;
     }
-
-    Unit* sideBug = FindTwinSideBugTarget(bot, botAI, encounterUnits, assignment);
 
     if (botAI->IsRanged(bot))
     {
-        if (assignment.sideEmperor != assignment.veklor)
-            return currentTarget != nullptr;
-
         if (isHunterBugController)
         {
-            if (sideBug)
-                return currentTarget != sideBug;
+            if (mutateBug)
+                return currentTarget != mutateBug;
 
-            return currentTarget != nullptr;
+            return currentTarget != assignment.veklor;
         }
-
-        if (sideBug)
-            return currentTarget != sideBug;
 
         return currentTarget != assignment.veklor;
     }
 
-    Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
     if (assignment.sideEmperor == assignment.veknilash && mutateBug &&
         Aq40Helpers::IsLikelyOnSameTwinSide(mutateBug, assignment.sideEmperor, assignment.oppositeEmperor))
         return currentTarget != mutateBug;

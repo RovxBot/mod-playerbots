@@ -35,6 +35,8 @@ struct TwinAssignments
     Unit* veklor = nullptr;
     Unit* veknilash = nullptr;
     uint32 sideIndex = 0;
+    uint32 veklorSideIndex = 0;
+    uint32 veknilashSideIndex = 0;
     // For tanks: which room-side the tank is assigned to stage on.
     // Primary tanks (slot 0) stage near their boss; backup tanks (slot 1)
     // stage on the opposite side to catch their boss after teleport.
@@ -63,8 +65,10 @@ bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& 
 bool IsTwinReadyForPreTeleportStage(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
-bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss);
+bool HasTwinBossAggro(Player* member, Unit* boss);
+bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI);

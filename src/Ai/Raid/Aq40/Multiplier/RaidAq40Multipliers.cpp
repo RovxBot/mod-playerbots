@@ -352,11 +352,15 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
         (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
     Aq40Helpers::TwinEncounterState const twinState = Aq40Helpers::GetTwinEncounterState(bot, botAI, activeUnits);
+    Aq40Helpers::TwinAssignments const twinAssignment = Aq40Helpers::GetTwinAssignments(bot, botAI, activeUnits);
     bool const twinDpsWaitWindow =
         !isTwinTank && Aq40Helpers::IsTwinDpsWaitWindow(bot, botAI, activeUnits);
     bool const twinPickupRecovery =
         twinState == Aq40Helpers::TwinEncounterState::OpenerHold ||
         twinState == Aq40Helpers::TwinEncounterState::TeleportRecovery;
+    bool const waitingOnAssignedPickup =
+        !isTwinTank && twinPickupRecovery && twinAssignment.sideEmperor &&
+        !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, twinAssignment, twinAssignment.sideEmperor);
 
     if (twinPickupRecovery)
     {
@@ -386,9 +390,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     // Illidan/Council pattern: give the assigned tanks a short protected
     // pickup window on pull and after role-changing events before non-tanks
     // begin normal DPS. Healing remains available during the wait.
-    if (twinDpsWaitWindow)
+    if (twinDpsWaitWindow && waitingOnAssignedPickup)
     {
+        if (actionName == "aq40 manage resistance strategies")
+            return 0.0f;
+
         if (dynamic_cast<AttackAction*>(action) ||
+            dynamic_cast<CastBuffSpellAction*>(action) ||
             (dynamic_cast<CastSpellAction*>(action) &&
              !dynamic_cast<CastHealingSpellAction*>(action)))
             return 0.0f;

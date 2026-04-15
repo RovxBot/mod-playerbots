@@ -17,15 +17,15 @@ float constexpr kPi = 3.14159265f;
 // Ground these Twin Emps positions in the repo's travel node data:
 // - The Master's Eye = room center / mid-room staging lane.
 // - Emperor Vek'lor / Vek'nilash = initial side references for pre-pull setup.
-float constexpr kTwinRoomCenterX = -8953.3f;
-float constexpr kTwinRoomCenterY = 1233.64f;
-float constexpr kTwinRoomCenterZ = -99.718f;
-float constexpr kTwinInitialVeklorX = -8874.06f;
-float constexpr kTwinInitialVeklorY = 1204.74f;
-float constexpr kTwinInitialVeklorZ = -104.17f;
-float constexpr kTwinInitialVeknilashX = -9019.14f;
-float constexpr kTwinInitialVeknilashY = 1180.07f;
-float constexpr kTwinInitialVeknilashZ = -104.17f;
+float constexpr kTwinRoomCenterX = -8954.855f;
+float constexpr kTwinRoomCenterY = 1235.7107f;
+float constexpr kTwinRoomCenterZ = -112.62047f;
+float constexpr kTwinInitialVeklorX = -8868.31f;
+float constexpr kTwinInitialVeklorY = 1205.97f;
+float constexpr kTwinInitialVeklorZ = -104.231f;
+float constexpr kTwinInitialVeknilashX = -9023.67f;
+float constexpr kTwinInitialVeknilashY = 1176.24f;
+float constexpr kTwinInitialVeknilashZ = -104.226f;
 float constexpr kTwinTankStageDistanceFromBoss = 42.0f;
 float constexpr kTwinTankPreTeleportDistanceFromBoss = 32.0f;
 uint32 constexpr kTwinStageRetryThrottleMs = 1200;
@@ -63,20 +63,6 @@ namespace
 std::unordered_map<uint64, uint32> sTwinPrePullStageRetryUntil;
 std::unordered_map<uint64, uint32> sTwinHoldSplitRetryUntil;
 uint32 constexpr kTwinHoldSplitRetryThrottleMs = 1200;
-
-bool IsTwinPrimaryTankOnActiveBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bot)
-        return false;
-
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
-        return assignment.sideEmperor && assignment.sideEmperor == assignment.veklor;
-
-    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
-        return assignment.sideEmperor && assignment.sideEmperor == assignment.veknilash;
-
-    return false;
-}
 
 bool IsTwinPickupHoldState(Aq40Helpers::TwinEncounterState state)
 {
@@ -184,26 +170,116 @@ float GetTwinCenteredSlotOffset(size_t botIndex, size_t count, float spacing)
     return centeredIndex * spacing;
 }
 
-bool HasTwinBossAggro(Player* bot, Unit* boss)
+Position GetTwinFixedSideAnchor(uint32 sideIndex)
 {
-    if (!bot || !boss)
-        return false;
+    Position anchor;
+    if (sideIndex == 1u)
+        anchor.Relocate(kTwinInitialVeklorX, kTwinInitialVeklorY, kTwinInitialVeklorZ);
+    else
+        anchor.Relocate(kTwinInitialVeknilashX, kTwinInitialVeknilashY, kTwinInitialVeknilashZ);
 
-    ObjectGuid const botGuid = bot->GetGUID();
-    ObjectGuid petGuid = ObjectGuid::Empty;
-    if (Pet* pet = bot->GetPet())
-        petGuid = pet->GetGUID();
-
-    return boss->GetTarget() == botGuid || (petGuid && boss->GetTarget() == petGuid) ||
-           bot->GetVictim() == boss;
+    return anchor;
 }
 
-bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, Aq40Helpers::TwinAssignments const& assignment)
+bool GetTwinCenterLanePosition(Player* bot, PlayerbotAI* botAI, Position& outPosition)
 {
-    if (!IsTwinNonTankDps(bot, botAI) || !assignment.veknilash)
+    if (!bot || !botAI || !bot->GetMap())
         return false;
 
-    return HasTwinBossAggro(bot, assignment.veknilash);
+    size_t botIndex = 0;
+    size_t count = 1;
+    GetTwinPositionCohortSlot(bot, botAI, false, botIndex, count);
+
+    float const axisX = kTwinInitialVeklorX - kTwinInitialVeknilashX;
+    float const axisY = kTwinInitialVeklorY - kTwinInitialVeknilashY;
+    float const axisLength = std::sqrt(axisX * axisX + axisY * axisY);
+    if (axisLength < 0.1f)
+        return false;
+
+    float const lateralX = -axisY / axisLength;
+    float const lateralY = axisX / axisLength;
+    float const spacing = 5.5f;
+    float const centeredOffset = GetTwinCenteredSlotOffset(botIndex, count, spacing);
+
+    float targetX = kTwinRoomCenterX + lateralX * centeredOffset;
+    float targetY = kTwinRoomCenterY + lateralY * centeredOffset;
+    float targetZ = kTwinRoomCenterZ;
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+    {
+        targetX = kTwinRoomCenterX;
+        targetY = kTwinRoomCenterY;
+        targetZ = kTwinRoomCenterZ;
+    }
+
+    outPosition.Relocate(targetX, targetY, targetZ);
+    return true;
+}
+
+bool GetTwinMeleeTransitPosition(Player* bot, Position& outPosition)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    float const axisX = kTwinInitialVeklorX - kTwinInitialVeknilashX;
+    float const axisY = kTwinInitialVeklorY - kTwinInitialVeknilashY;
+    float const axisLength = std::sqrt(axisX * axisX + axisY * axisY);
+    if (axisLength < 0.1f)
+        return false;
+
+    float const lateralX = -axisY / axisLength;
+    float const lateralY = axisX / axisLength;
+    float const relativeX = bot->GetPositionX() - kTwinRoomCenterX;
+    float const relativeY = bot->GetPositionY() - kTwinRoomCenterY;
+    float const sideSign = (relativeX * lateralX + relativeY * lateralY) >= 0.0f ? 1.0f : -1.0f;
+
+    float targetX = kTwinRoomCenterX + lateralX * sideSign * 10.0f;
+    float targetY = kTwinRoomCenterY + lateralY * sideSign * 10.0f;
+    float targetZ = kTwinRoomCenterZ;
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+    {
+        targetX = kTwinRoomCenterX;
+        targetY = kTwinRoomCenterY;
+        targetZ = kTwinRoomCenterZ;
+    }
+
+    outPosition.Relocate(targetX, targetY, targetZ);
+    return true;
+}
+float GetTwinPointToSegmentDistance2d(float pointX, float pointY,
+                                      float startX, float startY,
+                                      float endX, float endY)
+{
+    float const segmentX = endX - startX;
+    float const segmentY = endY - startY;
+    float const segmentLengthSq = segmentX * segmentX + segmentY * segmentY;
+    if (segmentLengthSq < 0.001f)
+        return std::sqrt((pointX - startX) * (pointX - startX) + (pointY - startY) * (pointY - startY));
+
+    float projection = ((pointX - startX) * segmentX + (pointY - startY) * segmentY) / segmentLengthSq;
+    projection = std::clamp(projection, 0.0f, 1.0f);
+
+    float const nearestX = startX + projection * segmentX;
+    float const nearestY = startY + projection * segmentY;
+    float const offsetX = pointX - nearestX;
+    float const offsetY = pointY - nearestY;
+    return std::sqrt(offsetX * offsetX + offsetY * offsetY);
+}
+
+bool IsTwinMeleeCasterCrossingRisk(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bot || !assignment.veklor || !assignment.veknilash)
+        return false;
+
+    if (Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.veknilash, assignment.veklor))
+        return false;
+
+    float const pathDistance = GetTwinPointToSegmentDistance2d(
+        assignment.veklor->GetPositionX(), assignment.veklor->GetPositionY(),
+        bot->GetPositionX(), bot->GetPositionY(),
+        assignment.veknilash->GetPositionX(), assignment.veknilash->GetPositionY());
+    return pathDistance < 20.0f;
 }
 
 void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
@@ -429,7 +505,15 @@ bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers:
         haveOppositeBossPosition = true;
     }
 
-    if (isWarlockTank || isMeleeTank)
+    if (isWarlockTank)
+    {
+        Position stagePosition = GetTwinFixedSideAnchor(assignment.tankStageSide);
+        targetX = stagePosition.GetPositionX();
+        targetY = stagePosition.GetPositionY();
+        targetZ = stagePosition.GetPositionZ();
+        tolerance = twinPullActive ? 6.0f : 8.0f;
+    }
+    else if (isMeleeTank)
     {
         float const stageDistance = forPreTeleport ? kTwinTankPreTeleportDistanceFromBoss : kTwinTankStageDistanceFromBoss;
         Position stagePosition;
@@ -444,14 +528,8 @@ bool GetTwinFallbackAnchorPosition(Player* bot, PlayerbotAI* botAI, Aq40Helpers:
     }
     else if (isRanged)
     {
-        size_t botIndex = 0;
-        size_t count = 1;
-        GetTwinPositionCohortSlot(bot, botAI, false, botIndex, count);
-        float const angleOffset = GetTwinCenteredSlotOffset(botIndex, count, 0.14f);
         Position stagePosition;
-        float const forwardDistance = forPreTeleport ? 28.0f : (twinPullActive ? 32.0f : 40.0f);
-        if (!buildOuterArcStagePoint(sideBossPosition, oppositeBossPosition, haveOppositeBossPosition, forwardDistance,
-                angleOffset, stagePosition))
+        if (!GetTwinCenterLanePosition(bot, botAI, stagePosition))
             return false;
 
         targetX = stagePosition.GetPositionX();
@@ -545,7 +623,7 @@ bool GetTwinStagePositioning(Player* bot, PlayerbotAI* botAI, GuidVector const& 
     if (!isWarlockTank && !isTank && !isHealer && !isRanged && !isMeleeDps)
         return false;
 
-    if (assignment.sideEmperor && isMeleeDps && IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
+    if (assignment.sideEmperor && isMeleeDps && Aq40Helpers::IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment))
         return false;
 
     MovementPriority const priority =
@@ -607,7 +685,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     bool const isMeleeDps = !isMeleeTank && !botAI->IsRanged(bot) && !botAI->IsHeal(bot);
     bool const isHunterBugController = bot->getClass() == CLASS_HUNTER;
-    bool const draggingMeleeBoss = IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment);
+    bool const draggingMeleeBoss = Aq40Helpers::IsTwinDpsDraggingMeleeBoss(bot, botAI, assignment);
     Unit* sideBug = FindTwinPriorityBugTarget(bot, botAI, assignment, Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     Unit* mutateBug = Aq40BossActions::FindTwinMutateBug(botAI, encounterUnits);
     if (IsTwinPickupHoldState(twinState) && sideBug &&
@@ -625,15 +703,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         return false;
     else if (isHunterBugController)
     {
-        if (sideBug)
-            target = sideBug;
-        else
-        {
-            ClearTwinTargetPin(bot, botAI, context);
-            if (bot->GetVictim())
-                bot->AttackStop();
-            return true;
-        }
+        target = mutateBug ? mutateBug : assignment.veklor;
     }
     else if (draggingMeleeBoss)
         target = assignment.veknilash;
@@ -647,7 +717,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         if (!assignment.veklor)
             return false;
 
-        target = sideBug && ShouldReserveForTwinBug(bot, botAI, assignment, sideBug) ? sideBug : assignment.veklor;
+        target = assignment.veklor;
     }
     else
     {
@@ -677,8 +747,26 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         (IsTwinPickupHoldState(twinState) || isWarlockTank || isMeleeTank))
         bot->AttackStop();
 
-    if (IsTwinPickupHoldState(twinState) && !isWarlockTank && !isMeleeTank)
+    if ((isWarlockTank || isMeleeTank) && !Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+    {
+        if (bot->GetVictim())
+            bot->AttackStop();
         return true;
+    }
+
+    if (IsTwinPickupHoldState(twinState) && !isWarlockTank && !isMeleeTank)
+    {
+        Unit* readinessBoss = nullptr;
+        if (isHunterBugController && mutateBug)
+            readinessBoss = nullptr;
+        else if (isMeleeDps)
+            readinessBoss = assignment.veknilash;
+        else if (botAI->IsRanged(bot))
+            readinessBoss = assignment.veklor;
+
+        if (readinessBoss && !Aq40Helpers::IsTwinAssignedTankReady(bot, botAI, assignment, readinessBoss))
+            return true;
+    }
 
     // During pickup recovery, tanks must NOT chase a boss that is on the far
     // side of the room.  Each side has a designated tank of each type; only
@@ -848,6 +936,20 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         return MoveNear(sideBoss, isWarlockTank ? 24.0f : 4.0f, MovementPriority::MOVEMENT_COMBAT);
     }
 
+    if (isMeleeDps && IsTwinMeleeCasterCrossingRisk(bot, assignment))
+    {
+        Position transitPosition;
+        if (!GetTwinMeleeTransitPosition(bot, transitPosition))
+            return false;
+
+        if (bot->GetExactDist2d(transitPosition.GetPositionX(), transitPosition.GetPositionY()) <= 4.0f)
+            return false;
+
+        return MoveTo(bot->GetMapId(), transitPosition.GetPositionX(), transitPosition.GetPositionY(),
+                      transitPosition.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+    }
+
     if (waitingOnTeleportPickup)
         return false;
 
@@ -879,8 +981,8 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         return MoveNear(sideBoss, holdRange, MovementPriority::MOVEMENT_COMBAT);
     }
 
-    if (!isWarlockTank && (isRangedDps || botAI->IsHeal(bot)) &&
-        sideBoss == assignment.veklor && HasTwinBossAggro(bot, sideBoss))
+    if (!isWarlockTank && botAI->IsHeal(bot) &&
+        sideBoss == assignment.veklor && Aq40Helpers::HasTwinBossAggro(bot, sideBoss))
     {
         Position tankAnchor;
         if (GetTwinFarSidePosition(bot, sideBoss, oppositeBoss, 24.0f, 0.0f, tankAnchor) &&
@@ -891,25 +993,25 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         }
     }
 
-    if (isRangedDps && oppositeBoss)
+    if (isRangedDps)
     {
-        size_t botIndex = 0;
-        size_t count = 1;
-        GetTwinPositionCohortSlot(bot, botAI, false, botIndex, count);
-        float const angleOffset = GetTwinCenteredSlotOffset(botIndex, count, 0.22f);
-        Position outerPosition;
-        if (GetTwinFarSidePosition(bot, sideBoss, oppositeBoss, 28.0f, angleOffset, outerPosition))
+        Position centerLanePosition;
+        if (GetTwinCenterLanePosition(bot, botAI, centerLanePosition) && assignment.veklor)
         {
-            if (bot->GetExactDist2d(outerPosition.GetPositionX(), outerPosition.GetPositionY()) <= 2.5f)
-                return false;
+            bool const centerSupportsCaster =
+                assignment.veklor->GetExactDist2d(centerLanePosition.GetPositionX(), centerLanePosition.GetPositionY()) <= 36.0f;
+            if (centerSupportsCaster)
+            {
+                if (bot->GetExactDist2d(centerLanePosition.GetPositionX(), centerLanePosition.GetPositionY()) <= 3.0f)
+                    return false;
 
-            return MoveTo(bot->GetMapId(), outerPosition.GetPositionX(), outerPosition.GetPositionY(),
-                          outerPosition.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT, true, false);
+                return MoveTo(bot->GetMapId(), centerLanePosition.GetPositionX(), centerLanePosition.GetPositionY(),
+                              centerLanePosition.GetPositionZ(), false, false, false, true,
+                              MovementPriority::MOVEMENT_COMBAT, true, false);
+            }
         }
 
-        if (!bot->IsWithinLOSInMap(sideBoss) || bot->GetDistance2d(sideBoss) > 31.0f)
-            return MoveNear(sideBoss, 28.0f, MovementPriority::MOVEMENT_COMBAT);
+        return false;
     }
 
     if (botAI->IsHeal(bot) && sideBoss == assignment.veklor && oppositeBoss)
@@ -1100,17 +1202,8 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (!assignment.veklor)
         return false;
 
-    // Safety net: if the side mapping doesn't think Vek'lor is on our side
-    // but we ARE the designated warlock tank and Vek'lor is within cast range,
-    // proceed anyway.  This prevents side-mapping edge cases from permanently
-    // dropping Searing Pain threat on Vek'lor.
-    if (!IsTwinPrimaryTankOnActiveBoss(bot, assignment))
-    {
-        if (!assignment.veklor->IsAlive() ||
-            !bot->IsWithinLOSInMap(assignment.veklor) ||
-            bot->GetDistance2d(assignment.veklor) > 40.0f)
-            return false;
-    }
+    if (!Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+        return false;
 
     // During teleport recovery / opener hold, if Vek'lor is on the far side
     // of the room (closer to the opposite boss than to us), do NOT chase it
@@ -1144,7 +1237,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         GetTwinFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, angleOffset, anchorPosition);
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
-    bool const hasThreat = HasTwinBossAggro(bot, veklor);
+    bool const hasThreat = Aq40Helpers::HasTwinBossAggro(bot, veklor);
     bool const pickupEstablished = Aq40Helpers::IsTwinWarlockPickupEstablished(bot, botAI, assignment);
 
     // During opener/pickup recovery, keep the action narrowly focused on
@@ -1238,15 +1331,10 @@ bool Aq40TwinEmperorsWarlockTankAction::isUseful()
     if (!assignment.veklor)
         return false;
 
-    if (IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+    if (Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
         return true;
 
-    // Safety net: mirror Execute()'s fallback — allow the action when the
-    // side mapping disagrees but Vek'lor is alive and within cast range.
-    // Without this the warlock tank goes idle during teleport recovery.
-    return assignment.veklor->IsAlive() &&
-           bot->IsWithinLOSInMap(assignment.veklor) &&
-           bot->GetDistance2d(assignment.veklor) <= 40.0f;
+    return false;
 }
 
 bool Aq40TwinEmperorsAvoidArcaneBurstAction::Execute(Event /*event*/)
@@ -1444,8 +1532,12 @@ bool Aq40TwinEmperorsPetControlAction::Execute(Event /*event*/)
         return false;
 
     bool const isHunterPetController = bot->getClass() == CLASS_HUNTER;
-    Unit* petTarget = FindTwinPriorityBugTarget(bot, botAI, assignment,
-        Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
+    Unit* petTarget = nullptr;
+    if (isHunterPetController)
+        petTarget = Aq40BossActions::FindTwinMutateBug(botAI, encounterUnits);
+    else
+        petTarget = FindTwinPriorityBugTarget(bot, botAI, assignment,
+            Aq40BossActions::FindTwinSideBugs(botAI, encounterUnits));
     if (!petTarget)
     {
         if (!isHunterPetController)
