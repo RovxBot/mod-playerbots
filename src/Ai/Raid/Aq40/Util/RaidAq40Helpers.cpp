@@ -26,9 +26,7 @@ struct TwinKnownBossGuids
     ObjectGuid veknilashGuid = ObjectGuid::Empty;
 };
 
-// Ground Twin Emps room geometry in repo travel-node data:
-// - The Master's Eye = mid-room anchor
-// - Emperor Vek'lor / Vek'nilash = initial boss-side references
+// Room geometry constants.
 float constexpr kTwinRoomCenterX = -8954.855f;
 float constexpr kTwinRoomCenterY = 1235.7107f;
 float constexpr kTwinRoomCenterZ = -112.62047f;
@@ -36,20 +34,10 @@ float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
 float constexpr kTwinPrePullDetectionRange = 320.0f;
 
-struct TwinTeleportState
-{
-    Position veklorPosition;
-    Position veknilashPosition;
-    uint32 encounterStartMs = 0;
-    uint32 lastTeleportMs = 0;
-    bool initialized = false;
-};
-
 TwinInstanceAssignments sTwinAssignments;
-std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStates;
 std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
-std::unordered_map<uint32, bool> sCachedTwinSplitByX;  // Cached split axis per instance
+std::unordered_map<uint32, bool> sCachedTwinSplitByX;
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
@@ -151,16 +139,6 @@ void AppendKnownTwinBosses(Player* bot, GuidVector& units)
         if (ResolveTwinUnitFromGuid(bot, guid))
             units.push_back(guid);
     }
-}
-
-void SeedTwinCombatTimer(Player* bot)
-{
-    if (!bot || !bot->GetMap() || !IsTwinRaidCombatActiveInternal(bot))
-        return;
-
-    TwinTeleportState& state = sTwinTeleportStates[bot->GetMap()->GetInstanceId()];
-    if (!state.encounterStartMs)
-        state.encounterStartMs = getMSTime();
 }
 
 bool IsInTwinRoomBounds(Player* bot)
@@ -278,34 +256,6 @@ bool IsAnyGroupMemberInTwinRoomInternal(Player* bot)
     return false;
 }
 
-bool HasTwinDeadGroupMemberAwaitingRecovery(Player* bot)
-{
-    if (!bot || !bot->GetMap())
-        return false;
-
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    uint32 const instanceId = bot->GetMap()->GetInstanceId();
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || member == bot || member->IsAlive())
-            continue;
-        if (member->GetMapId() != bot->GetMapId())
-            continue;
-        if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
-            continue;
-        if (!IsInTwinRoomBounds(member) && !Aq40BossHelper::IsNearEncounter(bot, member))
-            continue;
-
-        return true;
-    }
-
-    return false;
-}
-
 uint32 GetGroupMemberOrder(Player* bot, Player* member)
 {
     if (!bot || !member)
@@ -352,12 +302,8 @@ uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
     switch (cohort)
     {
         case TwinRoleCohort::WarlockTank:
-            // Best shadow-resist warlock starts on the initial Vek'lor side
-            // so the caster boss is picked up immediately on pull.
             return (slot % 2 == 0) ? 1u : 0u;
         case TwinRoleCohort::MeleeTank:
-            // Main tank starts on the initial Vek'nilash side, off-tank on
-            // the opposite side waiting for the first teleport pickup.
             return slot % 2;
         case TwinRoleCohort::Healer:
         case TwinRoleCohort::Other:
@@ -365,34 +311,6 @@ uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
     }
 
     return slot % 2;
-}
-
-void UpdateTwinTeleportState(Player* bot, TwinAssignments const& assignments)
-{
-    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
-        return;
-
-    TwinTeleportState& state = sTwinTeleportStates[bot->GetMap()->GetInstanceId()];
-    if (!state.encounterStartMs && IsTwinRaidCombatActiveInternal(bot))
-        state.encounterStartMs = getMSTime();
-
-    Position const veklorPosition = assignments.veklor->GetPosition();
-    Position const veknilashPosition = assignments.veknilash->GetPosition();
-    if (!state.initialized)
-    {
-        state.veklorPosition = veklorPosition;
-        state.veknilashPosition = veknilashPosition;
-        state.initialized = true;
-        return;
-    }
-
-    float const veklorMove = state.veklorPosition.GetExactDist2d(veklorPosition);
-    float const veknilashMove = state.veknilashPosition.GetExactDist2d(veknilashPosition);
-    if ((veklorMove > 18.0f && veknilashMove > 18.0f) || veklorMove > 35.0f || veknilashMove > 35.0f)
-        state.lastTeleportMs = getMSTime();
-
-    state.veklorPosition = veklorPosition;
-    state.veknilashPosition = veknilashPosition;
 }
 
 bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
@@ -431,64 +349,24 @@ bool HasTwinBossAggroInternal(Player* member, Unit* boss)
            member->GetVictim() == boss;
 }
 
-bool IsTwinOuterAnchorPosition(Player* member, Unit* boss, Unit* oppositeBoss)
-{
-    if (!member || !boss)
-        return false;
-
-    if (oppositeBoss && !IsLikelyOnSameTwinSide(member, boss, oppositeBoss))
-        return false;
-
-    if (!oppositeBoss)
-        return true;
-
-    float const offsetX = member->GetPositionX() - boss->GetPositionX();
-    float const offsetY = member->GetPositionY() - boss->GetPositionY();
-    float const awayX = boss->GetPositionX() - oppositeBoss->GetPositionX();
-    float const awayY = boss->GetPositionY() - oppositeBoss->GetPositionY();
-    return (offsetX * awayX + offsetY * awayY) >= 0.0f;
-}
-
 bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assignment, Unit* boss)
 {
     if (!member || !member->IsAlive() || !boss || !boss->IsAlive())
         return false;
 
-    Unit* oppositeBoss = boss == assignment.veklor ? assignment.veknilash : assignment.veklor;
     if (!member->IsWithinLOSInMap(boss) || !HasTwinBossAggroInternal(member, boss))
         return false;
 
     float const distance = member->GetDistance2d(boss);
     float const minRange = boss == assignment.veklor ? 18.0f : 1.5f;
-    // Vek'nilash max range raised from 10y to 15y so that Uppercut knockback
-    // does not immediately flip the pickup flag false and freeze all DPS.
     float const maxRange = boss == assignment.veklor ? 36.0f : 15.0f;
     if (distance < minRange || distance > maxRange)
         return false;
 
-    // During teleport recovery the tank may approach from any direction
-    // (running across the room).  Requiring the outer-anchor dot-product
-    // check would fail if the tank arrives on the "inner" side (between the
-    // two bosses).  Once the tank has LOS + aggro + correct range the
-    // pickup is established; outer positioning is a steady-state maintenance
-    // concern that enforce-separation will handle.
     if (distance <= (boss == assignment.veklor ? 30.0f : 8.0f))
         return true;
 
-    return IsTwinOuterAnchorPosition(member, boss, oppositeBoss);
-}
-
-bool IsTwinHealBrotherCastActive(TwinAssignments const& assignment)
-{
-    if (!assignment.veklor || !assignment.veknilash)
-        return false;
-
-    Spell* veklorSpell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    Spell* veknilashSpell = assignment.veknilash->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    return (veklorSpell &&
-            Aq40SpellIds::MatchesAnySpellId(veklorSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother })) ||
-           (veknilashSpell &&
-            Aq40SpellIds::MatchesAnySpellId(veknilashSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }));
+    return true;
 }
 
 }  // namespace
@@ -496,14 +374,6 @@ bool IsTwinHealBrotherCastActive(TwinAssignments const& assignment)
 bool HasTwinBossAggro(Player* member, Unit* boss)
 {
     return HasTwinBossAggroInternal(member, boss);
-}
-
-bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
-{
-    if (!bot || !botAI || PlayerbotAI::IsTank(bot) || botAI->IsHeal(bot) || !assignment.veknilash)
-        return false;
-
-    return HasTwinBossAggroInternal(bot, assignment.veknilash);
 }
 
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment)
@@ -546,10 +416,6 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     bool const twinVisiblePrePull = botAI && HasTwinPrePullVisibility(bot, botAI);
     if (!encounterActive)
     {
-        // Preserve side assignments while the raid is staged inside the Twin room
-        // so the pre-pull tank split survives until the actual pull.
-        sTwinTeleportStates.erase(instanceId);
-
         if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull && !IsAnyGroupMemberInTwinRoomInternal(bot))
         {
             sTwinAssignments.erase(instanceId);
@@ -563,10 +429,6 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     TwinRoleAssignmentMap& assignments = sTwinAssignments[instanceId][static_cast<int>(cohort)];
     uint64 const botGuid = bot->GetGUID().GetRawValue();
 
-    // Purge stale entries for players who are no longer in this cohort
-    // (e.g. warlocks that died and are no longer designated tanks).
-    // Without this, dead warlock GUIDs stay cached and prevent the
-    // replacement warlock from getting the correct side assignment.
     {
         std::vector<uint64> staleGuids;
         for (auto const& [guid, _] : assignments)
@@ -671,18 +533,11 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
-    // Determine which axis separates the two bosses.  The axis is cached at
-    // encounter start and only recalculated when the bosses are very far apart
-    // (safely separated).  Recalculating at shorter distances caused the axis
-    // to flip when boss positions drifted, which reversed the side mapping and
-    // broke all tank assignments mid-fight.
     float separation = result.veklor->GetDistance2d(result.veknilash);
     bool splitByX;
     auto axisIt = sCachedTwinSplitByX.find(instanceId);
     if (axisIt != sCachedTwinSplitByX.end())
     {
-        // Use cached axis.  Only recalculate when bosses are very far apart
-        // and clearly on their correct sides (post-teleport settled).
         if (separation > 60.0f)
         {
             splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
@@ -706,9 +561,6 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     Unit* lowSide = veklorAxis < veknilashAxis ? result.veklor : result.veknilash;
     Unit* highSide = lowSide == result.veklor ? result.veknilash : result.veklor;
 
-    // Side index 0 is the initial Vek'nilash pull side; side index 1 is the
-    // initial Vek'lor side. This keeps the main tank on the melee-pull side
-    // and the off-tank/active warlock staged on the caster side from pull.
     bool sideZeroIsLowSide = true;
     auto sideMappingIt = sTwinSideZeroIsLowSide.find(instanceId);
     if (sideMappingIt == sTwinSideZeroIsLowSide.end())
@@ -727,15 +579,12 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     {
         if (boss == sideOneBoss)
             return 1u;
-
         return 0u;
     };
 
     result.veklorSideIndex = getBossSideIndex(result.veklor);
     result.veknilashSideIndex = getBossSideIndex(result.veknilash);
 
-    // DPS always attacks its assigned emperor, but readiness checks still need
-    // the current room-side index for that emperor so they wait on the correct pickup tank.
     if (cohort == TwinRoleCohort::Other)
     {
         if (PlayerbotAI::IsRanged(bot))
@@ -748,37 +597,20 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
             result.sideEmperor = result.veknilash;
             result.oppositeEmperor = result.veklor;
         }
-
         result.sideIndex = getBossSideIndex(result.sideEmperor);
-        UpdateTwinTeleportState(bot, result);
         return result;
     }
 
-    // Use identity-based boss assignment for tanks so that sideEmperor is
-    // always the boss they are supposed to engage, regardless of which
-    // physical room-side that boss is currently on.  The previous room-side
-    // mapping inverted after every teleport swap (bosses exchange positions
-    // but sTwinSideZeroIsLowSide never updates), causing tanks to position
-    // near the wrong boss while ChooseTarget sent them toward the correct
-    // one — producing the back-and-forth oscillation.
-    //
-    // Healers keep the stable-index room-side mapping because they need to
-    // spread across both sides independently of boss identity.
     if (cohort == TwinRoleCohort::WarlockTank)
     {
         result.sideEmperor = result.veklor;
         result.oppositeEmperor = result.veknilash;
         result.sideIndex = result.veklorSideIndex;
 
-        // Determine if this is the backup warlock tank.  Backup tanks
-        // (slot 1) stage on the opposite room-side so they are ready to
-        // pick up Vek'lor immediately after a teleport swap.
         uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
         uint32 const veklorRoomSide = result.veklorSideIndex;
         result.tankStageSide = stableIdx;
         result.isTankBackup = (stableIdx != veklorRoomSide);
-
-        UpdateTwinTeleportState(bot, result);
         return result;
     }
     if (cohort == TwinRoleCohort::MeleeTank)
@@ -787,32 +619,19 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         result.oppositeEmperor = result.veklor;
         result.sideIndex = result.veknilashSideIndex;
 
-        // Determine if this is the off-tank.  Off-tanks (slot 1) stage
-        // on the opposite room-side so they are ready to pick up
-        // Vek'nilash immediately after a teleport swap.
         uint32 const stableIdx = GetStableTwinRoleIndex(bot, botAI);
         uint32 const veknilashRoomSide = result.veknilashSideIndex;
         result.tankStageSide = stableIdx;
         result.isTankBackup = (stableIdx != veknilashRoomSide);
-
-        UpdateTwinTeleportState(bot, result);
         return result;
     }
 
-    // Healers: use stable room-side index so they spread across both sides.
+    // Healers: use stable room-side index.
     uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
     result.sideIndex = sideIndex;
     result.sideEmperor = sideIndex == 0 ? sideZeroBoss : sideOneBoss;
     result.oppositeEmperor = sideIndex == 0 ? sideOneBoss : sideZeroBoss;
-    UpdateTwinTeleportState(bot, result);
     return result;
-}
-
-GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI)
-{
-    GuidVector units = CollectTwinVisibleUnits(bot, botAI);
-    UpdateTwinBossCache(bot, botAI, units);
-    return units;
 }
 
 GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -920,9 +739,6 @@ bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
     if (bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot))
         return false;
 
-    if (HasTwinDeadGroupMemberAwaitingRecovery(bot))
-        return false;
-
     return HasTwinVisibleEmperors(bot, botAI);
 }
 
@@ -937,145 +753,6 @@ bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor
     return unit->GetDistance2d(sideEmperor) <= unit->GetDistance2d(oppositeEmperor);
 }
 
-bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit)
-{
-    if (!botAI || !unit)
-        return false;
-
-    return Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::TwinMutateBug }) ||
-           botAI->EqualLowercaseName(unit->GetName(), "mutate bug");
-}
-
-bool IsTwinExplodeBug(PlayerbotAI* botAI, Unit* unit)
-{
-    return botAI && unit && Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::TwinExplodeBug });
-}
-
-bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* bug)
-{
-    if (!bot || !botAI || !bug || !bug->IsAlive() || !assignment.sideEmperor)
-        return false;
-
-    if (!IsLikelyOnSameTwinSide(bug, assignment.sideEmperor, assignment.oppositeEmperor))
-        return false;
-
-    if (IsTwinMutateBug(botAI, bug) || IsTwinExplodeBug(botAI, bug))
-        return true;
-
-    Unit* victim = bug->GetVictim();
-    if (victim)
-    {
-        if (Player* victimPlayer = victim->ToPlayer())
-        {
-            if (victimPlayer == bot || Aq40BossHelper::IsEncounterParticipant(bot, victimPlayer))
-                return true;
-        }
-    }
-
-    return false;
-}
-
-TwinEncounterState GetTwinEncounterState(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    if (!bot || !botAI)
-        return TwinEncounterState::SteadySplit;
-
-    if (IsTwinPrePullReady(bot, botAI))
-        return TwinEncounterState::PrePullStage;
-
-    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    if (!bot->GetMap() || !assignments.veklor || !assignments.veknilash)
-        return TwinEncounterState::SteadySplit;
-
-    SeedTwinCombatTimer(bot);
-
-    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
-    if (itr == sTwinTeleportStates.end())
-        return TwinEncounterState::SteadySplit;
-
-    bool const warlockPickupEstablished = IsTwinWarlockPickupEstablished(bot, botAI, assignments);
-    bool const meleePickupEstablished = IsTwinMeleePickupEstablished(bot, botAI, assignments);
-    bool const healthySeparation = assignments.veklor->GetDistance2d(assignments.veknilash) >= 60.0f;
-    bool const stableEncounter =
-        warlockPickupEstablished && meleePickupEstablished && healthySeparation &&
-        !IsTwinHealBrotherCastActive(assignments);
-    uint32 const now = getMSTime();
-
-    if (itr->second.lastTeleportMs &&
-        (now - itr->second.lastTeleportMs) <= 10000 &&
-        !stableEncounter)
-        return TwinEncounterState::TeleportRecovery;
-
-    if (!itr->second.lastTeleportMs &&
-        itr->second.encounterStartMs &&
-        (now - itr->second.encounterStartMs) <= 10000 &&
-        !stableEncounter)
-        return TwinEncounterState::OpenerHold;
-
-    if (IsTwinPreTeleportWindow(bot, botAI, attackers) && stableEncounter)
-        return TwinEncounterState::PreTeleportStage;
-
-    return TwinEncounterState::SteadySplit;
-}
-
-bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    return GetTwinEncounterState(bot, botAI, attackers) == TwinEncounterState::TeleportRecovery;
-}
-
-bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    TwinEncounterState const state = GetTwinEncounterState(bot, botAI, attackers);
-    return state == TwinEncounterState::OpenerHold || state == TwinEncounterState::TeleportRecovery;
-}
-
-bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    return assignments.veklor && assignments.veknilash;
-}
-
-bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    if (!bot || !bot->GetMap() || !assignments.veklor || !assignments.veknilash)
-        return false;
-
-    auto const itr = sTwinTeleportStates.find(bot->GetMap()->GetInstanceId());
-    if (itr == sTwinTeleportStates.end())
-        return false;
-
-    uint32 const referenceMs = itr->second.lastTeleportMs ? itr->second.lastTeleportMs : itr->second.encounterStartMs;
-    if (!referenceMs)
-        return false;
-
-    uint32 const elapsed = getMSTime() - referenceMs;
-    return elapsed >= 25000 && elapsed <= 38000;
-}
-
-bool IsTwinReadyForPreTeleportStage(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    if (!bot || !botAI)
-        return false;
-
-    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
-    if (!assignments.veklor || !assignments.veknilash)
-        return false;
-
-    if (!IsTwinPreTeleportWindow(bot, botAI, attackers))
-        return false;
-
-    TwinEncounterState const state = GetTwinEncounterState(bot, botAI, attackers);
-    if (state == TwinEncounterState::TeleportRecovery ||
-        state == TwinEncounterState::OpenerHold)
-        return false;
-
-    return IsTwinWarlockPickupEstablished(bot, botAI, assignments) &&
-           IsTwinMeleePickupEstablished(bot, botAI, assignments) &&
-           assignments.veklor->GetDistance2d(assignments.veknilash) >= 60.0f &&
-           !IsTwinHealBrotherCastActive(assignments);
-}
-
 bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
 {
     if (!bot || !botAI || !assignment.veklor)
@@ -1085,12 +762,6 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
     if (!group)
         return false;
 
-    // Check ALL designated warlock tanks against Vek'lor directly rather than
-    // filtering by side index.  After a teleport the cached side mapping can
-    // invert (Vek'lor now sits on the formerly-Vek'nilash side), which makes
-    // GetTwinBossSideIndex return the wrong value and causes this function to
-    // skip the warlock that actually has aggro.  Boss identity is stable;
-    // room-side mapping is transient.
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1117,9 +788,6 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
     if (!group)
         return false;
 
-    // Check ALL melee tanks against Vek'nilash directly, same rationale as
-    // IsTwinWarlockPickupEstablished — boss identity is stable across
-    // teleports; room-side mapping is not.
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1137,19 +805,15 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
     return false;
 }
 
-bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss)
+bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    if (!bot || !botAI || !boss)
-        return false;
-
-    if (boss == assignment.veklor)
-        return IsTwinWarlockPickupEstablished(bot, botAI, assignment);
-
-    if (boss == assignment.veknilash)
-        return IsTwinMeleePickupEstablished(bot, botAI, assignment);
-
-    return false;
+    TwinAssignments const assignments = GetTwinAssignments(bot, botAI, attackers);
+    return assignments.veklor && assignments.veknilash;
 }
+
+// ---------------------------------------------------------------------------
+// Non-Twin-Emperors helpers (C'Thun, Skeram, resistance, cleanup)
+// ---------------------------------------------------------------------------
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI)
 {
@@ -1167,8 +831,6 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     uint32 const instanceId = (bot && bot->GetMap()) ? bot->GetMap()->GetInstanceId() : 0;
 
-    // Wipe/reset safety: if no encounter cluster is active near the caller,
-    // clear the timer unconditionally so stale state cannot survive a repull.
     if (bot && !Aq40BossHelper::IsEncounterCombatActive(bot))
     {
         sCthunPhase2StartByInstance.erase(instanceId);
@@ -1177,10 +839,6 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
 
     if (!cthunBody)
     {
-    // Body not in this caller's view.  Only erase the timer if no
-    // C'Thun-related unit is visible at all (encounter over).  A bot
-    // that sees tentacles but not the body must not zero the shared
-    // timer — other callers who CAN see the body will maintain it.
         if (!Aq40BossHelper::HasAnyNamedUnit(botAI, attackers,
                 { "eye of c'thun", "flesh tentacle", "eye tentacle",
                   "giant eye tentacle", "claw tentacle", "giant claw tentacle" }))
@@ -1189,8 +847,6 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
             return 0;
         }
 
-    // Tentacles visible but body not — return the stored elapsed time
-    // so wave prediction stays consistent with bots that can see the body.
         auto itr = sCthunPhase2StartByInstance.find(instanceId);
         if (itr != sCthunPhase2StartByInstance.end())
             return getMSTime() - itr->second;
@@ -1278,14 +934,11 @@ bool IsSkeramPostBlinkHoldActive(Player* bot, PlayerbotAI* botAI, GuidVector con
 
 GameObject* FindLikelyStomachExitPortal(Player* bot, PlayerbotAI* botAI)
 {
-    // Primary: find by entry ID (AzerothCore C'Thun script portal entry).
-    // Pattern lifted from Karazhan NPC_GREEN/BLUE/RED_PORTAL entry ID lookups.
     static constexpr uint32 CTHUN_EXIT_PORTAL_ENTRY = 180523;
     GameObject* portal = bot->FindNearestGameObject(CTHUN_EXIT_PORTAL_ENTRY, 150.0f);
     if (portal)
         return portal;
 
-    // Fallback: string matching for non-standard server scripts.
     GuidVector nearbyGameObjects = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
     GameObject* candidate = nullptr;
     float bestDistance = 999.0f;
@@ -1326,7 +979,6 @@ bool ResetEncounterState(Player* bot)
     bool erased = false;
 
     erased = sTwinAssignments.erase(instanceId) > 0 || erased;
-    erased = sTwinTeleportStates.erase(instanceId) > 0 || erased;
     erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
     erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
@@ -1343,7 +995,6 @@ bool HasPersistentEncounterState(Player* bot)
 
     uint32 const instanceId = bot->GetMap()->GetInstanceId();
     return sTwinAssignments.find(instanceId) != sTwinAssignments.end() ||
-           sTwinTeleportStates.find(instanceId) != sTwinTeleportStates.end() ||
            sTwinKnownTwinBosses.find(instanceId) != sTwinKnownTwinBosses.end() ||
            sCthunPhase2StartByInstance.find(instanceId) != sCthunPhase2StartByInstance.end() ||
            sCachedTwinSplitByX.find(instanceId) != sCachedTwinSplitByX.end() ||
@@ -1414,10 +1065,6 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (!hasPersistentEncounterState)
         return false;
 
-    // Do not run cleanup while any group member is staged inside the Twin
-    // Emperors room.  Individual bots outside the room must not wipe the
-    // shared instance caches that bots inside the room are actively using
-    // for pre-pull positioning.
     if (IsAnyGroupMemberInTwinRoomInternal(bot))
         return false;
 

@@ -19,15 +19,6 @@ enum class TwinRoleCohort : uint8
     Other = 3,
 };
 
-enum class TwinEncounterState : uint8
-{
-    PrePullStage = 0,
-    OpenerHold = 1,
-    SteadySplit = 2,
-    PreTeleportStage = 3,
-    TeleportRecovery = 4,
-};
-
 struct TwinAssignments
 {
     Unit* sideEmperor = nullptr;
@@ -37,9 +28,6 @@ struct TwinAssignments
     uint32 sideIndex = 0;
     uint32 veklorSideIndex = 0;
     uint32 veknilashSideIndex = 0;
-    // For tanks: which room-side the tank is assigned to stage on.
-    // Primary tanks (slot 0) stage near their boss; backup tanks (slot 1)
-    // stage on the opposite side to catch their boss after teleport.
     uint32 tankStageSide = 0;
     bool isTankBackup = false;
 };
@@ -47,7 +35,6 @@ struct TwinAssignments
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI);
 uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI);
 TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
-GuidVector GetTwinPrePullUnits(Player* bot, PlayerbotAI* botAI);
 GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsInTwinEmperorRoom(Player* bot);
 bool IsTwinRaidCombatActive(Player* bot);
@@ -55,19 +42,9 @@ bool IsTwinPlayerPullAuthorized(Player* bot, PlayerbotAI* botAI, GuidVector cons
 bool IsTwinCombatInProgress(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI);
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor);
-bool IsTwinMutateBug(PlayerbotAI* botAI, Unit* unit);
-bool IsTwinExplodeBug(PlayerbotAI* botAI, Unit* unit);
-bool IsTwinCriticalSideBug(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* bug);
-TwinEncounterState GetTwinEncounterState(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
-bool IsTwinDpsWaitWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
-bool IsTwinTeleportRecoveryWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
-bool IsTwinPreTeleportWindow(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
-bool IsTwinReadyForPreTeleportStage(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
-bool IsTwinAssignedTankReady(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment, Unit* boss);
 bool HasTwinBossAggro(Player* member, Unit* boss);
-bool IsTwinDpsDraggingMeleeBoss(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 

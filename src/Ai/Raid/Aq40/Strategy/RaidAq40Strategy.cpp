@@ -94,10 +94,10 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
 
     // Twin Emperors baseline strategy:
-    // - stage the raid on room entry so pull positions are ready before combat starts
-    // - tanks/melee favor Vek'nilash, ranged non-tanks favor Vek'lor
-    // - AQ40 resistance manager enables rshadow during the encounter
-    // - pre-stage before teleports, keep the emperors separated, and reserve some DPS for side bugs
+    // - tanks move to assigned sides on room entry, raid holds center
+    // - warlock tanks engage Vek'lor, melee tanks engage Vek'nilash
+    // - at teleport each side's appropriate tank picks up the new boss
+    // - tanks that can't tank the current boss on their side hold position
     triggers.push_back(new TriggerNode("aq40 twin emperors room entry",
         { NextAction("aq40 twin emperors pre pull stage", ACTION_RAID + 8) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors active",
@@ -105,30 +105,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             NextAction("aq40 twin emperors choose target", ACTION_RAID + 2),
             NextAction("aq40 twin emperors hold split", ACTION_RAID + 3),
             NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 4),
-            NextAction("aq40 twin emperors pet control", ACTION_RAID + 2),
         }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors pre teleport",
-        { NextAction("aq40 twin emperors pre teleport stage", ACTION_RAID + 6) }));
-    // Hold-split must run at a higher priority than choose-target so that
-    // positioning is established before the bot pins and chases a target.
-    // Previously choose-target at +5 would return OK (pinning a target),
-    // consuming the tick before hold-split at +4 could fire — leaving bots
-    // running toward bosses with no split-positioning discipline.
-    triggers.push_back(new TriggerNode("aq40 twin emperors role mismatch",
-        {
-            NextAction("aq40 twin emperors hold split", ACTION_RAID + 6),
-            NextAction("aq40 twin emperors choose target", ACTION_RAID + 5),
-        }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors has opposite aggro",
-        { NextAction("aq40 twin emperors move away from brother", ACTION_EMERGENCY + 1) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors arcane burst risk",
-        { NextAction("aq40 twin emperors avoid arcane burst", ACTION_RAID + 5) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors blizzard risk",
-        { NextAction("aq40 twin emperors avoid blizzard", ACTION_RAID + 5) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors heal brother",
-        { NextAction("aq40 twin emperors enforce separation", ACTION_RAID + 7) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors need separation",
-        { NextAction("aq40 twin emperors enforce separation", ACTION_RAID + 6) }));
 
     // Ouro baseline strategy:
     // - keep melee contact to reduce avoidable submerge windows

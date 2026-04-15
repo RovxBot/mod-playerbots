@@ -231,17 +231,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40TwinEmperorsPreTeleportStageAction : public MovementAction
-{
-public:
-    Aq40TwinEmperorsPreTeleportStageAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 twin emperors pre teleport stage")
-    {
-    }
-    bool isUseful() override;
-    bool Execute(Event event) override;
-};
-
 class Aq40TwinEmperorsWarlockTankAction : public AttackAction
 {
 public:
@@ -250,62 +239,6 @@ public:
     {
     }
     bool isUseful() override;
-    bool Execute(Event event) override;
-};
-
-class Aq40TwinEmperorsAvoidArcaneBurstAction : public MovementAction
-{
-public:
-    Aq40TwinEmperorsAvoidArcaneBurstAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 twin emperors avoid arcane burst")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
-class Aq40TwinEmperorsAvoidBlizzardAction : public MovementAction
-{
-public:
-    Aq40TwinEmperorsAvoidBlizzardAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 twin emperors avoid blizzard")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
-class Aq40TwinEmperorsEnforceSeparationAction : public AttackAction
-{
-public:
-    Aq40TwinEmperorsEnforceSeparationAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "aq40 twin emperors enforce separation")
-    {
-    }
-    bool isUseful() override
-    {
-        return Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
-               (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
-    }
-    bool Execute(Event event) override;
-};
-
-class Aq40TwinEmperorsPetControlAction : public Action
-{
-public:
-    Aq40TwinEmperorsPetControlAction(PlayerbotAI* botAI)
-        : Action(botAI, "aq40 twin emperors pet control")
-    {
-    }
-    bool isUseful() override { return bot->GetPet() != nullptr; }
-    bool Execute(Event event) override;
-};
-
-class Aq40TwinEmperorsMoveAwayFromBrotherAction : public MovementAction
-{
-public:
-    Aq40TwinEmperorsMoveAwayFromBrotherAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 twin emperors move away from brother")
-    {
-    }
     bool Execute(Event event) override;
 };
 
