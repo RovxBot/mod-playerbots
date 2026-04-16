@@ -360,15 +360,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (dynamic_cast<PetAttackAction*>(action))
         return 0.0f;
 
+    // Suppress follow during combat so bots don't run back to the player
+    // between positioning ticks.
     if (dynamic_cast<FollowAction*>(action))
-        return 1.0f;
+        return 0.0f;
 
     if (dynamic_cast<CombatFormationMoveAction*>(action) ||
         dynamic_cast<FleeAction*>(action))
-        return 0.0f;
-
-    if (dynamic_cast<ReachTargetAction*>(action) ||
-        dynamic_cast<CastReachTargetSpellAction*>(action))
         return 0.0f;
 
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))

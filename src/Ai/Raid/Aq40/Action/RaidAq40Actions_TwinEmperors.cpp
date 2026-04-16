@@ -124,106 +124,129 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 }
 
 // ---------------------------------------------------------------------------
-// ChooseTargetAction - assign the correct target based on role and which
-// boss is currently on this bot's assigned side of the room.
+// ChooseTargetAction - pin correct target, move into range, and attack.
+// Runs every tick.  Returns false only when the bot is on the correct
+// target AND in range, so the class AI can take over spell casting.
 //
-// Warlock tank -> Vek'lor if primary tank for it, else hold.
-// Melee tank   -> Vek'nilash if primary tank for it, else hold.
-// Ranged DPS   -> Vek'lor (follow it wherever it is).
-// Melee DPS    -> Vek'nilash (follow it wherever it is).
+// Warlock tank  -> defer to WarlockTankAction
+// Melee tank    -> defer to HoldSplit for positioning
+// Ranged DPS    -> Vek'lor
+// Melee DPS     -> Vek'nilash
+// Hunter        -> mutate bugs first, then Vek'lor
+// Healer        -> return false (class AI handles healing)
 // ---------------------------------------------------------------------------
 bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
         context->GetValue<GuidVector>("attackers")->Get());
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor || !assignment.veknilash)
+    if (!assignment.veklor && !assignment.veknilash)
         return false;
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
-    bool const isRangedDps = !isWarlockTank && !isMeleeTank && botAI->IsRanged(bot) && !botAI->IsHeal(bot);
+
+    // Tanks are handled by WarlockTankAction and HoldSplitAction.
+    if (isWarlockTank || isMeleeTank)
+        return false;
+
+    bool const isHealer = botAI->IsHeal(bot);
+    if (isHealer)
+        return false;
+
+    bool const isHunter = bot->getClass() == CLASS_HUNTER;
+    bool const isRangedDps = botAI->IsRanged(bot);
 
     Unit* desiredTarget = nullptr;
 
-    if (isWarlockTank)
+    // Hunters prioritize mutate bugs threatening the raid.
+    if (isHunter)
     {
-        // Warlock tank targets Vek'lor when it's the primary tank.
-        // Backup warlocks hold and don't attack.
-        if (Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
-            desiredTarget = assignment.veklor;
-        else
-            return true;  // Backup warlock - hold, don't attack.
-    }
-    else if (isMeleeTank)
-    {
-        // Melee tank targets Vek'nilash when it's the primary tank.
-        if (Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
-            desiredTarget = assignment.veknilash;
-        else
-            return true;  // Backup tank - hold on assigned side.
-    }
-    else if (isRangedDps)
-    {
-        desiredTarget = assignment.veklor;
-    }
-    else if (!botAI->IsHeal(bot))
-    {
-        // Melee DPS.
-        desiredTarget = assignment.veknilash;
-    }
-    else
-    {
-        // Healer - don't override target selection.
-        return false;
+        Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
+        if (mutateBug && mutateBug->IsAlive())
+            desiredTarget = mutateBug;
     }
 
     if (!desiredTarget)
+    {
+        if (isRangedDps)
+            desiredTarget = assignment.veklor ? assignment.veklor : assignment.veknilash;
+        else
+            desiredTarget = assignment.veknilash ? assignment.veknilash : assignment.veklor;
+    }
+
+    if (!desiredTarget || !desiredTarget->IsAlive())
         return false;
 
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
-    if (currentTarget == desiredTarget)
-        return false;
-
+    // Always keep the target pinned.
     PinTwinTarget(botAI, context, desiredTarget);
-    return Attack(desiredTarget);
+
+    float const distance = bot->GetDistance2d(desiredTarget);
+    float const attackRange = isRangedDps ? 28.0f : 5.0f;
+
+    // If out of range, move toward the target.
+    if (distance > attackRange || !bot->IsWithinLOSInMap(desiredTarget))
+    {
+        float const moveRange = isRangedDps ? 25.0f : 3.0f;
+        return MoveNear(desiredTarget, moveRange, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // In range - attack if not already, then return false so class AI casts spells.
+    if (bot->GetVictim() != desiredTarget)
+        Attack(desiredTarget);
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------
-// HoldSplitAction - tanks stay on their assigned side of the room.
-// Primary tank: move to engage range with the correct boss.
-// Backup tank: hold at side anchor, wait for next teleport.
+// HoldSplitAction - tank positioning.
+// Primary melee tank: pin Vek'nilash, move to melee range, attack.
+// Backup tanks: hold at assigned side anchor.
+// Backup warlock: pre-cast Shadow Ward while waiting.
 // ---------------------------------------------------------------------------
 bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
         context->GetValue<GuidVector>("attackers")->Get());
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor || !assignment.veknilash)
+    if (!assignment.veklor && !assignment.veknilash)
         return false;
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
 
     if (!isWarlockTank && !isMeleeTank)
-        return false;  // Only tanks need hold-split positioning.
+        return false;
 
     bool const isPrimaryTank = Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
 
-    if (isPrimaryTank)
+    if (isPrimaryTank && isMeleeTank && assignment.veknilash)
     {
-        // Primary melee tank: move to melee range of Vek'nilash.
-        // Warlock tank positioning is handled by WarlockTankAction.
-        if (isMeleeTank)
-        {
-            float const range = bot->GetDistance2d(assignment.veknilash);
-            if (range > 5.0f)
-                return MoveTo(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
-        }
-        return false;
+        // Primary melee tank: pin Vek'nilash and engage.
+        PinTwinTarget(botAI, context, assignment.veknilash);
+
+        float const range = bot->GetDistance2d(assignment.veknilash);
+        if (range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
+            return MoveNear(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
+
+        if (bot->GetVictim() != assignment.veknilash)
+            Attack(assignment.veknilash);
+
+        return false;  // Let class AI handle tanking abilities.
     }
 
-    // Backup tank: hold at assigned side anchor, wait for teleport.
+    if (isPrimaryTank)
+        return false;  // Primary warlock tank is handled by WarlockTankAction.
+
+    // Backup tank: hold at assigned side anchor.
+    // Pre-cast Shadow Ward if warlock.
+    if (isWarlockTank && !botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+        botAI->CastSpell("shadow ward", bot);
+
+    // Stop attacking - backup tanks should not engage the wrong boss type.
+    if (bot->GetVictim())
+        bot->AttackStop();
+
     uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
     Position anchor = GetTwinSideAnchor(sideIndex);
 

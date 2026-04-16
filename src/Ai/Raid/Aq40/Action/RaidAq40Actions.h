@@ -209,7 +209,6 @@ public:
         : AttackAction(botAI, "aq40 twin emperors choose target")
     {
     }
-    bool isUseful() override { return !botAI->IsHeal(bot); }
     bool Execute(Event event) override;
 };
 
