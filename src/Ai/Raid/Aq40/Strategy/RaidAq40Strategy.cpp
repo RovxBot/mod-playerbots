@@ -52,10 +52,13 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Fankriss baseline strategy:
     // - kill Spawn of Fankriss immediately
     // - fall back to boss pressure between spawn waves
+    // - tank swap when Mortal Wound stacks become dangerous
     triggers.push_back(new TriggerNode("aq40 fankriss active",
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 2) }));
     triggers.push_back(new TriggerNode("aq40 fankriss spawn active",
         { NextAction("aq40 fankriss choose target", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 fankriss mortal wound",
+        { NextAction("aq40 fankriss tank swap", ACTION_RAID + 5) }));
 
     // AQ40 trash baseline strategy:
     // - kill mindslayers first (deadly AoE Mind Blast)
@@ -171,6 +174,7 @@ void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new Aq40SkeramMultiplier(botAI));
     multipliers.push_back(new Aq40BugTrioMultiplier(botAI));
     multipliers.push_back(new Aq40SarturaMultiplier(botAI));
+    multipliers.push_back(new Aq40FankrissMultiplier(botAI));
     multipliers.push_back(new Aq40HuhuranMultiplier(botAI));
     multipliers.push_back(new Aq40OuroMultiplier(botAI));
     multipliers.push_back(new Aq40TwinEmperorsMultiplier(botAI));

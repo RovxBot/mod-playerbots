@@ -239,6 +239,39 @@ float Aq40SarturaMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
+float Aq40FankrissMultiplier::GetValue(Action* action)
+{
+    if (!action || !Aq40BossHelper::IsInAq40(bot))
+        return 1.0f;
+
+    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "fankriss the unyielding" }))
+        return 1.0f;
+
+    std::string const actionName = action->getName();
+
+    // Whitelist Fankriss-specific actions.
+    if (actionName.compare(0, 14, "aq40 fankriss ") == 0)
+        return 1.0f;
+
+    // Suppress trash actions during boss encounter.
+    if (actionName.compare(0, 11, "aq40 trash ") == 0)
+        return 0.0f;
+
+    // Suppress generic assist actions that scatter DPS away from boss-assigned targets.
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+        return 0.0f;
+
+    // Suppress flee/formation movement for non-tanks to keep the raid stable.
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (dynamic_cast<FleeAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action))
+            return 0.0f;
+    }
+
+    return 1.0f;
+}
+
 float Aq40HuhuranMultiplier::GetValue(Action* action)
 {
     if (!action || !Aq40BossHelper::IsInAq40(bot))

@@ -128,6 +128,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40FankrissTankSwapAction : public AttackAction
+{
+public:
+    Aq40FankrissTankSwapAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 fankriss tank swap") {}
+    bool Execute(Event event) override;
+};
+
 class Aq40TrashChooseTargetAction : public AttackAction
 {
 public:

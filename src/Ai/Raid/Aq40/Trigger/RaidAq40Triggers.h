@@ -113,6 +113,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40FankrissMortalWoundTrigger : public Trigger
+{
+public:
+    Aq40FankrissMortalWoundTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 fankriss mortal wound") {}
+    bool IsActive() override;
+};
+
 class Aq40TrashActiveTrigger : public Trigger
 {
 public:

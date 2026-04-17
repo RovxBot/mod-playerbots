@@ -1065,6 +1065,8 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
 
                 if (assignedIndex < spawns.size())
                     target = spawns[assignedIndex];
+                else if (!spawns.empty())
+                    target = spawns.back();
             }
         }
         else if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot))
@@ -1073,6 +1075,9 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
         }
         else
         {
+            // Ranged/healers prefer a tank-held spawn, but fall back to any spawn
+            // to avoid the deadlock where nobody attacks spawns because no tank
+            // has picked one up yet.
             for (Unit* spawn : spawns)
             {
                 if (Aq40BossHelper::IsUnitHeldByEncounterTank(bot, spawn))
@@ -1090,6 +1095,10 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     {
         target = fankriss;
     }
+
+    // Fall back to Fankriss if no target was resolved (e.g. tank index overshoot).
+    if (!target)
+        target = fankriss;
 
     bool const targetIsSpawn = target && botAI->EqualLowercaseName(target->GetName(), "spawn of fankriss");
     if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, !targetIsSpawn))

@@ -25,6 +25,7 @@ public:
         creators["aq40 bug trio poison cloud"] = &RaidAq40TriggerContext::bug_trio_poison_cloud;
         creators["aq40 fankriss active"] = &RaidAq40TriggerContext::fankriss_active;
         creators["aq40 fankriss spawn active"] = &RaidAq40TriggerContext::fankriss_spawn_active;
+        creators["aq40 fankriss mortal wound"] = &RaidAq40TriggerContext::fankriss_mortal_wound;
         creators["aq40 trash active"] = &RaidAq40TriggerContext::trash_active;
         creators["aq40 trash dangerous aoe"] = &RaidAq40TriggerContext::trash_dangerous_aoe;
         creators["aq40 trash mindslayer cast"] = &RaidAq40TriggerContext::trash_mindslayer_cast;
@@ -75,6 +76,7 @@ private:
     static Trigger* bug_trio_poison_cloud(PlayerbotAI* botAI) { return new Aq40BugTrioPoisonCloudTrigger(botAI); }
     static Trigger* fankriss_active(PlayerbotAI* botAI) { return new Aq40FankrissActiveTrigger(botAI); }
     static Trigger* fankriss_spawn_active(PlayerbotAI* botAI) { return new Aq40FankrissSpawnedTrigger(botAI); }
+    static Trigger* fankriss_mortal_wound(PlayerbotAI* botAI) { return new Aq40FankrissMortalWoundTrigger(botAI); }
     static Trigger* trash_active(PlayerbotAI* botAI) { return new Aq40TrashActiveTrigger(botAI); }
     static Trigger* trash_dangerous_aoe(PlayerbotAI* botAI) { return new Aq40TrashDangerousAoeTrigger(botAI); }
     static Trigger* trash_mindslayer_cast(PlayerbotAI* botAI) { return new Aq40TrashMindslayerCastTrigger(botAI); }

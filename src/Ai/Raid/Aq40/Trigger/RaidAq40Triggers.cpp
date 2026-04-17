@@ -5,6 +5,7 @@
 #include "ObjectGuid.h"
 #include "SharedDefines.h"
 #include "Spell.h"
+#include "../Action/RaidAq40Actions.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
 
@@ -305,6 +306,24 @@ bool Aq40FankrissSpawnedTrigger::IsActive()
     }
 
     return false;
+}
+
+bool Aq40FankrissMortalWoundTrigger::IsActive()
+{
+    if (!Aq40FankrissActiveTrigger(botAI).IsActive())
+        return false;
+
+    // Only fire for tanks that are currently tanking Fankriss with dangerous Mortal Wound stacks.
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* fankriss = Aq40BossActions::FindFankrissTarget(botAI, encounterUnits);
+    if (!fankriss || !Aq40BossHelper::IsUnitFocusedOnPlayer(fankriss, bot))
+        return false;
+
+    Aura* mortalWound = bot->GetAura(Aq40SpellIds::FankrissMortalWound);
+    return mortalWound && mortalWound->GetStackAmount() >= 5;
 }
 
 bool Aq40TrashActiveTrigger::IsActive()

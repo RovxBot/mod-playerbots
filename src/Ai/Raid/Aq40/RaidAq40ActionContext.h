@@ -22,6 +22,7 @@ public:
         creators["aq40 bug trio interrupt heal"] = &RaidAq40ActionContext::bug_trio_interrupt_heal;
         creators["aq40 bug trio avoid poison cloud"] = &RaidAq40ActionContext::bug_trio_avoid_poison_cloud;
         creators["aq40 fankriss choose target"] = &RaidAq40ActionContext::fankriss_choose_target;
+        creators["aq40 fankriss tank swap"] = &RaidAq40ActionContext::fankriss_tank_swap;
         creators["aq40 trash choose target"] = &RaidAq40ActionContext::trash_choose_target;
         creators["aq40 trash interrupt mind blast"] = &RaidAq40ActionContext::trash_interrupt_mind_blast;
         creators["aq40 trash avoid dangerous aoe"] = &RaidAq40ActionContext::trash_avoid_dangerous_aoe;
@@ -87,6 +88,7 @@ private:
         return new Aq40BugTrioAvoidPoisonCloudAction(botAI);
     }
     static Action* fankriss_choose_target(PlayerbotAI* botAI) { return new Aq40FankrissChooseTargetAction(botAI); }
+    static Action* fankriss_tank_swap(PlayerbotAI* botAI) { return new Aq40FankrissTankSwapAction(botAI); }
     static Action* trash_choose_target(PlayerbotAI* botAI) { return new Aq40TrashChooseTargetAction(botAI); }
     static Action* trash_interrupt_mind_blast(PlayerbotAI* botAI)
     {
