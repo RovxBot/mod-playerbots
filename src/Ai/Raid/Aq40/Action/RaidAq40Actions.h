@@ -212,10 +212,13 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40TwinEmperorsHoldSplitAction : public MovementAction
+class Aq40TwinEmperorsHoldSplitAction : public AttackAction
 {
 public:
-    Aq40TwinEmperorsHoldSplitAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin emperors hold split") {}
+    Aq40TwinEmperorsHoldSplitAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "aq40 twin emperors hold split")
+    {
+    }
     bool Execute(Event event) override;
 };
 
