@@ -68,6 +68,13 @@ bool Aq40BotIsNotInCombatTrigger::IsActive()
     if (!bot || !bot->IsAlive() || bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot))
         return false;
 
+    GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
+    if (!Aq40BossHelper::GetActiveCombatUnits(botAI, attackers).empty())
+        return false;
+
+    if (Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, attackers))
+        return false;
+
     return Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI);
 }
 
@@ -82,15 +89,7 @@ bool Aq40SkeramActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }))
-            return true;
-    }
-
-    return false;
+    return Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, AI_VALUE(GuidVector, "attackers"));
 }
 
 bool Aq40SkeramBlinkTrigger::IsActive()
@@ -107,8 +106,8 @@ bool Aq40SkeramArcaneExplosionTrigger::IsActive()
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
+    GuidVector skeramUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : skeramUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !botAI->EqualLowercaseName(unit->GetName(), "the prophet skeram"))
@@ -151,8 +150,8 @@ bool Aq40SkeramExecutePhaseTrigger::IsActive()
     if (!Aq40SkeramActiveTrigger(botAI).IsActive())
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    for (ObjectGuid const guid : encounterUnits)
+    GuidVector skeramUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    for (ObjectGuid const guid : skeramUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "the prophet skeram" }) && unit->GetHealthPct() <= 25.0f)
@@ -313,7 +312,11 @@ bool Aq40TrashActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
+    if (Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, attackers))
+        return false;
+
+    GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
     if (encounterUnits.empty() || Aq40BossHelper::IsBossEncounterActive(botAI, encounterUnits))
         return false;
 

@@ -138,8 +138,8 @@ float Aq40SkeramMultiplier::GetValue(Action* action)
     if (!action || !Aq40BossHelper::IsInAq40(bot))
         return 1.0f;
 
-    GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "the prophet skeram" }))
+    GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
+    if (!Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, attackers))
         return 1.0f;
 
     std::string const actionName = action->getName();
@@ -152,6 +152,9 @@ float Aq40SkeramMultiplier::GetValue(Action* action)
         actionName == "aq40 choose target";
     if (isSkeramControlAction)
         return 1.0f;
+
+    if (actionName.compare(0, 11, "aq40 trash ") == 0)
+        return 0.0f;
 
     // Suppress generic assist actions that scatter DPS across split copies
     // (pattern used by all reference raids for complex encounters).

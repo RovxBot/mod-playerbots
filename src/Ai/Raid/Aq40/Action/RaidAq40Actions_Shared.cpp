@@ -774,14 +774,15 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
 
 bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
 {
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
     Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
     if (!target)
         return false;
 
     if (!Aq40BossHelper::IsEncounterTank(bot, bot))
     {
-        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, context->GetValue<GuidVector>("attackers")->Get()))
+        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, attackers))
             return false;
 
         if (!Aq40BossHelper::HasAnyNamedUnitHeldByEncounterTank(botAI, bot, encounterUnits, { "the prophet skeram" }, true))
@@ -791,12 +792,18 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
+    float const desiredRange = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 24.0f : 4.0f;
+    float const engageSlack = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 4.0f : 2.0f;
+    if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
+        return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+
     return Attack(target);
 }
 
 bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
 {
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
     std::vector<Unit*> skerams =
         Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "the prophet skeram" });
 
@@ -834,36 +841,34 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
+    if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > 22.0f)
+        return MoveNear(target, 18.0f, MovementPriority::MOVEMENT_COMBAT);
+
     return Attack(target);
 }
 
 bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
 {
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-    std::vector<Unit*> skerams =
-        Aq40BossActions::FindUnitsByAnyName(botAI, encounterUnits, { "the prophet skeram" });
-
-    if (skerams.empty())
-        return false;
-
-    Unit* target = skerams.front();
-    for (Unit* skeram : skerams)
-    {
-        if (skeram && target && skeram->GetHealthPct() < target->GetHealthPct())
-            target = skeram;
-    }
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits, true);
 
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
     if (!Aq40BossHelper::IsEncounterTank(bot, bot))
     {
-        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, context->GetValue<GuidVector>("attackers")->Get()))
+        if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, attackers))
             return false;
 
         if (!Aq40BossHelper::HasAnyNamedUnitHeldByEncounterTank(botAI, bot, encounterUnits, { "the prophet skeram" }, true))
             return false;
     }
+
+    float const desiredRange = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 24.0f : 4.0f;
+    float const engageSlack = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 4.0f : 2.0f;
+    if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
+        return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
     return Attack(target);
 }
@@ -872,7 +877,8 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 {
     // Pattern lifted from BWL BwlPolymorphMindControlledTargetAction and TempestKeep KaelthasSunstriderBreakMindControlAction:
     // Detect charmed raid members and apply CC (sheep/fear) to neutralize them.
-    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
+    GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 
     // First: try to CC an MC'd player (mages sheep, priests fear, etc.)
     Unit* mcTarget = nullptr;
@@ -910,9 +916,15 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
     }
 
     // Fallback: force target back to Skeram.
-    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, encounterUnits);
+    GuidVector skeramUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
+    Unit* target = Aq40BossActions::FindSkeramTarget(botAI, skeramUnits);
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
+
+    float const desiredRange = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 24.0f : 4.0f;
+    float const engageSlack = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 4.0f : 2.0f;
+    if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
+        return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
     return Attack(target);
 }

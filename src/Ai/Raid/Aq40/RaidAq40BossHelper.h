@@ -431,9 +431,16 @@ inline Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& units, std:
     if (!botAI)
         return nullptr;
 
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return nullptr;
+
     for (ObjectGuid const guid : units)
     {
         Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() || unit->IsFriendlyTo(bot))
+            continue;
+
         if (IsUnitNamedAny(botAI, unit, names))
             return unit;
     }
@@ -448,9 +455,16 @@ inline std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector cons
     if (!botAI)
         return found;
 
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return found;
+
     for (ObjectGuid const guid : units)
     {
         Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() || unit->IsFriendlyTo(bot))
+            continue;
+
         if (IsUnitNamedAny(botAI, unit, names))
             found.push_back(unit);
     }
@@ -484,13 +498,22 @@ inline bool IsNearbyEncounterUnit(Player* bot, PlayerbotAI* botAI, Unit* candida
 
 inline GuidVector GetEncounterUnits(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    GuidVector units = attackers;
+    GuidVector units;
     if (!botAI)
         return units;
 
     Player* bot = botAI->GetBot();
     if (!bot)
         return units;
+
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() || unit->IsFriendlyTo(bot))
+            continue;
+
+        units.push_back(guid);
+    }
 
     // Do not pull in no-LOS AQ40 units unless there is an actual local
     // encounter in progress. Otherwise nearby dead-room bosses/trash can
