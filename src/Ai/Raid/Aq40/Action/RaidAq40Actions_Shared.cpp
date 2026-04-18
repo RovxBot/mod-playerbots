@@ -105,24 +105,7 @@ void LogAq40CleanupTransition(Player* bot, bool wasDirty)
     sAq40CleanupReportedDirtyByBot[botGuid] = false;
 }
 
-bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
-{
-    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
-                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
-}
-
-bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
-{
-    if (!IsSarturaMob(botAI, unit))
-        return false;
-
-    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
-           Aq40SpellIds::HasAnyAura(botAI, unit,
-               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
-           botAI->HasAura("whirlwind", unit);
-}
+// IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
 
 bool IsAq40TrashUnit(PlayerbotAI* botAI, Unit* unit)
 {
@@ -913,45 +896,11 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
 
 bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
 {
-    // Pattern lifted from BWL BwlPolymorphMindControlledTargetAction and TempestKeep KaelthasSunstriderBreakMindControlAction:
-    // Detect charmed raid members and apply CC (sheep/fear) to neutralize them.
     GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 
-    // First: try to CC an MC'd player (mages sheep, priests fear, etc.)
-    Unit* mcTarget = nullptr;
-    float closestDist = std::numeric_limits<float>::max();
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        Player* player = unit ? unit->ToPlayer() : nullptr;
-        if (!player || !player->IsAlive() || player == bot)
-            continue;
-
-    // BWL pattern: IsCharmed() + !IsPolymorphed() to avoid double-CC.
-        if (!player->IsCharmed() || player->IsPolymorphed())
-            continue;
-
-        float const dist = bot->GetDistance2d(player);
-        if (dist < closestDist)
-        {
-            closestDist = dist;
-            mcTarget = player;
-        }
-    }
-
-    if (mcTarget)
-    {
-    // TempestKeep pattern: try multiple CC spells by class.
-        static std::initializer_list<char const*> ccSpells = {
-            "polymorph", "fear", "hibernate", "freezing trap", "repentance"
-        };
-        for (char const* spell : ccSpells)
-        {
-            if (botAI->CanCastSpell(spell, mcTarget) && botAI->CastSpell(spell, mcTarget))
-                return true;
-        }
-    }
+    if (Aq40BossHelper::TryCrowdControlCharmedPlayer(bot, botAI, encounterUnits))
+        return true;
 
     // Fallback: force target back to Skeram.
     GuidVector skeramUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
@@ -1042,7 +991,7 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!IsSarturaSpinning(botAI, unit))
+        if (!Aq40BossHelper::IsSarturaSpinning(botAI, unit))
             continue;
 
         float const distance = bot->GetDistance2d(unit);
@@ -1450,38 +1399,8 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
 {
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
 
-    // Try to CC a mind-controlled player (polymorph, fear, etc.)
-    Unit* mcTarget = nullptr;
-    float closestDist = std::numeric_limits<float>::max();
-    for (ObjectGuid const guid : encounterUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        Player* player = unit ? unit->ToPlayer() : nullptr;
-        if (!player || !player->IsAlive() || player == bot)
-            continue;
-
-        if (!player->IsCharmed() || player->IsPolymorphed())
-            continue;
-
-        float const dist = bot->GetDistance2d(player);
-        if (dist < closestDist)
-        {
-            closestDist = dist;
-            mcTarget = player;
-        }
-    }
-
-    if (mcTarget)
-    {
-        static std::initializer_list<char const*> ccSpells = {
-            "polymorph", "fear", "hibernate", "freezing trap", "repentance", "blind"
-        };
-        for (char const* spell : ccSpells)
-        {
-            if (botAI->CanCastSpell(spell, mcTarget) && botAI->CastSpell(spell, mcTarget))
-                return true;
-        }
-    }
+    if (Aq40BossHelper::TryCrowdControlCharmedPlayer(bot, botAI, encounterUnits))
+        return true;
 
     // Fallback: resume normal trash targeting using combat-filtered units
     // so passive mobs (idle scarabs/scorpions) are ignored.

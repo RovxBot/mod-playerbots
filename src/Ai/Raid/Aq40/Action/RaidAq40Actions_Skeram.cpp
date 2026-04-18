@@ -3,10 +3,11 @@
 #include <algorithm>
 
 #include "../../RaidBossHelpers.h"
-#include "RtiTargetValue.h"
 
 namespace
 {
+static constexpr uint32 kSkullIndex = 7;
+
 bool IsAttackableSkeramTarget(Player* bot, Unit* target)
 {
     return bot && target && target->IsInWorld() && target->IsAlive() && target->GetMapId() == bot->GetMapId() &&
@@ -22,7 +23,10 @@ Unit* FindSkeramSkullTarget(Player* bot, PlayerbotAI* botAI)
     if (!group)
         return nullptr;
 
-    ObjectGuid const skullGuid = group->GetTargetIcon(RtiTargetValue::skullIndex);
+    // Skull is the authoritative "real boss" marker — the base AI system
+    // already auto-focuses skull via DpsTargetValue and FindTargetStrategy.
+    // We only need this lookup for the fallback sort logic below.
+    ObjectGuid const skullGuid = group->GetTargetIcon(kSkullIndex);
     if (!skullGuid)
         return nullptr;
 

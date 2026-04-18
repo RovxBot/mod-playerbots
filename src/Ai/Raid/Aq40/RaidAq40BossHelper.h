@@ -14,6 +14,8 @@
 #include "Playerbots.h"
 #include "PlayerbotAI.h"
 #include "SharedDefines.h"
+#include "Spell.h"
+#include "RaidAq40SpellIds.h"
 
 namespace Aq40BossHelper
 {
@@ -625,6 +627,96 @@ inline bool IsTrashEncounterActive(PlayerbotAI* botAI, GuidVector const& attacke
                              "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
                              "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
                              "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+}
+
+// -----------------------------------------------------------------------
+// Shared encounter helpers — centralised to avoid duplicate definitions
+// across Actions, Triggers, and Multipliers.
+// -----------------------------------------------------------------------
+
+inline bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
+{
+    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
+                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
+}
+
+inline bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!IsSarturaMob(botAI, unit))
+        return false;
+
+    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
+                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
+           Aq40SpellIds::HasAnyAura(botAI, unit,
+               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
+           botAI->HasAura("whirlwind", unit);
+}
+
+inline Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    Unit* ouro = FindUnitByAnyName(botAI, attackers, { "ouro" });
+    if (!ouro || (ouro->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE)
+        return nullptr;
+
+    return ouro;
+}
+
+inline Unit* FindLowestHealthUnit(std::vector<Unit*> const& units)
+{
+    Unit* chosen = nullptr;
+    for (Unit* unit : units)
+    {
+        if (!unit)
+            continue;
+
+        if (!chosen || unit->GetHealthPct() < chosen->GetHealthPct())
+            chosen = unit;
+    }
+
+    return chosen;
+}
+
+// Shared mind-control CC logic used by both Skeram and Trash encounters.
+// Returns true if a CC spell was successfully cast on a charmed player.
+inline bool TryCrowdControlCharmedPlayer(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits)
+{
+    if (!bot || !botAI)
+        return false;
+
+    Unit* mcTarget = nullptr;
+    float closestDist = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        Player* player = unit ? unit->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || player == bot)
+            continue;
+
+        if (!player->IsCharmed() || player->IsPolymorphed())
+            continue;
+
+        float const dist = bot->GetDistance2d(player);
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            mcTarget = player;
+        }
+    }
+
+    if (!mcTarget)
+        return false;
+
+    static std::initializer_list<char const*> ccSpells = {
+        "polymorph", "fear", "hibernate", "freezing trap", "repentance", "blind"
+    };
+    for (char const* spell : ccSpells)
+    {
+        if (botAI->CanCastSpell(spell, mcTarget) && botAI->CastSpell(spell, mcTarget))
+            return true;
+    }
+
+    return false;
 }
 }    // namespace Aq40BossHelper
 

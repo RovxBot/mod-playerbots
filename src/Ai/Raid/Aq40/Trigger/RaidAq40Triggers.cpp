@@ -26,14 +26,7 @@ bool Aq40EncounterEngaged(PlayerbotAI* botAI, Player* bot)
     return Aq40BossHelper::IsEncounterCombatActive(bot);
 }
 
-Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    Unit* ouro = Aq40BossHelper::FindUnitByAnyName(botAI, attackers, { "ouro" });
-    if (!ouro || (ouro->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE)
-        return nullptr;
-
-    return ouro;
-}
+// FindBurrowedOuro now lives in Aq40BossHelper.
 
 Unit* FindSelectableCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
 {
@@ -44,24 +37,7 @@ Unit* FindSelectableCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
     return cthun;
 }
 
-bool IsSarturaMob(PlayerbotAI* botAI, Unit* unit)
-{
-    return unit && (botAI->EqualLowercaseName(unit->GetName(), "battleguard sartura") ||
-                    botAI->EqualLowercaseName(unit->GetName(), "sartura's royal guard"));
-}
-
-bool IsSarturaSpinning(PlayerbotAI* botAI, Unit* unit)
-{
-    if (!IsSarturaMob(botAI, unit))
-        return false;
-
-    Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    return (spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(),
-                { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind })) ||
-           Aq40SpellIds::HasAnyAura(botAI, unit,
-               { Aq40SpellIds::SarturaWhirlwind, Aq40SpellIds::SarturaGuardWhirlwind }) ||
-           botAI->HasAura("whirlwind", unit);
-}
+// IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
 }    // namespace
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
@@ -192,7 +168,7 @@ bool Aq40SarturaWhirlwindTrigger::IsActive()
     for (ObjectGuid const guid : encounterUnits)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!IsSarturaSpinning(botAI, unit))
+        if (!Aq40BossHelper::IsSarturaSpinning(botAI, unit))
             continue;
 
         float const distance = bot->GetDistance2d(unit);
@@ -647,7 +623,7 @@ bool Aq40OuroSubmergeTrigger::IsActive()
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    if (Unit* ouro = FindBurrowedOuro(botAI, encounterUnits))
+    if (Unit* ouro = Aq40BossHelper::FindBurrowedOuro(botAI, encounterUnits))
         return bot->GetDistance2d(ouro) <= 16.0f;
 
     for (ObjectGuid const guid : encounterUnits)

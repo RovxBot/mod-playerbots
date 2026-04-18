@@ -5,7 +5,6 @@
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../../RaidBossHelpers.h"
-#include "RtiTargetValue.h"
 
 namespace Aq40BossActions
 {
@@ -50,12 +49,6 @@ Unit* FindBugTrioTankOwnedTarget(PlayerbotAI* botAI, Player* bot, GuidVector con
 
 namespace
 {
-bool IsBugTrioKillTarget(PlayerbotAI* botAI, Unit* unit)
-{
-    return unit && unit->IsAlive() &&
-           Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "princess yauj", "vem", "lord kri" });
-}
-
 GuidVector GetBugTrioCombatUnits(PlayerbotAI* botAI)
 {
     if (!botAI)
@@ -73,23 +66,6 @@ GuidVector GetBugTrioEncounterUnits(PlayerbotAI* botAI)
     GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     return Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 }
-
-Unit* FindBugTrioSkullTarget(Player* bot, PlayerbotAI* botAI)
-{
-    if (!bot || !botAI)
-        return nullptr;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
-
-    ObjectGuid const skullGuid = group->GetTargetIcon(RtiTargetValue::skullIndex);
-    if (!skullGuid)
-        return nullptr;
-
-    Unit* skullTarget = botAI->GetUnit(skullGuid);
-    return IsBugTrioKillTarget(botAI, skullTarget) ? skullTarget : nullptr;
-}
 }    // namespace
 
 bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
@@ -99,13 +75,23 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
         return false;
 
     GuidVector const encounterUnits = GetBugTrioEncounterUnits(botAI);
-    Unit* skullTarget = FindBugTrioSkullTarget(bot, botAI);
-    Unit* target = skullTarget;
-    if (!target)
+
+    Unit* target = nullptr;
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
     {
-        target = Aq40BossHelper::IsEncounterTank(bot, bot) ?
-            Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits) :
-            Aq40BossActions::FindBugTrioTankOwnedTarget(botAI, bot, encounterUnits);
+        // Tank picks the highest kill-order target and marks it with skull.
+        // The base DpsAssist system will auto-focus skull for all DPS.
+        target = Aq40BossActions::FindBugTrioTarget(botAI, encounterUnits);
+
+        if (target)
+            MarkTargetWithSkull(bot, target);
+    }
+    else
+    {
+        // Non-tanks follow a tank-held target in kill order.
+        // Skull preference is already handled by the base DpsTargetValue,
+        // but we still need explicit targeting here for the wait-for-aggro gate.
+        target = Aq40BossActions::FindBugTrioTankOwnedTarget(botAI, bot, encounterUnits);
     }
 
     if (!target)
@@ -113,9 +99,6 @@ bool Aq40BugTrioChooseTargetAction::Execute(Event /*event*/)
 
     if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
-
-    if (Aq40BossHelper::IsEncounterTank(bot, bot) && !skullTarget)
-        MarkTargetWithSkull(bot, target);
 
     return Attack(target);
 }

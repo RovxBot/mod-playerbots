@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "../RaidAq40BossHelper.h"
+#include "../../RaidBossHelpers.h"
 
 namespace
 {
@@ -74,11 +75,15 @@ bool Aq40HuhuranChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    // Tank marks Huhuran with skull so the base DpsAssist system auto-focuses her.
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        MarkTargetWithSkull(bot, target);
+
     // Startup ownership: primary tank establishes the boss before the raid commits.
     if (Aq40BossHelper::ShouldWaitForEncounterTankAggro(bot, bot, target, true))
         return false;
 
-    if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
+    if (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target)
         return false;
 
     return Attack(target);

@@ -15,25 +15,12 @@ Unit* FindViscidusTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
 namespace
 {
-Unit* FindLowestHealthUnit(std::vector<Unit*> const& units)
-{
-    Unit* chosen = nullptr;
-    for (Unit* unit : units)
-    {
-        if (!unit)
-            continue;
-
-        if (!chosen || unit->GetHealthPct() < chosen->GetHealthPct())
-            chosen = unit;
-    }
-
-    return chosen;
-}
+// FindLowestHealthUnit now lives in Aq40BossHelper.
 
 Unit* FindViscidusGlobTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     std::vector<Unit*> globs = Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "glob of viscidus" });
-    return FindLowestHealthUnit(globs);
+    return Aq40BossHelper::FindLowestHealthUnit(globs);
 }
 }    // namespace
 

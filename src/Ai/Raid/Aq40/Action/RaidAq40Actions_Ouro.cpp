@@ -20,26 +20,13 @@ Unit* FindOuroTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
 namespace
 {
-Unit* FindLowestHealthUnit(std::vector<Unit*> const& units)
-{
-    Unit* chosen = nullptr;
-    for (Unit* unit : units)
-    {
-        if (!unit)
-            continue;
-
-        if (!chosen || unit->GetHealthPct() < chosen->GetHealthPct())
-            chosen = unit;
-    }
-
-    return chosen;
-}
+// FindLowestHealthUnit now lives in Aq40BossHelper.
 
 Unit* FindOuroScarabs(PlayerbotAI* botAI, GuidVector const& attackers)
 {
     std::vector<Unit*> scarabs =
         Aq40BossActions::FindUnitsByAnyName(botAI, attackers, { "qiraji scarab", "scarab" });
-    return FindLowestHealthUnit(scarabs);
+    return Aq40BossHelper::FindLowestHealthUnit(scarabs);
 }
 
 Unit* FindNearestDirtMound(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -63,14 +50,7 @@ Unit* FindNearestDirtMound(Player* bot, PlayerbotAI* botAI, GuidVector const& at
     return closest;
 }
 
-Unit* FindBurrowedOuro(PlayerbotAI* botAI, GuidVector const& attackers)
-{
-    Unit* ouro = Aq40BossActions::FindOuroTarget(botAI, attackers);
-    if (!ouro || (ouro->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE)
-        return nullptr;
-
-    return ouro;
-}
+// FindBurrowedOuro now lives in Aq40BossHelper.
 }    // namespace
 
 bool Aq40OuroChooseTargetAction::Execute(Event /*event*/)
@@ -227,7 +207,7 @@ bool Aq40OuroAvoidSubmergeAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* hazard = FindNearestDirtMound(bot, botAI, encounterUnits);
     if (!hazard)
-        hazard = FindBurrowedOuro(botAI, encounterUnits);
+        hazard = Aq40BossHelper::FindBurrowedOuro(botAI, encounterUnits);
     if (!hazard)
         return false;
 
