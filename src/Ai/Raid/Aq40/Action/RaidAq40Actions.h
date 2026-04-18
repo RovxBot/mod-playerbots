@@ -15,6 +15,7 @@ namespace Aq40BossActions
 Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names);
 std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names);
 Unit* FindSkeramTarget(PlayerbotAI* botAI, GuidVector const& attackers, bool preferLowestHealth = false);
+bool HasSkeramSkullTarget(PlayerbotAI* botAI);
 Unit* FindBugTrioTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 Unit* FindSarturaTarget(PlayerbotAI* botAI, GuidVector const& attackers);
 std::vector<Unit*> FindSarturaGuards(PlayerbotAI* botAI, GuidVector const& attackers);

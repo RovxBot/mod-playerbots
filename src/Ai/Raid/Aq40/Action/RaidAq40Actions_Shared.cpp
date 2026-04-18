@@ -9,6 +9,7 @@
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
+#include "../../RaidBossHelpers.h"
 
 namespace
 {
@@ -402,6 +403,32 @@ std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& atta
 
 Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 {
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+
+    // Pre-filter attackers by distance so bots don't run past nearby mobs to
+    // chase a distant priority target.  Fall back to closest unit if nothing
+    // from the priority list is within range.
+    static float constexpr kTrashTargetMaxRange = 45.0f;
+    GuidVector nearbyAttackers;
+    Unit* closestUnit = nullptr;
+    float closestDist = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        float const dist = bot ? bot->GetDistance2d(unit) : 0.0f;
+        if (!bot || dist <= kTrashTargetMaxRange)
+            nearbyAttackers.push_back(guid);
+
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            closestUnit = unit;
+        }
+    }
+
     std::initializer_list<std::initializer_list<char const*>> priority = {
         { "qiraji mindslayer" },
         { "obsidian nullifier" },
@@ -420,12 +447,14 @@ Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
 
     for (std::initializer_list<char const*> names : priority)
     {
-        Unit* chosen = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, names);
+        Unit* chosen = Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, nearbyAttackers, names);
         if (chosen)
             return chosen;
     }
 
-    return nullptr;
+    // Nothing from the priority list in range — fall back to the closest active
+    // combat unit so the bot doesn't stand idle while mobs hit them.
+    return closestUnit;
 }
 }    // namespace Aq40BossActions
 
@@ -780,7 +809,7 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot) && !Aq40BossActions::HasSkeramSkullTarget(botAI))
     {
         if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, attackers))
             return false;
@@ -796,6 +825,11 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     float const engageSlack = (botAI->IsRanged(bot) || botAI->IsHeal(bot)) ? 4.0f : 2.0f;
     if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
         return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+
+    // Encounter tank marks the real Skeram with skull so the raid can follow
+    // through blinks without relying solely on tank aggro detection.
+    if (Aq40BossHelper::IsEncounterTank(bot, bot))
+        MarkTargetWithSkull(bot, target);
 
     return Attack(target);
 }
@@ -856,7 +890,11 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
-    if (!Aq40BossHelper::IsEncounterTank(bot, bot))
+    // When a skull marker is present the target has already been validated as
+    // the real boss — skip the tank-aggro prerequisite that frequently fails
+    // after blinks.  Only apply the old guards when no skull exists.
+    bool const hasSkullTarget = Aq40BossActions::HasSkeramSkullTarget(botAI);
+    if (!Aq40BossHelper::IsEncounterTank(bot, bot) && !hasSkullTarget)
     {
         if (Aq40Helpers::IsSkeramPostBlinkHoldActive(bot, botAI, attackers))
             return false;

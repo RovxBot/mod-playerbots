@@ -143,6 +143,24 @@ float Aq40SkeramMultiplier::GetValue(Action* action)
         return 1.0f;
 
     std::string const actionName = action->getName();
+
+    // When trash is still alive alongside Skeram (e.g. pulling trash near
+    // Skeram's room), prioritise finishing trash first.  Suppress Skeram
+    // actions so bots don't run past the pull to engage the boss.
+    GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
+    if (Aq40BossHelper::IsTrashEncounterActive(botAI, encounterUnits))
+    {
+        bool isSkeramControlAction =
+            actionName == "aq40 skeram acquire platform target" ||
+            actionName == "aq40 skeram interrupt" ||
+            actionName == "aq40 skeram focus real boss" ||
+            actionName == "aq40 skeram control mind control";
+        if (isSkeramControlAction)
+            return 0.0f;
+
+        return 1.0f;
+    }
+
     // Whitelist Skeram-specific actions (pattern from Aq40TwinEmperorsMultiplier).
     bool isSkeramControlAction =
         actionName == "aq40 skeram acquire platform target" ||

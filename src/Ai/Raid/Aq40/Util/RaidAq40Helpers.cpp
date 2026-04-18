@@ -901,9 +901,6 @@ GuidVector GetObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, Guid
             observedUnits.push_back(guid);
     }
 
-    if (observedUnits.empty() && instanceId)
-        sSkeramPostBlinkHoldUntilByInstance.erase(instanceId);
-
     return observedUnits;
 }
 

@@ -2,12 +2,38 @@
 
 #include <algorithm>
 
+#include "../../RaidBossHelpers.h"
+#include "RtiTargetValue.h"
+
 namespace
 {
 bool IsAttackableSkeramTarget(Player* bot, Unit* target)
 {
     return bot && target && target->IsInWorld() && target->IsAlive() && target->GetMapId() == bot->GetMapId() &&
            !target->IsFriendlyTo(bot) && (target->GetUnitFlags() & UNIT_FLAG_NOT_SELECTABLE) != UNIT_FLAG_NOT_SELECTABLE;
+}
+
+Unit* FindSkeramSkullTarget(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    ObjectGuid const skullGuid = group->GetTargetIcon(RtiTargetValue::skullIndex);
+    if (!skullGuid)
+        return nullptr;
+
+    Unit* skullTarget = botAI->GetUnit(skullGuid);
+    if (!IsAttackableSkeramTarget(bot, skullTarget))
+        return nullptr;
+
+    if (!botAI->EqualLowercaseName(skullTarget->GetName(), "the prophet skeram"))
+        return nullptr;
+
+    return skullTarget;
 }
 }
 
@@ -19,9 +45,20 @@ Unit* FindSkeramTarget(PlayerbotAI* botAI, GuidVector const& attackers, bool pre
         return nullptr;
 
     Player* bot = botAI->GetBot();
-    std::vector<Unit*> skerams = FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
     if (!bot)
+    {
+        std::vector<Unit*> skerams = FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
         return skerams.empty() ? nullptr : skerams.front();
+    }
+
+    // Skull-marked Skeram takes absolute priority — this is the authoritative
+    // "real boss" signal set by the encounter tank, immune to blink/aggro
+    // confusion.
+    Unit* skullTarget = FindSkeramSkullTarget(bot, botAI);
+    if (skullTarget)
+        return skullTarget;
+
+    std::vector<Unit*> skerams = FindUnitsByAnyName(botAI, attackers, { "the prophet skeram" });
 
     skerams.erase(std::remove_if(skerams.begin(), skerams.end(), [bot](Unit* skeram)
     {
@@ -63,5 +100,14 @@ Unit* FindSkeramTarget(PlayerbotAI* botAI, GuidVector const& attackers, bool pre
     });
 
     return skerams.front();
+}
+
+bool HasSkeramSkullTarget(PlayerbotAI* botAI)
+{
+    if (!botAI)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    return FindSkeramSkullTarget(bot, botAI) != nullptr;
 }
 }    // namespace Aq40BossActions
