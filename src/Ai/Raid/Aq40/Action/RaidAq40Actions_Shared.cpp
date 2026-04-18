@@ -415,7 +415,7 @@ Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!unit || !unit->IsAlive() || !unit->IsCreature())
             continue;
 
         float const dist = bot ? bot->GetDistance2d(unit) : 0.0f;

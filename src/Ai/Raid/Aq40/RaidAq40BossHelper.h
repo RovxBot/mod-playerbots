@@ -549,7 +549,8 @@ inline GuidVector GetActiveCombatUnits(PlayerbotAI* botAI, GuidVector const& att
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() ||
+            unit->IsFriendlyTo(bot))
             continue;
 
         units.push_back(guid);
@@ -566,8 +567,13 @@ inline GuidVector GetActiveCombatUnits(PlayerbotAI* botAI, GuidVector const& att
         if (!IsNearbyEncounterUnit(bot, botAI, unit, attackers))
             continue;
 
+        // Mind-controlled raid members can become hostile, but they are still
+        // players. Querying a player's ThreatManager current victim here can
+        // drive the core down creature-only AI update paths and trip
+        // ASSERT_NOTNULL(_owner->ToCreature()) in ThreatManager.
+        bool const hasThreatVictim = unit && unit->IsCreature() && unit->GetThreatMgr().GetCurrentVictim();
         bool const isCombatRelevant =
-            unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || unit->GetThreatMgr().GetCurrentVictim();
+            unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || hasThreatVictim;
         if (!isCombatRelevant)
             continue;
 
