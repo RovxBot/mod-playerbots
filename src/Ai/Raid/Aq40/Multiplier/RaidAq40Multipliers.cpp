@@ -365,13 +365,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     {
         if (actionName == "aq40 twin emperors pre pull stage")
             return 4.0f;
-    }
 
-    // Suppress follow whenever bots are in the Twin room, not just when
-    // IsTwinPrePullReady is true.  Prevents oscillation when the pre-pull
-    // state flickers due to combat state transitions.
-    if (Aq40Helpers::IsInTwinEmperorRoom(bot) && dynamic_cast<FollowAction*>(action))
-        return 0.0f;
+        // Suppress follow during pre-pull staging.  Gated behind
+        // IsTwinPrePullReady (requires LOS to bosses) so bots can still
+        // follow through the corridor before entering the room.
+        if (dynamic_cast<FollowAction*>(action))
+            return 0.0f;
+    }
 
     GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))

@@ -23,11 +23,33 @@ float constexpr kTwinInitialVeknilashZ = -104.226f;
 
 Position GetTwinSideAnchor(uint32 sideIndex)
 {
-    Position anchor;
+    // Stage 40y from boss toward room center — outside ~25y aggro range
+    // but close enough to engage quickly on pull.
+    float bossX, bossY, bossZ;
     if (sideIndex == 1u)
-        anchor.Relocate(kTwinInitialVeklorX, kTwinInitialVeklorY, kTwinInitialVeklorZ);
+    {
+        bossX = kTwinInitialVeklorX;  bossY = kTwinInitialVeklorY;  bossZ = kTwinInitialVeklorZ;
+    }
     else
-        anchor.Relocate(kTwinInitialVeknilashX, kTwinInitialVeknilashY, kTwinInitialVeknilashZ);
+    {
+        bossX = kTwinInitialVeknilashX;  bossY = kTwinInitialVeknilashY;  bossZ = kTwinInitialVeknilashZ;
+    }
+
+    float const dirX = kTwinRoomCenterX - bossX;
+    float const dirY = kTwinRoomCenterY - bossY;
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 0.1f)
+    {
+        Position anchor;
+        anchor.Relocate(bossX, bossY, bossZ);
+        return anchor;
+    }
+
+    float constexpr kStageDistance = 40.0f;
+    Position anchor;
+    anchor.Relocate(bossX + (dirX / length) * kStageDistance,
+                    bossY + (dirY / length) * kStageDistance,
+                    bossZ);
     return anchor;
 }
 
@@ -360,14 +382,22 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     float const minRange = 21.0f;
     float const maxRange = 30.0f;
 
-    Position anchorPosition;
-    bool const hasAnchor = GetFarSidePosition(bot, veklor, assignment.oppositeEmperor,
-                                              desiredRange, anchorPosition);
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
 
-    // Hard reposition if out of LOS or range.
-    if (!hasLOS || rangeToVeklor < minRange || rangeToVeklor > maxRange)
+    // Far from Vek'lor: move DIRECTLY toward boss via shortest path.
+    // Do NOT use far-side anchor here — it sends the warlock toward the wall.
+    if (rangeToVeklor > maxRange || !hasLOS)
+    {
+        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            botAI->CastSpell("shadow ward", bot);
+
+        MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+        return true;
+    }
+
+    // Too close — back away using far-side anchor.
+    if (rangeToVeklor < minRange)
     {
         if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
             botAI->CastSpell("shadow ward", bot);
@@ -375,9 +405,10 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         bot->AttackStop();
         bot->InterruptNonMeleeSpells(true);
 
-        if (hasAnchor)
-            MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
-                   anchorPosition.GetPositionZ(), false, false, false, true,
+        Position retreatPos;
+        if (GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, retreatPos))
+            MoveTo(bot->GetMapId(), retreatPos.GetPositionX(), retreatPos.GetPositionY(),
+                   retreatPos.GetPositionZ(), false, false, false, true,
                    MovementPriority::MOVEMENT_COMBAT, true, false);
         else
             MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
@@ -385,7 +416,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return true;
     }
 
-    // In range - threat generation and utility.
+    // In casting range (21-30y) with LOS — threat generation is #1 priority.
     if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
         return botAI->CastSpell("shadow ward", bot);
 
@@ -395,8 +426,10 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
         return botAI->CastSpell("curse of doom", veklor);
 
-    // Soft reposition toward anchor between casts.
-    if (hasAnchor && bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 6.0f)
+    // Soft reposition toward far-side anchor between casts.
+    Position anchorPosition;
+    if (GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, anchorPosition) &&
+        bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 6.0f)
         MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
                anchorPosition.GetPositionZ(), false, false, false, true,
                MovementPriority::MOVEMENT_COMBAT, true, false);
