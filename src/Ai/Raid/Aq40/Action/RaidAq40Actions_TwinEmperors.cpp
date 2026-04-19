@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "CreatureAI.h"
 #include "SharedDefines.h"
 #include "../RaidAq40BossHelper.h"
 #include "RaidBossHelpers.h"
@@ -125,8 +126,31 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
     if (isWarlockTank || isMeleeTank)
     {
         // Tanks move to their assigned side anchor.
+        // Warlock tanks stage closer (28y) so they can immediately cast
+        // Searing Pain on pull instead of spending 15+ seconds closing the gap.
         uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
         Position anchor = GetTwinSideAnchor(sideIndex);
+
+        if (isWarlockTank)
+        {
+            // Pull the warlock staging position 12y closer to boss (40y → 28y).
+            float bossX, bossY;
+            if (sideIndex == 1u)
+            {   bossX = kTwinInitialVeklorX;  bossY = kTwinInitialVeklorY;   }
+            else
+            {   bossX = kTwinInitialVeknilashX;  bossY = kTwinInitialVeknilashY;   }
+
+            float const dirX = kTwinRoomCenterX - bossX;
+            float const dirY = kTwinRoomCenterY - bossY;
+            float const length = std::sqrt(dirX * dirX + dirY * dirY);
+            if (length > 0.1f)
+            {
+                float constexpr kWarlockStageDistance = 28.0f;
+                anchor.Relocate(bossX + (dirX / length) * kWarlockStageDistance,
+                                bossY + (dirY / length) * kWarlockStageDistance,
+                                anchor.GetPositionZ());
+            }
+        }
 
         if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
         {
@@ -229,12 +253,25 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     Unit* desiredTarget = nullptr;
 
-    // Hunters prioritize mutate bugs threatening the raid.
+    // Hunters prioritize dangerous bugs, then Vek'nilash (physical damage).
+    // Explode bugs first (AoE raid damage), then mutate bugs.
     if (isHunter)
     {
-        Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
-        if (mutateBug && mutateBug->IsAlive())
-            desiredTarget = mutateBug;
+        Unit* explodeBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "explode bug" });
+        if (explodeBug && explodeBug->IsAlive())
+            desiredTarget = explodeBug;
+
+        if (!desiredTarget)
+        {
+            Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
+            if (mutateBug && mutateBug->IsAlive())
+                desiredTarget = mutateBug;
+        }
+
+        // Hunters do primarily physical damage — Vek'lor is IMMUNE.
+        // Fall back to Vek'nilash instead.
+        if (!desiredTarget)
+            desiredTarget = assignment.veknilash ? assignment.veknilash : assignment.veklor;
     }
 
     if (!desiredTarget)
@@ -250,10 +287,30 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     // Always keep the target pinned and set RTI for base AI integration.
     PinTwinTarget(botAI, context, desiredTarget);
-    if (isRangedDps)
+    if (isRangedDps && !isHunter)
         SetRtiTarget(botAI, "square", desiredTarget);   // Vek'lor = square
-    else
+    else if (!isRangedDps)
         SetRtiTarget(botAI, "diamond", desiredTarget);  // Vek'nilash = diamond
+
+    // Redirect hunter pets to the hunter's target (prevent IMMUNE spam on Vek'lor).
+    if (isHunter)
+    {
+        if (Guardian* pet = bot->GetGuardianPet())
+        {
+            if (pet->IsAlive() && pet->GetVictim() != desiredTarget)
+            {
+                pet->ClearUnitState(UNIT_STATE_FOLLOW);
+                pet->AttackStop();
+                pet->SetTarget(desiredTarget->GetGUID());
+                pet->GetCharmInfo()->SetIsCommandAttack(true);
+                pet->GetCharmInfo()->SetIsAtStay(false);
+                pet->GetCharmInfo()->SetIsFollowing(false);
+                pet->GetCharmInfo()->SetIsCommandFollow(false);
+                pet->GetCharmInfo()->SetIsReturning(false);
+                pet->ToCreature()->AI()->AttackStart(desiredTarget);
+            }
+        }
+    }
 
     float const distance = bot->GetDistance2d(desiredTarget);
     float const attackRange = isRangedDps ? 28.0f : 5.0f;
@@ -300,11 +357,32 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
     if (isPrimaryTank && isMeleeTank && assignment.veknilash)
     {
-        // Primary melee tank: pin Vek'nilash and engage.
+        // Primary melee tank: pin Vek'nilash and drag away from Vek'lor.
         PinTwinTarget(botAI, context, assignment.veknilash);
 
+        // Tank on the far side of Vek'nilash (away from Vek'lor) to naturally
+        // pull Vek'nilash away and prevent Heal Brother.
+        Position tankPos;
+        bool hasFarPos = assignment.veklor &&
+            GetFarSidePosition(bot, assignment.veknilash, assignment.veklor, 3.0f, tankPos);
+
         float const range = bot->GetDistance2d(assignment.veknilash);
-        if (range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
+
+        if (hasFarPos)
+        {
+            float const distToPos = bot->GetExactDist2d(tankPos.GetPositionX(), tankPos.GetPositionY());
+            // If not in melee range or not at far-side position, move there.
+            if (distToPos > 5.0f || range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
+            {
+                bool moved = MoveTo(bot->GetMapId(), tankPos.GetPositionX(), tankPos.GetPositionY(),
+                                    tankPos.GetPositionZ(), false, false, false, true,
+                                    MovementPriority::MOVEMENT_COMBAT, true, false);
+                if (!moved && range > 5.0f)
+                    return true;  // Still en route.
+                return moved;
+            }
+        }
+        else if (range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
         {
             bool moved = MoveNear(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
             if (!moved && range > 5.0f)

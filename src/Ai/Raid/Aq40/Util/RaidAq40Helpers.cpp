@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -480,12 +481,12 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
     });
 
-    uint32 assignedCount = 0;
-    for (Player* member : members)
-    {
-        if (assignments.find(member->GetGUID().GetRawValue()) != assignments.end())
-            ++assignedCount;
-    }
+    // Collect which sides are already occupied by existing assignments.
+    // This prevents the bug where a warlock returning from death gets
+    // assigned the same side as the remaining warlock (both on same side).
+    std::set<uint32> occupiedSides;
+    for (auto const& [guid, side] : assignments)
+        occupiedSides.insert(side);
 
     for (Player* member : members)
     {
@@ -493,8 +494,28 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         if (assignments.find(memberGuid) != assignments.end())
             continue;
 
-        assignments[memberGuid] = GetTwinRoleSideForSlot(cohort, assignedCount);
-        ++assignedCount;
+        // For cohorts with only 2 members per side (warlock/melee tanks),
+        // prefer the first unoccupied side to guarantee one per side.
+        uint32 assignedSide;
+        if ((cohort == TwinRoleCohort::WarlockTank || cohort == TwinRoleCohort::MeleeTank) &&
+            occupiedSides.size() < 2)
+        {
+            // For warlocks: prefer side 1 (Vek'lor's initial side) first.
+            // For melee tanks: prefer side 0 (Vek'nilash's initial side) first.
+            uint32 const preferredSide = (cohort == TwinRoleCohort::WarlockTank) ? 1u : 0u;
+            uint32 const otherSide = 1u - preferredSide;
+            if (occupiedSides.find(preferredSide) == occupiedSides.end())
+                assignedSide = preferredSide;
+            else
+                assignedSide = otherSide;
+        }
+        else
+        {
+            assignedSide = GetTwinRoleSideForSlot(cohort, static_cast<uint32>(occupiedSides.size()));
+        }
+
+        assignments[memberGuid] = assignedSide;
+        occupiedSides.insert(assignedSide);
     }
 
     auto itr = assignments.find(botGuid);
