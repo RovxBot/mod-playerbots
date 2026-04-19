@@ -185,23 +185,6 @@ bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUn
     return botAI && !units.empty();
 }
 
-bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr)
-{
-    GuidVector units;
-    if (!HasTwinPrePullVisibility(bot, botAI, &units))
-    {
-        if (outUnits)
-            *outUnits = units;
-        return false;
-    }
-
-    if (outUnits)
-        *outUnits = units;
-
-    return Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'nilash" }) &&
-           Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'lor" });
-}
-
 bool IsTwinRaidCombatActiveInternal(Player* bot)
 {
     if (!bot || !bot->GetMap())
@@ -371,6 +354,23 @@ bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assign
 
 }  // namespace
 
+bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits)
+{
+    GuidVector units;
+    if (!HasTwinPrePullVisibility(bot, botAI, &units))
+    {
+        if (outUnits)
+            *outUnits = units;
+        return false;
+    }
+
+    if (outUnits)
+        *outUnits = units;
+
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'nilash" }) &&
+           Aq40BossHelper::HasAnyNamedUnit(botAI, units, { "emperor vek'lor" });
+}
+
 bool HasTwinBossAggro(Player* member, Unit* boss)
 {
     return HasTwinBossAggroInternal(member, boss);
@@ -381,6 +381,9 @@ bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignmen
     if (!bot)
         return false;
 
+    // Each side has one warlock tank + one melee tank permanently assigned.
+    // Tanks never cross sides — the backup on the other side picks up after
+    // teleport.  Primary = side-matched to the boss's current position.
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return assignment.veklor && !assignment.isTankBackup;
 

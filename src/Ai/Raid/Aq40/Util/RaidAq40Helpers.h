@@ -47,6 +47,7 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
 bool HasTwinBossAggro(Player* member, Unit* boss);
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
+bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
 
 bool IsCthunInStomach(Player* bot, PlayerbotAI* botAI);
 uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers);

@@ -131,8 +131,18 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
         {
             // Mark bosses for the raid while holding position.
-            GuidVector preUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
-                context->GetValue<GuidVector>("attackers")->Get());
+            // During pre-pull, attackers list is empty (no combat yet), so use
+            // an empty vector — GetTwinAssignments will fall back to the
+            // boss cache populated from visible emperors during staging.
+            GuidVector emptyAttackers;
+            GuidVector preUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, emptyAttackers);
+            // If encounter units are empty, build from visible twins directly.
+            if (preUnits.empty())
+            {
+                GuidVector visibleTwins;
+                Aq40Helpers::HasTwinVisibleEmperors(bot, botAI, &visibleTwins);
+                preUnits = visibleTwins;
+            }
             Aq40Helpers::TwinAssignments preAssign = Aq40Helpers::GetTwinAssignments(bot, botAI, preUnits);
             if (preAssign.veknilash)
                 MarkTargetWithDiamond(bot, preAssign.veknilash);
@@ -377,31 +387,42 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != veklor)
         PinTwinTarget(botAI, context, veklor);
 
-    // Positioning: hold at range on far side of Vek'lor, away from Vek'nilash.
+    // Positioning constants.
+    // minRange = 15y — just outside 18y Arcane Burst radius with margin for
+    //   movement jitter.  Old value of 21y was too tight and caused oscillation
+    //   between move branches, preventing any casts.
+    // maxRange = 30y — standard Shadow Bolt range.
     float const desiredRange = 24.0f;
-    float const minRange = 21.0f;
+    float const minRange = 15.0f;
     float const maxRange = 30.0f;
 
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
 
-    // Far from Vek'lor: move DIRECTLY toward boss via shortest path.
-    // Do NOT use far-side anchor here — it sends the warlock toward the wall.
-    if (rangeToVeklor > maxRange || !hasLOS)
+    // --- CAST-FIRST PRIORITY ---
+    // Threat generation is more important than perfect positioning.
+    // If we're anywhere within 30y with LOS, try to cast immediately.
+    // This prevents the bot from oscillating between movement branches
+    // without ever entering the old narrow casting window.
+    if (rangeToVeklor <= maxRange && hasLOS)
     {
         if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
             botAI->CastSpell("shadow ward", bot);
 
-        MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
-        return true;
+        if (botAI->CanCastSpell("searing pain", veklor))
+            return botAI->CastSpell("searing pain", veklor);
+
+        if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
+            return botAI->CastSpell("curse of doom", veklor);
+
+        if (bot->GetVictim() != veklor)
+            Attack(veklor);
     }
 
-    // Too close — back away using far-side anchor.
-    if (rangeToVeklor < minRange)
+    // --- POSITIONING (between casts / GCD) ---
+    // Too close — inside Arcane Burst danger zone, back away urgently.
+    if (rangeToVeklor < minRange && hasLOS)
     {
-        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
-            botAI->CastSpell("shadow ward", bot);
-
         bot->AttackStop();
         bot->InterruptNonMeleeSpells(true);
 
@@ -411,31 +432,25 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
                    retreatPos.GetPositionZ(), false, false, false, true,
                    MovementPriority::MOVEMENT_COMBAT, true, false);
         else
-            MoveTo(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+            MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
         return true;
     }
 
-    // In casting range (21-30y) with LOS — threat generation is #1 priority.
-    if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
-        return botAI->CastSpell("shadow ward", bot);
+    // Far from Vek'lor or no LOS: move DIRECTLY toward boss.
+    if (rangeToVeklor > maxRange || !hasLOS)
+    {
+        MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+        return true;
+    }
 
-    if (botAI->CanCastSpell("searing pain", veklor))
-        return botAI->CastSpell("searing pain", veklor);
-
-    if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
-        return botAI->CastSpell("curse of doom", veklor);
-
-    // Soft reposition toward far-side anchor between casts.
+    // In range — soft reposition toward far-side anchor between casts.
     Position anchorPosition;
     if (GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, anchorPosition) &&
         bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY()) > 6.0f)
         MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
                anchorPosition.GetPositionZ(), false, false, false, true,
                MovementPriority::MOVEMENT_COMBAT, true, false);
-
-    if (bot->GetVictim() != veklor)
-        Attack(veklor);
 
     return true;
 }
