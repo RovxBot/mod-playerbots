@@ -210,13 +210,18 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 28.0f, healPos))
             return false;
 
-        if (bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) <= 5.0f)
+        // Use generous 8y tolerance to prevent oscillation between movement
+        // and "in position" states.  Healers that oscillate never cast heals
+        // because MoveNear returns true every tick, consuming the action slot.
+        if (bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) <= 8.0f)
             return false;  // In position — let class AI handle healing.
 
-        bool moved = MoveNear(healBoss, 28.0f, MovementPriority::MOVEMENT_COMBAT);
-        if (!moved && bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) > 5.0f)
-            return true;  // Still en route.
-        return moved;
+        // Move to the EXACT far-side position, not a random point around the boss.
+        // MoveNear picks a random angle and can put the healer between bosses
+        // (inside Arcane Burst range) or out of range of the warlock tank.
+        return MoveTo(bot->GetMapId(), healPos.GetPositionX(), healPos.GetPositionY(),
+                      healPos.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
     }
 
     bool const isHunter = bot->getClass() == CLASS_HUNTER;
@@ -415,31 +420,32 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         if (!botAI->HasAura("curse of doom", veklor) && botAI->CanCastSpell("curse of doom", veklor))
             return botAI->CastSpell("curse of doom", veklor);
 
+        // On GCD or casting — ensure we're attacking and hold the action slot.
+        // Don't fall through to positioning, which would waste the tick on
+        // movement when we should be waiting for GCD to finish.
         if (bot->GetVictim() != veklor)
             Attack(veklor);
-    }
 
-    // --- POSITIONING (between casts / GCD) ---
-    // Too close — inside Arcane Burst danger zone, back away urgently.
-    if (rangeToVeklor < minRange && hasLOS)
-    {
-        bot->AttackStop();
-        bot->InterruptNonMeleeSpells(true);
+        // Only reposition if too close (Arcane Burst danger).
+        if (rangeToVeklor < minRange)
+        {
+            Position retreatPos;
+            if (GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, retreatPos))
+                MoveTo(bot->GetMapId(), retreatPos.GetPositionX(), retreatPos.GetPositionY(),
+                       retreatPos.GetPositionZ(), false, false, false, true,
+                       MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
 
-        Position retreatPos;
-        if (GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, retreatPos))
-            MoveTo(bot->GetMapId(), retreatPos.GetPositionX(), retreatPos.GetPositionY(),
-                   retreatPos.GetPositionZ(), false, false, false, true,
-                   MovementPriority::MOVEMENT_COMBAT, true, false);
-        else
-            MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
-
-        return true;
+        return true;  // Hold action slot — cast next tick.
     }
 
     // Far from Vek'lor or no LOS: move DIRECTLY toward boss.
+    // Pre-cast Shadow Ward while approaching.
     if (rangeToVeklor > maxRange || !hasLOS)
     {
+        if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
+            botAI->CastSpell("shadow ward", bot);
+
         MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
         return true;
     }
