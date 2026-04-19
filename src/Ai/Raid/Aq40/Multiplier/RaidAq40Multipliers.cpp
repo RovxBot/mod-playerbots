@@ -365,10 +365,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     {
         if (actionName == "aq40 twin emperors pre pull stage")
             return 4.0f;
-
-        if (dynamic_cast<FollowAction*>(action))
-            return 0.0f;
     }
+
+    // Suppress follow whenever bots are in the Twin room, not just when
+    // IsTwinPrePullReady is true.  Prevents oscillation when the pre-pull
+    // state flickers due to combat state transitions.
+    if (Aq40Helpers::IsInTwinEmperorRoom(bot) && dynamic_cast<FollowAction*>(action))
+        return 0.0f;
 
     GuidVector activeUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, AI_VALUE(GuidVector, "attackers"));
     if (!Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "emperor vek'nilash", "emperor vek'lor" }))
@@ -408,6 +411,18 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
         return 0.0f;
+
+    // Suppress offensive class AI spell casts for designated warlock tanks.
+    // WarlockTankAction handles all combat spells (Searing Pain, Shadow Ward,
+    // Curse of Doom) via direct botAI->CastSpell() calls which bypass the
+    // action engine.  Block enemy-targeted class AI actions so the Affliction/
+    // Destruction rotation doesn't override the threat-generation priority.
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        if (spellAction && spellAction->GetTargetName() == "current target")
+            return 0.0f;
+    }
 
     return 1.0f;
 }

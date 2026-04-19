@@ -107,20 +107,35 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         Position anchor = GetTwinSideAnchor(sideIndex);
 
         if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
+        {
+            // Mark bosses for the raid while holding position.
+            GuidVector preUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+                context->GetValue<GuidVector>("attackers")->Get());
+            Aq40Helpers::TwinAssignments preAssign = Aq40Helpers::GetTwinAssignments(bot, botAI, preUnits);
+            if (preAssign.veknilash)
+                MarkTargetWithDiamond(bot, preAssign.veknilash);
+            if (preAssign.veklor)
+                MarkTargetWithSquare(bot, preAssign.veklor);
             return true;  // Already in position - hold.
+        }
 
-        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
+        bool moved = MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
                       anchor.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true, false);
+        // Still en route — hold action slot even if MoveTo dedup returned false.
+        return moved || bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f;
     }
 
     // Everyone else moves to room center and holds.
     if (bot->GetExactDist2d(kTwinRoomCenterX, kTwinRoomCenterY) <= 5.0f)
         return true;  // Already in position - hold.
 
-    return MoveTo(bot->GetMapId(), kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ,
-                  false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true, false);
+    {
+        bool moved = MoveTo(bot->GetMapId(), kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ,
+                      false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+        return moved || bot->GetExactDist2d(kTwinRoomCenterX, kTwinRoomCenterY) > 5.0f;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +167,25 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     bool const isHealer = botAI->IsHeal(bot);
     if (isHealer)
-        return false;
+    {
+        // Position healers on their assigned side, 28y from boss on the far side
+        // (outside 18y Arcane Burst range, within 40y heal range of tanks).
+        Unit* healBoss = assignment.sideEmperor;
+        if (!healBoss)
+            return false;
+
+        Position healPos;
+        if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 28.0f, healPos))
+            return false;
+
+        if (bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) <= 5.0f)
+            return false;  // In position — let class AI handle healing.
+
+        bool moved = MoveNear(healBoss, 28.0f, MovementPriority::MOVEMENT_COMBAT);
+        if (!moved && bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) > 5.0f)
+            return true;  // Still en route.
+        return moved;
+    }
 
     bool const isHunter = bot->getClass() == CLASS_HUNTER;
     bool const isRangedDps = botAI->IsRanged(bot);
@@ -178,8 +211,12 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (!desiredTarget || !desiredTarget->IsAlive())
         return false;
 
-    // Always keep the target pinned.
+    // Always keep the target pinned and set RTI for base AI integration.
     PinTwinTarget(botAI, context, desiredTarget);
+    if (isRangedDps)
+        SetRtiTarget(botAI, "square", desiredTarget);   // Vek'lor = square
+    else
+        SetRtiTarget(botAI, "diamond", desiredTarget);  // Vek'nilash = diamond
 
     float const distance = bot->GetDistance2d(desiredTarget);
     float const attackRange = isRangedDps ? 28.0f : 5.0f;
@@ -188,7 +225,11 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (distance > attackRange || !bot->IsWithinLOSInMap(desiredTarget))
     {
         float const moveRange = isRangedDps ? 25.0f : 3.0f;
-        return MoveNear(desiredTarget, moveRange, MovementPriority::MOVEMENT_COMBAT);
+        bool moved = MoveNear(desiredTarget, moveRange, MovementPriority::MOVEMENT_COMBAT);
+        // Still en route — hold action slot even if MoveTo dedup returned false.
+        if (!moved && distance > attackRange)
+            return true;
+        return moved;
     }
 
     // In range - attack if not already, then return false so class AI casts spells.
@@ -227,7 +268,12 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
         float const range = bot->GetDistance2d(assignment.veknilash);
         if (range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
-            return MoveNear(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
+        {
+            bool moved = MoveNear(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
+            if (!moved && range > 5.0f)
+                return true;  // Still en route.
+            return moved;
+        }
 
         if (bot->GetVictim() != assignment.veknilash)
             Attack(assignment.veknilash);
@@ -291,11 +337,13 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     if (!Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
         return false;
 
-    // If Vek'lor is on the far side (closer to opposite boss than to us),
-    // don't chase across the room.  The other warlock tank handles pickup.
+    // If Vek'lor is on the far side AND far away, don't chase across the room.
+    // The other warlock tank handles pickup.  But if we're within 45y of Vek'lor
+    // (e.g. still near room center after pull), engage regardless of side check.
     // Pre-cast Shadow Ward while holding so we're ready when it teleports back.
     if (assignment.veknilash &&
-        !Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.veklor, assignment.veknilash))
+        !Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.veklor, assignment.veknilash) &&
+        bot->GetDistance2d(assignment.veklor) > 45.0f)
     {
         if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
             botAI->CastSpell("shadow ward", bot);
