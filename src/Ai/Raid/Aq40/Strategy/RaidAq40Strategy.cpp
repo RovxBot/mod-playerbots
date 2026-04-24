@@ -108,6 +108,7 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             NextAction("aq40 twin emperors choose target", ACTION_RAID + 2),
             NextAction("aq40 twin emperors hold split", ACTION_RAID + 3),
             NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 4),
+            NextAction("aq40 twin emperors healer support", ACTION_RAID + 5),
         }));
 
     // Ouro baseline strategy:
