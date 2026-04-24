@@ -1,6 +1,7 @@
 #ifndef _PLAYERBOT_RAIDAQ40HELPERS_H_
 #define _PLAYERBOT_RAIDAQ40HELPERS_H_
 
+#include <list>
 #include <unordered_map>
 
 #include "ObjectGuid.h"
@@ -46,6 +47,9 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool HasTwinBossAggro(Player* member, Unit* boss);
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
+std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets);
+bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
 

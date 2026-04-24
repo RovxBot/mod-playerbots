@@ -384,6 +384,7 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     // Let our Twin control actions pass through at normal priority.
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
+        actionName == "aq40 twin emperors healer support" ||
         actionName == "aq40 twin emperors pre pull stage" ||
         actionName == "aq40 twin emperors hold split" ||
         actionName == "aq40 twin emperors warlock tank";
@@ -407,6 +408,9 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 
     if (dynamic_cast<CombatFormationMoveAction*>(action) ||
         dynamic_cast<FleeAction*>(action))
+        return 0.0f;
+
+    if (botAI->IsHeal(bot) && dynamic_cast<ReachPartyMemberToHealAction*>(action))
         return 0.0f;
 
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))

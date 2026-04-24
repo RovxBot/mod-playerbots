@@ -33,6 +33,7 @@ public:
         creators["aq40 huhuran choose target"] = &RaidAq40ActionContext::huhuran_choose_target;
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
         creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
+        creators["aq40 twin emperors healer support"] = &RaidAq40ActionContext::twin_emperors_healer_support;
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors pre pull stage"] = &RaidAq40ActionContext::twin_emperors_pre_pull_stage;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
@@ -110,6 +111,10 @@ private:
     static Action* twin_emperors_choose_target(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsChooseTargetAction(botAI);
+    }
+    static Action* twin_emperors_healer_support(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsHealerSupportAction(botAI);
     }
     static Action* twin_emperors_hold_split(PlayerbotAI* botAI) { return new Aq40TwinEmperorsHoldSplitAction(botAI); }
     static Action* twin_emperors_pre_pull_stage(PlayerbotAI* botAI)

@@ -1,9 +1,16 @@
 #include "RaidAq40Actions.h"
 
+#include <algorithm>
 #include <cmath>
+#include <list>
+#include <string>
 
+#include "CharmInfo.h"
 #include "CreatureAI.h"
+#include "Pet.h"
 #include "SharedDefines.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "../RaidAq40BossHelper.h"
 #include "RaidBossHelpers.h"
 #include "../RaidAq40SpellIds.h"
@@ -104,6 +111,57 @@ bool GetFarSidePosition(Player* bot, Unit* boss, Unit* otherBoss,
     }
     return false;
 }
+
+bool IsWithinHealCoverage(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets)
+{
+    if (!bot || !botAI)
+        return false;
+
+    float const healRange = botAI->GetRange("heal");
+    for (ObjectGuid const guid : focusTargets)
+    {
+        Unit* target = botAI->GetUnit(guid);
+        if (!target || !target->IsAlive() || target->GetMapId() != bot->GetMapId())
+            continue;
+        if (bot->GetDistance2d(target) <= healRange && bot->IsWithinLOSInMap(target))
+            return true;
+    }
+
+    return false;
+}
+
+bool IsTooCloseToTwinBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
+{
+    if (!bot)
+        return false;
+
+    float constexpr kSafeBossDistance = 21.0f;
+    return (assignment.veklor && bot->GetDistance2d(assignment.veklor) < kSafeBossDistance) ||
+           (assignment.veknilash && bot->GetDistance2d(assignment.veknilash) < kSafeBossDistance);
+}
+
+void DisableTwinPetTauntAutocast(Pet* pet)
+{
+    if (!pet)
+        return;
+
+    for (PetSpellMap::const_iterator itr = pet->m_spells.begin(); itr != pet->m_spells.end(); ++itr)
+    {
+        if (itr->second.state == PETSPELL_REMOVED)
+            continue;
+
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(itr->first);
+        if (!spellInfo || !spellInfo->IsAutocastable() || !spellInfo->SpellName[0])
+            continue;
+
+        std::string const spellName = spellInfo->SpellName[0];
+        if (spellName != "Growl" && spellName != "Charge")
+            continue;
+
+        if (std::find(pet->m_autospells.begin(), pet->m_autospells.end(), itr->first) != pet->m_autospells.end())
+            pet->ToggleAutocast(spellInfo, false);
+    }
+}
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -195,6 +253,52 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 }
 
 // ---------------------------------------------------------------------------
+// HealerSupportAction - locks healers to their stable room side and focuses
+// their generic heal logic on the tanks assigned to that side.
+// ---------------------------------------------------------------------------
+bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
+{
+    if (!botAI->IsHeal(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor && !assignment.veknilash)
+        return Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+
+    std::list<ObjectGuid> const focusTargets = Aq40Helpers::GetTwinHealerFocusTargets(bot, botAI, assignment);
+    if (focusTargets.empty())
+        return Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+
+    Aq40Helpers::ApplyTwinHealerFocusTargets(bot, botAI, focusTargets);
+
+    Unit* healBoss = assignment.sideEmperor;
+    if (!healBoss)
+        return false;
+
+    Position healPos;
+    if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 28.0f, healPos))
+        return false;
+
+    float const distToHealPos = bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY());
+    bool const hasHealCoverage = IsWithinHealCoverage(bot, botAI, focusTargets);
+    bool const tooCloseToBoss = IsTooCloseToTwinBoss(bot, assignment);
+
+    // If the healer can already cover their side tanks and is near their side
+    // anchor, avoid movement so class healing can fire immediately.
+    if (hasHealCoverage && !tooCloseToBoss && distToHealPos <= 18.0f)
+        return false;
+    if (distToHealPos <= 8.0f && !tooCloseToBoss)
+        return false;
+
+    bool moved = MoveTo(bot->GetMapId(), healPos.GetPositionX(), healPos.GetPositionY(),
+                        healPos.GetPositionZ(), false, false, false, true,
+                        MovementPriority::MOVEMENT_COMBAT, true, false);
+    return moved || distToHealPos > 8.0f;
+}
+
+// ---------------------------------------------------------------------------
 // ChooseTargetAction - pin correct target, move into range, and attack.
 // Runs every tick.  Returns false only when the bot is on the correct
 // target AND in range, so the class AI can take over spell casting.
@@ -203,7 +307,7 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 // Melee tank    -> defer to HoldSplit for positioning
 // Ranged DPS    -> Vek'lor
 // Melee DPS     -> Vek'nilash
-// Hunter        -> mutate bugs first, then Vek'lor
+// Hunter        -> dangerous bugs first, then Vek'nilash
 // Healer        -> return false (class AI handles healing)
 // ---------------------------------------------------------------------------
 bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
@@ -221,32 +325,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (isWarlockTank || isMeleeTank)
         return false;
 
-    bool const isHealer = botAI->IsHeal(bot);
-    if (isHealer)
-    {
-        // Position healers on their assigned side, 28y from boss on the far side
-        // (outside 18y Arcane Burst range, within 40y heal range of tanks).
-        Unit* healBoss = assignment.sideEmperor;
-        if (!healBoss)
-            return false;
-
-        Position healPos;
-        if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 28.0f, healPos))
-            return false;
-
-        // Use generous 8y tolerance to prevent oscillation between movement
-        // and "in position" states.  Healers that oscillate never cast heals
-        // because MoveNear returns true every tick, consuming the action slot.
-        if (bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY()) <= 8.0f)
-            return false;  // In position — let class AI handle healing.
-
-        // Move to the EXACT far-side position, not a random point around the boss.
-        // MoveNear picks a random angle and can put the healer between bosses
-        // (inside Arcane Burst range) or out of range of the warlock tank.
-        return MoveTo(bot->GetMapId(), healPos.GetPositionX(), healPos.GetPositionY(),
-                      healPos.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT, true, false);
-    }
+    if (botAI->IsHeal(bot))
+        return false;
 
     bool const isHunter = bot->getClass() == CLASS_HUNTER;
     bool const isRangedDps = botAI->IsRanged(bot);
@@ -295,6 +375,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     // Redirect hunter pets to the hunter's target (prevent IMMUNE spam on Vek'lor).
     if (isHunter)
     {
+        DisableTwinPetTauntAutocast(bot->GetPet());
         if (Guardian* pet = bot->GetGuardianPet())
         {
             if (pet->IsAlive() && pet->GetVictim() != desiredTarget)
