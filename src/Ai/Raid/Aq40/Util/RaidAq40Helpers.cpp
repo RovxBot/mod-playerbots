@@ -50,6 +50,12 @@ struct TwinHealerFocusState
 };
 std::unordered_map<uint64, TwinHealerFocusState> sTwinHealerFocusStateByBot;
 
+struct TwinTemporaryStrategyState
+{
+    bool hadAvoidAoeStrategy = false;
+};
+std::unordered_map<uint64, TwinTemporaryStrategyState> sTwinTemporaryStrategyStateByBot;
+
 bool IsTwinRaidCombatActiveInternal(Player* bot);
 bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
 void UpdateTwinBossCache(Player* bot, PlayerbotAI* botAI, GuidVector const& units);
@@ -74,6 +80,22 @@ void SetFocusHealTargets(PlayerbotAI* botAI, std::list<ObjectGuid> const& focusT
 bool HasTwinHealerFocusState(Player* bot)
 {
     return bot && sTwinHealerFocusStateByBot.find(bot->GetGUID().GetRawValue()) != sTwinHealerFocusStateByBot.end();
+}
+
+bool HasTwinTemporaryStrategyState(Player* bot)
+{
+    return bot && sTwinTemporaryStrategyStateByBot.find(bot->GetGUID().GetRawValue()) !=
+                      sTwinTemporaryStrategyStateByBot.end();
+}
+
+void AppendUniqueFocusTarget(std::list<ObjectGuid>& focusTargets, Player* target)
+{
+    if (!target)
+        return;
+
+    ObjectGuid const guid = target->GetGUID();
+    if (std::find(focusTargets.begin(), focusTargets.end(), guid) == focusTargets.end())
+        focusTargets.push_back(guid);
 }
 
 bool IsTwinBossUnit(PlayerbotAI* botAI, Unit* unit)
@@ -698,6 +720,8 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
 
     std::vector<Player*> primaryTargets;
     std::vector<Player*> reserveTargets;
+    std::vector<Player*> sideHealers;
+    std::vector<Player*> sideMembers;
     for (GroupReference const* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -710,34 +734,45 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
 
         bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
         bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
-        if (!isWarlockTank && !isMeleeTank)
-            continue;
+        bool const isHealer = PlayerbotAI::IsHeal(member);
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.sideIndex)
+        if (isWarlockTank || isMeleeTank || isHealer)
+        {
+            if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.sideIndex)
+                continue;
+
+            if (isWarlockTank || isMeleeTank)
+            {
+                bool const isPrimaryForCurrentBoss =
+                    (isWarlockTank && assignment.veklor && assignment.veklorSideIndex == assignment.sideIndex) ||
+                    (isMeleeTank && assignment.veknilash && assignment.veknilashSideIndex == assignment.sideIndex);
+
+                if (isPrimaryForCurrentBoss)
+                    primaryTargets.push_back(member);
+                else
+                    reserveTargets.push_back(member);
+            }
+            else
+            {
+                sideHealers.push_back(member);
+            }
+
             continue;
+        }
 
-        bool const isPrimaryForCurrentBoss =
-            (isWarlockTank && assignment.veklor && assignment.veklorSideIndex == assignment.sideIndex) ||
-            (isMeleeTank && assignment.veknilash && assignment.veknilashSideIndex == assignment.sideIndex);
-
-        if (isPrimaryForCurrentBoss)
-            primaryTargets.push_back(member);
-        else
-            reserveTargets.push_back(member);
+        if (IsLikelyOnSameTwinSide(member, assignment.sideEmperor, assignment.oppositeEmperor))
+            sideMembers.push_back(member);
     }
 
-    auto appendUnique = [&focusTargets](Player* target)
-    {
-        ObjectGuid const guid = target->GetGUID();
-        if (std::find(focusTargets.begin(), focusTargets.end(), guid) == focusTargets.end())
-            focusTargets.push_back(guid);
-    };
-
     for (Player* target : primaryTargets)
-        appendUnique(target);
+        AppendUniqueFocusTarget(focusTargets, target);
     for (Player* target : reserveTargets)
-        appendUnique(target);
+        AppendUniqueFocusTarget(focusTargets, target);
+    for (Player* target : sideHealers)
+        AppendUniqueFocusTarget(focusTargets, target);
+    for (Player* target : sideMembers)
+        AppendUniqueFocusTarget(focusTargets, target);
 
     return focusTargets;
 }
@@ -801,6 +836,70 @@ bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI)
     }
 
     sTwinHealerFocusStateByBot.erase(stateItr);
+    return true;
+}
+
+bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment)
+{
+    if (!bot || !assignment.sideEmperor)
+        return false;
+
+    float constexpr kSideLeashDistance = 55.0f;
+    float constexpr kWrongSideMargin = 10.0f;
+
+    float const sideDistance = bot->GetDistance2d(assignment.sideEmperor);
+    if (sideDistance > kSideLeashDistance)
+        return true;
+
+    if (!assignment.oppositeEmperor)
+        return false;
+
+    float const oppositeDistance = bot->GetDistance2d(assignment.oppositeEmperor);
+    return oppositeDistance + kWrongSideMargin < sideDistance;
+}
+
+bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    if (sTwinTemporaryStrategyStateByBot.find(botGuid) == sTwinTemporaryStrategyStateByBot.end())
+    {
+        sTwinTemporaryStrategyStateByBot[botGuid] =
+        {
+            botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT)
+        };
+    }
+
+    if (botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+        return false;
+
+    botAI->ChangeStrategy("+avoid aoe", BOT_STATE_COMBAT);
+    return true;
+}
+
+bool ClearTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto stateItr = sTwinTemporaryStrategyStateByBot.find(botGuid);
+    if (stateItr == sTwinTemporaryStrategyStateByBot.end())
+        return false;
+
+    if (stateItr->second.hadAvoidAoeStrategy)
+    {
+        if (!botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+            botAI->ChangeStrategy("+avoid aoe", BOT_STATE_COMBAT);
+    }
+    else if (botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-avoid aoe", BOT_STATE_COMBAT);
+    }
+
+    sTwinTemporaryStrategyStateByBot.erase(stateItr);
     return true;
 }
 
@@ -1271,9 +1370,10 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
 
     bool const hasManagedResistanceStrategy = HasManagedResistanceStrategy(bot, botAI);
     bool const hasTwinHealerFocusState = HasTwinHealerFocusState(bot);
+    bool const hasTwinTemporaryStrategyState = HasTwinTemporaryStrategyState(bot);
     bool const hasPersistentEncounterState = HasPersistentEncounterState(bot);
 
-    if (hasManagedResistanceStrategy || hasTwinHealerFocusState)
+    if (hasManagedResistanceStrategy || hasTwinHealerFocusState || hasTwinTemporaryStrategyState)
         return true;
 
     if (!hasPersistentEncounterState)
