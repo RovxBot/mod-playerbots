@@ -60,29 +60,13 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("aq40 fankriss mortal wound",
         { NextAction("aq40 fankriss tank swap", ACTION_RAID + 5) }));
 
-    // AQ40 trash baseline strategy:
-    // - kill mindslayers first (deadly AoE Mind Blast)
-    // - prioritize disruptive casters (nullifier/eradicator)
-    // - switch to interrupt Mind Blast casts and Mind Flay channels immediately
-    // - CC mind-controlled players from Cause Insanity
-    // - spread out of high-danger point-blank trash AoE casts
-    // - hunters tranq Slayer Enrage, shamans/mages/hunters dispel Champion Vengeance
-    // - shamans drop tremor totem, priests pre-cast fear ward for Champion fear
+    // AQ40 trash strategy (Anubisath Defenders only):
+    // - choose correct target among defenders
+    // - spread out of Thunderclap and Plague AoE
     triggers.push_back(new TriggerNode("aq40 trash active",
         { NextAction("aq40 trash choose target", ACTION_RAID + 2) }));
-    triggers.push_back(new TriggerNode("aq40 trash mindslayer cast",
-        { NextAction("aq40 trash interrupt mind blast", ACTION_RAID + 7),
-          NextAction("aq40 trash choose target", ACTION_RAID + 6) }));
-    triggers.push_back(new TriggerNode("aq40 trash mc detected",
-        { NextAction("aq40 trash control mind control", ACTION_RAID + 5) }));
     triggers.push_back(new TriggerNode("aq40 trash dangerous aoe",
         { NextAction("aq40 trash avoid dangerous aoe", ACTION_RAID + 5) }));
-    triggers.push_back(new TriggerNode("aq40 trash slayer enrage",
-        { NextAction("aq40 trash tranq enrage", ACTION_RAID + 6) }));
-    triggers.push_back(new TriggerNode("aq40 trash champion vengeance",
-        { NextAction("aq40 trash dispel vengeance", ACTION_RAID + 6) }));
-    triggers.push_back(new TriggerNode("aq40 trash champion fear",
-        { NextAction("aq40 trash fear ward", ACTION_RAID + 5) }));
 
     // Huhuran baseline strategy:
     // - maintain boss focus
