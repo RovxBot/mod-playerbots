@@ -1,10 +1,13 @@
 #include "RaidAq40Helpers.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <list>
+#include <mutex>
 #include <set>
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
@@ -42,7 +45,6 @@ std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
-
 struct TwinHealerFocusState
 {
     bool hadFocusStrategy = false;
@@ -55,6 +57,8 @@ struct TwinTemporaryStrategyState
     bool hadAvoidAoeStrategy = false;
 };
 std::unordered_map<uint64, TwinTemporaryStrategyState> sTwinTemporaryStrategyStateByBot;
+std::unordered_map<std::string, uint32> sAq40LogLastMsByKey;
+std::mutex sAq40LogMutex;
 
 bool IsTwinRaidCombatActiveInternal(Player* bot);
 bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
@@ -291,6 +295,80 @@ bool IsAnyGroupMemberInTwinRoomInternal(Player* bot)
     return false;
 }
 
+std::string ToAq40LogToken(std::string value)
+{
+    std::string token;
+    bool lastWasSeparator = false;
+    for (char ch : value)
+    {
+        unsigned char const uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch))
+        {
+            token.push_back(static_cast<char>(std::tolower(uch)));
+            lastWasSeparator = false;
+        }
+        else if (!lastWasSeparator && !token.empty())
+        {
+            token.push_back('_');
+            lastWasSeparator = true;
+        }
+    }
+
+    while (!token.empty() && token.back() == '_')
+        token.pop_back();
+
+    return token.empty() ? "unknown" : token;
+}
+
+uint32 GetAq40LogInstanceId(Player* bot)
+{
+    if (!bot)
+        return 0;
+
+    if (bot->GetMap())
+        return bot->GetMap()->GetInstanceId();
+
+    return bot->GetMapId();
+}
+
+void LogAq40(Player* bot, std::string const& eventKey, std::string const& stateKey,
+             std::string const& fields, uint32 throttleMs, bool warn)
+{
+    if (!sPlayerbotAIConfig.aq40StrategyLog || !bot)
+        return;
+
+    uint32 const instanceId = GetAq40LogInstanceId(bot);
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    uint32 const effectiveThrottleMs = throttleMs ? throttleMs : sPlayerbotAIConfig.aq40StrategyLogThrottleMs;
+
+    std::ostringstream key;
+    key << instanceId << ":" << botGuid << ":" << ToAq40LogToken(eventKey) << ":" << stateKey;
+    std::string const logKey = key.str();
+
+    uint32 const now = getMSTime();
+    {
+        std::lock_guard<std::mutex> guard(sAq40LogMutex);
+        auto const itr = sAq40LogLastMsByKey.find(logKey);
+        if (effectiveThrottleMs > 0 && itr != sAq40LogLastMsByKey.end() && now - itr->second < effectiveThrottleMs)
+            return;
+
+        sAq40LogLastMsByKey[logKey] = now;
+    }
+
+    std::ostringstream line;
+    line << "event=" << ToAq40LogToken(eventKey)
+         << " bot=" << ToAq40LogToken(bot->GetName())
+         << " role=" << GetAq40LogRole(bot, GET_PLAYERBOT_AI(bot))
+         << " instance=" << instanceId;
+    if (!fields.empty())
+        line << " " << fields;
+
+    if (warn)
+        LOG_WARN("playerbots_aq40", "AQ40 {}", line.str());
+    else
+        LOG_INFO("playerbots_aq40", "AQ40 {}", line.str());
+}
+
 uint32 GetGroupMemberOrder(Player* bot, Player* member)
 {
     if (!bot || !member)
@@ -406,6 +484,251 @@ bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assign
 }
 
 }  // namespace
+
+std::string GetAq40LogToken(std::string value)
+{
+    return ToAq40LogToken(value);
+}
+
+std::string GetAq40LogUnit(Unit* unit)
+{
+    if (!unit)
+        return "none";
+
+    std::ostringstream out;
+    out << ToAq40LogToken(unit->GetName()) << ":" << unit->GetGUID().GetCounter();
+    return out.str();
+}
+
+std::string GetAq40LogRole(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot)
+        return "unknown";
+
+    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+        return "warlock_tank";
+    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
+        return "melee_tank";
+    if (botAI && botAI->IsHeal(bot))
+        return "healer";
+    if (botAI && botAI->IsRanged(bot))
+        return "ranged";
+    return "melee";
+}
+
+void LogAq40Info(Player* bot, std::string const& eventKey, std::string const& stateKey,
+                 std::string const& fields, uint32 throttleMs)
+{
+    LogAq40(bot, eventKey, stateKey, fields, throttleMs, false);
+}
+
+void LogAq40Warn(Player* bot, std::string const& eventKey, std::string const& stateKey,
+                 std::string const& fields, uint32 throttleMs)
+{
+    LogAq40(bot, eventKey, stateKey, fields, throttleMs, true);
+}
+
+void LogAq40Target(Player* bot, std::string const& boss, std::string const& reason, Unit* target,
+                   uint32 throttleMs)
+{
+    std::ostringstream fields;
+    fields << "boss=" << ToAq40LogToken(boss)
+           << " target=" << GetAq40LogUnit(target)
+           << " reason=" << ToAq40LogToken(reason);
+    LogAq40Info(bot, "target_change", boss + ":" + reason + ":" + GetAq40LogUnit(target),
+                fields.str(), throttleMs);
+}
+
+std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    std::list<ObjectGuid> focusTargets;
+    if (!bot || !botAI || !bot->GetGroup())
+        return focusTargets;
+
+    std::vector<Player*> primaryTargets;
+    std::vector<Player*> reserveTargets;
+    std::vector<Player*> sideHealers;
+    std::vector<Player*> sideMembers;
+    for (GroupReference const* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->IsGameMaster())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
+            continue;
+
+        bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
+        bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
+        bool const isHealer = PlayerbotAI::IsHeal(member);
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (isWarlockTank || isMeleeTank || isHealer)
+        {
+            if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.sideIndex)
+                continue;
+
+            if (isWarlockTank || isMeleeTank)
+            {
+                bool const isPrimaryForCurrentBoss =
+                    (isWarlockTank && assignment.veklor && assignment.veklorSideIndex == assignment.sideIndex) ||
+                    (isMeleeTank && assignment.veknilash && assignment.veknilashSideIndex == assignment.sideIndex);
+
+                if (isPrimaryForCurrentBoss)
+                    primaryTargets.push_back(member);
+                else
+                    reserveTargets.push_back(member);
+            }
+            else
+            {
+                sideHealers.push_back(member);
+            }
+
+            continue;
+        }
+
+        if (IsLikelyOnSameTwinSide(member, assignment.sideEmperor, assignment.oppositeEmperor))
+            sideMembers.push_back(member);
+    }
+
+    for (Player* target : primaryTargets)
+        AppendUniqueFocusTarget(focusTargets, target);
+    for (Player* target : reserveTargets)
+        AppendUniqueFocusTarget(focusTargets, target);
+    for (Player* target : sideHealers)
+        AppendUniqueFocusTarget(focusTargets, target);
+    for (Player* target : sideMembers)
+        AppendUniqueFocusTarget(focusTargets, target);
+
+    return focusTargets;
+}
+
+bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets)
+{
+    if (!bot || !botAI)
+        return false;
+    if (focusTargets.empty())
+        return ClearTwinHealerFocusTargets(bot, botAI);
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    if (sTwinHealerFocusStateByBot.find(botGuid) == sTwinHealerFocusStateByBot.end())
+    {
+        sTwinHealerFocusStateByBot[botGuid] =
+        {
+            botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT),
+            GetFocusHealTargets(botAI)
+        };
+    }
+
+    bool changed = false;
+    std::list<ObjectGuid> const currentTargets = GetFocusHealTargets(botAI);
+    if (currentTargets != focusTargets)
+    {
+        SetFocusHealTargets(botAI, focusTargets);
+        changed = true;
+    }
+
+    if (!botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("+focus heal targets", BOT_STATE_COMBAT);
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto stateItr = sTwinHealerFocusStateByBot.find(botGuid);
+    if (stateItr == sTwinHealerFocusStateByBot.end())
+        return false;
+
+    if (stateItr->second.hadFocusStrategy)
+    {
+        SetFocusHealTargets(botAI, stateItr->second.previousTargets);
+        if (!botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT))
+            botAI->ChangeStrategy("+focus heal targets", BOT_STATE_COMBAT);
+    }
+    else
+    {
+        std::list<ObjectGuid> emptyTargets;
+        SetFocusHealTargets(botAI, emptyTargets);
+        if (botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT))
+            botAI->ChangeStrategy("-focus heal targets", BOT_STATE_COMBAT);
+    }
+
+    sTwinHealerFocusStateByBot.erase(stateItr);
+    return true;
+}
+
+bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment)
+{
+    if (!bot || !assignment.sideEmperor)
+        return false;
+
+    float constexpr kSideLeashDistance = 55.0f;
+    float constexpr kWrongSideMargin = 10.0f;
+
+    float const sideDistance = bot->GetDistance2d(assignment.sideEmperor);
+    if (sideDistance > kSideLeashDistance)
+        return true;
+
+    if (!assignment.oppositeEmperor)
+        return false;
+
+    float const oppositeDistance = bot->GetDistance2d(assignment.oppositeEmperor);
+    return oppositeDistance + kWrongSideMargin < sideDistance;
+}
+
+bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    if (sTwinTemporaryStrategyStateByBot.find(botGuid) == sTwinTemporaryStrategyStateByBot.end())
+    {
+        sTwinTemporaryStrategyStateByBot[botGuid] =
+        {
+            botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT)
+        };
+    }
+
+    if (botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+        return false;
+
+    botAI->ChangeStrategy("+avoid aoe", BOT_STATE_COMBAT);
+    return true;
+}
+
+bool ClearTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI)
+        return false;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto stateItr = sTwinTemporaryStrategyStateByBot.find(botGuid);
+    if (stateItr == sTwinTemporaryStrategyStateByBot.end())
+        return false;
+
+    if (stateItr->second.hadAvoidAoeStrategy)
+    {
+        if (!botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+            botAI->ChangeStrategy("+avoid aoe", BOT_STATE_COMBAT);
+    }
+    else if (botAI->HasStrategy("avoid aoe", BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-avoid aoe", BOT_STATE_COMBAT);
+    }
+
+    sTwinTemporaryStrategyStateByBot.erase(stateItr);
+    return true;
+}
 
 bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits)
 {
@@ -1136,6 +1459,7 @@ uint32 GetCthunPhase2ElapsedMs(PlayerbotAI* botAI, GuidVector const& attackers)
     if (itr == sCthunPhase2StartByInstance.end())
     {
         sCthunPhase2StartByInstance[instanceId] = now;
+        LogAq40Info(bot, "encounter_phase", "cthun:phase2", "boss=cthun phase=phase2", 30000);
         return 0;
     }
 
@@ -1296,6 +1620,10 @@ bool ResetEncounterState(Player* bot)
     erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
     erased = sTwinSideZeroIsLowSide.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
+
+    if (erased)
+        LogAq40Info(bot, "encounter_reset", "shared:" + std::to_string(instanceId),
+            "boss=shared state=reset instance=" + std::to_string(instanceId), 30000);
 
     return erased;
 }

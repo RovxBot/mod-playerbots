@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 
 #include "ObjectGuid.h"
@@ -93,14 +95,14 @@ void LogAq40CleanupTransition(Player* bot, bool wasDirty)
     if (wasDirty)
     {
         if (!previousDirty)
-            LOG_INFO("playerbots", "AQ40 cleanup: bot={} cleaned stale recovery state and can resume follow", bot->GetName());
+            Aq40Helpers::LogAq40Info(bot, "cleanup", "dirty", "boss=shared cleaned=1");
 
         sAq40CleanupReportedDirtyByBot[botGuid] = true;
         return;
     }
 
     if (previousDirty)
-        LOG_INFO("playerbots", "AQ40 cleanup: bot={} recovery state already clean", bot->GetName());
+        Aq40Helpers::LogAq40Info(bot, "cleanup", "clean", "boss=shared cleaned=0");
 
     sAq40CleanupReportedDirtyByBot[botGuid] = false;
 }
@@ -700,6 +702,17 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
         !managedState.warlockShadowBuffApplied)
         sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue());
 
+    if (acted)
+    {
+        std::ostringstream fields;
+        fields << "boss=resistance nature=" << (needNatureResistance ? 1 : 0)
+               << " shadow=" << (needShadowResistance ? 1 : 0);
+        Aq40Helpers::LogAq40Info(bot, "resistance_strategy",
+            std::string("nature:") + (needNatureResistance ? "1" : "0") +
+            ":shadow:" + (needShadowResistance ? "1" : "0"),
+            fields.str());
+    }
+
     return acted;
 }
 
@@ -815,8 +828,13 @@ bool Aq40SkeramAcquirePlatformTargetAction::Execute(Event /*event*/)
     // Encounter tank marks the real Skeram with skull so the raid can follow
     // through blinks without relying solely on tank aggro detection.
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
         MarkTargetWithSkull(bot, target);
+        Aq40Helpers::LogAq40Info(bot, "raid_marker", "skeram:skull:" + Aq40Helpers::GetAq40LogUnit(target),
+            "boss=skeram marker=skull target=" + Aq40Helpers::GetAq40LogUnit(target));
+    }
 
+    Aq40Helpers::LogAq40Target(bot, "skeram", "platform", target);
     return Attack(target);
 }
 
@@ -837,7 +855,11 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
         for (Unit* skeram : skerams)
         {
             if (skeram == currentTarget && skeram->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+            {
+                Aq40Helpers::LogAq40Info(bot, "interrupt", "skeram:" + Aq40Helpers::GetAq40LogUnit(skeram),
+                    "boss=skeram target=" + Aq40Helpers::GetAq40LogUnit(skeram));
                 return botAI->DoSpecificAction("interrupt spell", Event(), true);
+            }
         }
     }
 
@@ -864,6 +886,7 @@ bool Aq40SkeramInterruptAction::Execute(Event /*event*/)
     if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > 22.0f)
         return MoveNear(target, 18.0f, MovementPriority::MOVEMENT_COMBAT);
 
+    Aq40Helpers::LogAq40Target(bot, "skeram", "interrupt", target);
     return Attack(target);
 }
 
@@ -894,6 +917,7 @@ bool Aq40SkeramFocusRealBossAction::Execute(Event /*event*/)
     if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
         return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
+    Aq40Helpers::LogAq40Target(bot, "skeram", "execute", target);
     return Attack(target);
 }
 
@@ -903,7 +927,10 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
 
     if (Aq40BossHelper::TryCrowdControlCharmedPlayer(bot, botAI, encounterUnits))
+    {
+        Aq40Helpers::LogAq40Info(bot, "mind_control", "skeram:cc", "boss=skeram action=cc");
         return true;
+    }
 
     // Fallback: force target back to Skeram.
     GuidVector skeramUnits = Aq40Helpers::GetObservedSkeramEncounterUnits(bot, botAI, attackers);
@@ -916,6 +943,7 @@ bool Aq40SkeramControlMindControlAction::Execute(Event /*event*/)
     if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
         return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
+    Aq40Helpers::LogAq40Target(bot, "skeram", "mc_fallback", target);
     return Attack(target);
 }
 
@@ -980,6 +1008,7 @@ bool Aq40SarturaChooseTargetAction::Execute(Event /*event*/)
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
+    Aq40Helpers::LogAq40Target(bot, "sartura", targetIsGuard ? "guard" : "boss", target);
     return Attack(target);
 }
 
@@ -1019,6 +1048,9 @@ bool Aq40SarturaAvoidWhirlwindAction::Execute(Event /*event*/)
 
     bot->AttackStop();
     bot->InterruptNonMeleeSpells(true);
+    Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
+        "sartura:whirlwind:" + Aq40Helpers::GetAq40LogUnit(threat),
+        "boss=sartura hazard=whirlwind source=" + Aq40Helpers::GetAq40LogUnit(threat));
     return MoveAway(threat, desiredDistance - currentDistance);
 }
 
@@ -1097,6 +1129,7 @@ bool Aq40FankrissChooseTargetAction::Execute(Event /*event*/)
     if (!target || AI_VALUE(Unit*, "current target") == target)
         return false;
 
+    Aq40Helpers::LogAq40Target(bot, "fankriss", targetIsSpawn ? "spawn" : "boss", target);
     return Attack(target);
 }
 
@@ -1144,15 +1177,25 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
             assigned = nullptr;
 
         if (assigned)
+        {
+            Aq40Helpers::LogAq40Target(bot, "trash", "casting_danger", assigned);
             return Attack(assigned);
+        }
     }
 
     Unit* target = nullptr;
+    bool assignedByTank = false;
     if (Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
         target = FindAssignedAq40TrashTankTarget(bot, botAI, controlTargets);
+        assignedByTank = target != nullptr;
+    }
 
     if (!target)
+    {
         target = Aq40BossActions::FindTrashTarget(botAI, activeUnits);
+        assignedByTank = false;
+    }
 
     // Only call Attack() when we actually need to switch targets.  Requiring
     // GetVictim() == target caused Attack() to re-fire every tick for melee
@@ -1166,6 +1209,7 @@ bool Aq40TrashChooseTargetAction::Execute(Event /*event*/)
     if (!bot->IsWithinLOSInMap(target) || bot->GetDistance2d(target) > (desiredRange + engageSlack))
         return MoveNear(target, desiredRange, MovementPriority::MOVEMENT_COMBAT);
 
+    Aq40Helpers::LogAq40Target(bot, "trash", assignedByTank ? "tank_assignment" : "priority", target);
     return Attack(target);
 }
 
@@ -1222,7 +1266,12 @@ bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
         }
 
         if (shouldInterrupt)
+        {
+            Aq40Helpers::LogAq40Info(bot, "interrupt",
+                "trash:" + Aq40Helpers::GetAq40LogUnit(currentTarget),
+                "boss=trash target=" + Aq40Helpers::GetAq40LogUnit(currentTarget));
             return botAI->DoSpecificAction("interrupt spell", Event(), true);
+        }
     }
 
     // Not yet targeting a casting dangerous trash mob – find one and switch.
@@ -1274,6 +1323,7 @@ bool Aq40TrashInterruptMindBlastAction::Execute(Event /*event*/)
     if (!assigned || (AI_VALUE(Unit*, "current target") == assigned && bot->GetVictim() == assigned))
         return false;
 
+    Aq40Helpers::LogAq40Target(bot, "trash", "interrupt_setup", assigned);
     return Attack(assigned);
 }
 
@@ -1298,6 +1348,9 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
         bot->SetTarget(ObjectGuid::Empty);
         bot->SetSelection(ObjectGuid());
 
+        Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
+            "trash:plague:" + Aq40Helpers::GetAq40LogUnit(separationRisk),
+            "boss=trash hazard=plague source=" + Aq40Helpers::GetAq40LogUnit(separationRisk));
         return MoveAway(separationRisk, separationNeeded);
     }
 
@@ -1307,6 +1360,7 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
 
     GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
     Unit* danger = nullptr;
+    std::string dangerKind;
     float highestThreatGap = 0.0f;
 
     for (ObjectGuid const guid : encounterUnits)
@@ -1325,6 +1379,7 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
             {
                 highestThreatGap = gap;
                 danger = unit;
+                dangerKind = "thunderclap";
             }
         }
 
@@ -1338,6 +1393,7 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
             {
                 highestThreatGap = gap;
                 danger = unit;
+                dangerKind = "mind_flay";
             }
         }
     }
@@ -1352,10 +1408,18 @@ bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
     // preventing bots from running deeper into uncleared rooms.
     Aq40TankRetreatResult retreat = ComputeTankRetreatPosition(bot, danger, highestThreatGap + 2.0f);
     if (retreat.valid)
+    {
+        Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
+            "trash:" + dangerKind + ":" + Aq40Helpers::GetAq40LogUnit(danger),
+            "boss=trash hazard=" + dangerKind + " source=" + Aq40Helpers::GetAq40LogUnit(danger));
         return MoveTo(bot->GetMapId(), retreat.x, retreat.y, retreat.z,
                       false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
+    }
 
     // No safe tank-relative position — hold current position rather than scattering.
+    Aq40Helpers::LogAq40Warn(bot, "movement_failure",
+        "trash:" + dangerKind + ":" + Aq40Helpers::GetAq40LogUnit(danger),
+        "boss=trash hazard=" + dangerKind + " reason=no_safe_retreat source=" + Aq40Helpers::GetAq40LogUnit(danger));
     return false;
 }
 
@@ -1403,7 +1467,10 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
 
     if (Aq40BossHelper::TryCrowdControlCharmedPlayer(bot, botAI, encounterUnits))
+    {
+        Aq40Helpers::LogAq40Info(bot, "mind_control", "trash:cc", "boss=trash action=cc");
         return true;
+    }
 
     // Fallback: resume normal trash targeting using combat-filtered units
     // so passive mobs (idle scarabs/scorpions) are ignored.
@@ -1412,6 +1479,7 @@ bool Aq40TrashControlMindControlAction::Execute(Event /*event*/)
     if (!target || (AI_VALUE(Unit*, "current target") == target && bot->GetVictim() == target))
         return false;
 
+    Aq40Helpers::LogAq40Target(bot, "trash", "mc_fallback", target);
     return Attack(target);
 }
 
@@ -1430,7 +1498,14 @@ bool Aq40TrashTranqEnrageAction::Execute(Event /*event*/)
         if (botAI->HasAura(Aq40SpellIds::Aq40SlayerEnrage, unit))
         {
             if (botAI->CanCastSpell("tranquilizing shot", unit))
-                return botAI->CastSpell("tranquilizing shot", unit);
+            {
+                bool const casted = botAI->CastSpell("tranquilizing shot", unit);
+                if (casted)
+                    Aq40Helpers::LogAq40Info(bot, "enrage_handled",
+                        "trash:" + Aq40Helpers::GetAq40LogUnit(unit),
+                        "boss=trash spell=tranquilizing_shot target=" + Aq40Helpers::GetAq40LogUnit(unit));
+                return casted;
+            }
         }
     }
 
@@ -1465,7 +1540,15 @@ bool Aq40TrashDispelVengeanceAction::Execute(Event /*event*/)
     for (char const* spell : dispelSpells)
     {
         if (botAI->CanCastSpell(spell, vengeanceTarget))
-            return botAI->CastSpell(spell, vengeanceTarget);
+        {
+            bool const casted = botAI->CastSpell(spell, vengeanceTarget);
+            if (casted)
+                Aq40Helpers::LogAq40Info(bot, "vengeance_handled",
+                    "trash:" + Aq40Helpers::GetAq40LogUnit(vengeanceTarget),
+                    "boss=trash spell=" + Aq40Helpers::GetAq40LogToken(spell) +
+                    " target=" + Aq40Helpers::GetAq40LogUnit(vengeanceTarget));
+            return casted;
+        }
     }
 
     return false;
@@ -1477,7 +1560,12 @@ bool Aq40TrashFearWardAction::Execute(Event /*event*/)
     if (bot->getClass() == CLASS_SHAMAN)
     {
         if (botAI->CanCastSpell("tremor totem", bot))
-            return botAI->CastSpell("tremor totem", bot);
+        {
+            bool const casted = botAI->CastSpell("tremor totem", bot);
+            if (casted)
+                Aq40Helpers::LogAq40Info(bot, "fear_handled", "trash:tremor_totem", "boss=trash spell=tremor_totem");
+            return casted;
+        }
         return false;
     }
 
@@ -1486,7 +1574,14 @@ bool Aq40TrashFearWardAction::Execute(Event /*event*/)
     {
         Player* mainTank = Aq40BossHelper::GetEncounterPrimaryTank(bot);
         if (mainTank && botAI->CanCastSpell("fear ward", mainTank))
-            return botAI->CastSpell("fear ward", mainTank);
+        {
+            bool const casted = botAI->CastSpell("fear ward", mainTank);
+            if (casted)
+                Aq40Helpers::LogAq40Info(bot, "fear_handled",
+                    "trash:fear_ward:" + Aq40Helpers::GetAq40LogUnit(mainTank),
+                    "boss=trash spell=fear_ward target=" + Aq40Helpers::GetAq40LogUnit(mainTank));
+            return casted;
+        }
     }
 
     return false;
