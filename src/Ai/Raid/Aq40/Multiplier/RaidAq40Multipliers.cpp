@@ -413,6 +413,13 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
         return 0.0f;
 
+    // Suppress buff actions during active combat so bots don't waste time
+    // rebuffing (Gift of the Wild, Shadow Protection, auras) instead of
+    // healing or DPSing.  Self-buffs like Shadow Ward for warlock tanks are
+    // cast via direct botAI->CastSpell() which bypasses the action engine.
+    if (dynamic_cast<CastBuffSpellAction*>(action))
+        return 0.0f;
+
     // Suppress offensive class AI spell casts for designated warlock tanks.
     // WarlockTankAction handles all combat spells (Searing Pain, Shadow Ward,
     // Curse of Doom) via direct botAI->CastSpell() calls which bypass the

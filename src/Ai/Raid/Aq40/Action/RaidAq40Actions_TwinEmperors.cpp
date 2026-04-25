@@ -234,6 +234,32 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         return moved || bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f;
     }
 
+    // Healers move to their assigned side so they're already in range when
+    // combat starts, avoiding the post-pull repositioning that prevents healing.
+    if (botAI->IsHeal(bot))
+    {
+        uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
+        Position anchor = GetTwinSideAnchor(sideIndex);
+
+        {
+            std::ostringstream fields;
+            fields << "boss=twins phase=prepull side=" << sideIndex
+                   << " role=healer"
+                   << " anchor_x=" << anchor.GetPositionX()
+                   << " anchor_y=" << anchor.GetPositionY();
+            Aq40Helpers::LogAq40Info(bot, "prepull_stage",
+                "twins:healer:" + std::to_string(sideIndex), fields.str(), 30000);
+        }
+
+        if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
+            return true;  // Already in position - hold.
+
+        bool moved = MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
+                      anchor.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+        return moved || bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f;
+    }
+
     // Everyone else moves to room center and holds.
     Aq40Helpers::LogAq40Info(bot, "prepull_stage", "twins:raid:center",
         "boss=twins phase=prepull side=center", 30000);
@@ -291,6 +317,13 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
     Unit* partyMemberToHeal = AI_VALUE(Unit*, "party member to heal");
     if (partyMemberToHeal && partyMemberToHeal->IsAlive() && partyMemberToHeal->GetMapId() == bot->GetMapId() &&
         bot->GetDistance2d(partyMemberToHeal) <= botAI->GetRange("heal") && bot->IsWithinLOSInMap(partyMemberToHeal))
+        return false;
+
+    // Safety net: if any heal target in LOS is critically low, yield to the
+    // base healing AI even if we're out of position.  Repositioning can wait.
+    if (partyMemberToHeal && partyMemberToHeal->IsAlive() && partyMemberToHeal->GetMapId() == bot->GetMapId() &&
+        partyMemberToHeal->GetHealthPct() < 30.0f &&
+        bot->IsWithinLOSInMap(partyMemberToHeal) && bot->GetDistance2d(partyMemberToHeal) <= 40.0f)
         return false;
 
     if (bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) || bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
@@ -684,12 +717,11 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         PinTwinTarget(botAI, context, veklor);
 
     // Positioning constants.
-    // minRange = 15y — just outside 18y Arcane Burst radius with margin for
-    //   movement jitter.  Old value of 21y was too tight and caused oscillation
-    //   between move branches, preventing any casts.
+    // minRange = 19y — outside 18y Arcane Burst radius with 1y margin for
+    //   movement jitter.
     // maxRange = 30y — standard Shadow Bolt range.
     float const desiredRange = 24.0f;
-    float const minRange = 15.0f;
+    float const minRange = 19.0f;
     float const maxRange = 30.0f;
 
     float const rangeToVeklor = bot->GetDistance2d(veklor);
