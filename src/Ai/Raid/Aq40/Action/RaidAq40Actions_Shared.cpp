@@ -34,140 +34,139 @@ bool ClearManagedAq40ResistanceStrategies(Player* bot, PlayerbotAI* botAI)
         return false;
 
     bool cleaned = false;
-        Aq40Helpers::LogAq40Target(bot, "trash", "priority", target);
-        return Attack(target);
-    }
 
-    bool Aq40TrashChooseTargetAction::isUseful()
+    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
     {
-        GuidVector const& attackers = context->GetValue<GuidVector>("attackers")->Get();
-        GuidVector activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
-        if (activeUnits.empty())
-            return false;
-
-        Unit* currentTarget = AI_VALUE(Unit*, "current target");
-        if (!currentTarget || !currentTarget->IsAlive())
-            return true;
-
-        if (!Aq40BossHelper::IsUnitNamedAny(botAI, currentTarget, { "anubisath defender" }))
-            return true;
-
-        for (ObjectGuid const guid : activeUnits)
-        {
-            if (guid == currentTarget->GetGUID())
-                return false;
-        }
-
-        return true;
+        botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
     }
 
-    bool Aq40TrashAvoidDangerousAoeAction::Execute(Event /*event*/)
+    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT))
     {
-        if (Aq40BossHelper::IsEncounterTank(bot, bot))
-            return false;
-
-        // Plague separation path — applies to all non-tank roles.
-        if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
-        {
-            float separationNeeded = 0.0f;
-            Unit* separationRisk = FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded);
-            if (!separationRisk || separationNeeded <= 0.0f)
-                return false;
-
-            bot->AttackStop();
-            bot->InterruptNonMeleeSpells(true);
-            context->GetValue<Unit*>("current target")->Set(nullptr);
-            bot->SetTarget(ObjectGuid::Empty);
-            bot->SetSelection(ObjectGuid());
-
-            Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
-                "trash:plague:" + Aq40Helpers::GetAq40LogUnit(separationRisk),
-                "boss=trash hazard=plague source=" + Aq40Helpers::GetAq40LogUnit(separationRisk));
-            return MoveAway(separationRisk, separationNeeded);
-        }
-
-        // Only ranged and healers reposition for Defender Thunderclap; melee stay on target.
-        if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
-            return false;
-
-        GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-        Unit* danger = nullptr;
-        std::string dangerKind;
-        float highestThreatGap = 0.0f;
-
-        for (ObjectGuid const guid : encounterUnits)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!unit)
-                continue;
-
-            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-            if (spell &&
-                Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }))
-            {
-                float const gap = 24.0f - bot->GetDistance2d(unit);
-                if (gap > highestThreatGap)
-                {
-                    highestThreatGap = gap;
-                    danger = unit;
-                    dangerKind = "thunderclap";
-                }
-            }
-        }
-
-        if (!danger || highestThreatGap <= 0.0f)
-            return false;
-
-        bot->AttackStop();
-        bot->InterruptNonMeleeSpells(true);
-
-        Aq40TankRetreatResult retreat = ComputeTankRetreatPosition(bot, danger, highestThreatGap + 2.0f);
-        if (retreat.valid)
-        {
-            Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
-                "trash:" + dangerKind + ":" + Aq40Helpers::GetAq40LogUnit(danger),
-                "boss=trash hazard=" + dangerKind + " source=" + Aq40Helpers::GetAq40LogUnit(danger));
-            return MoveTo(bot->GetMapId(), retreat.x, retreat.y, retreat.z,
-                          false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
-        }
-
-        Aq40Helpers::LogAq40Warn(bot, "movement_failure",
-            "trash:" + dangerKind + ":" + Aq40Helpers::GetAq40LogUnit(danger),
-            "boss=trash hazard=" + dangerKind + " reason=no_safe_retreat source=" + Aq40Helpers::GetAq40LogUnit(danger));
-        return false;
+        botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_NON_COMBAT);
+        cleaned = true;
     }
 
-    bool Aq40TrashAvoidDangerousAoeAction::isUseful()
+    if (botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT))
     {
-        if (Aq40BossHelper::IsEncounterTank(bot, bot))
-            return false;
-
-        if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::Aq40DefenderPlague }))
-        {
-            float separationNeeded = 0.0f;
-            return FindClosestAq40PlagueSeparationRisk(bot, botAI, separationNeeded) != nullptr &&
-                   separationNeeded > 0.0f;
-        }
-
-        if (!PlayerbotAI::IsRanged(bot) && !botAI->IsHeal(bot))
-            return false;
-
-        GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, context->GetValue<GuidVector>("attackers")->Get());
-        for (ObjectGuid const guid : encounterUnits)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!unit)
-                continue;
-
-            Spell* spell = unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-            if (spell &&
-                Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }) &&
-                bot->GetDistance2d(unit) < 24.0f)
-                return true;
-        }
-
-        return false;
+        botAI->ChangeStrategy("-nature resistance", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
     }
+
+    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
+        cleaned = true;
+    }
+
+    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
+    {
+        botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
+        cleaned = true;
+    }
+
+    if (bot->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff))
+    {
+        bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
+        cleaned = true;
+    }
+
+    cleaned = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || cleaned;
+    return cleaned;
+}
+
+void LogAq40CleanupTransition(Player* bot, bool wasDirty)
+{
+    if (!bot)
+        return;
+
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    auto itr = sAq40CleanupReportedDirtyByBot.find(botGuid);
+    bool const previousDirty = itr != sAq40CleanupReportedDirtyByBot.end() && itr->second;
+
+    if (wasDirty)
+    {
+        if (!previousDirty)
+            LOG_INFO("playerbots", "AQ40 cleanup: bot={} cleaned stale recovery state and can resume follow", bot->GetName());
+
+        sAq40CleanupReportedDirtyByBot[botGuid] = true;
+        return;
+    }
+
+    if (previousDirty)
+        LOG_INFO("playerbots", "AQ40 cleanup: bot={} recovery state already clean", bot->GetName());
+
+    sAq40CleanupReportedDirtyByBot[botGuid] = false;
+}
+
+// IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
+
+}    // namespace
+
+namespace Aq40BossActions
+{
+Unit* FindUnitByAnyName(PlayerbotAI* botAI, GuidVector const& attackers, std::initializer_list<char const*> names)
+{
+    return Aq40BossHelper::FindUnitByAnyName(botAI, attackers, names);
+}
+
+std::vector<Unit*> FindUnitsByAnyName(PlayerbotAI* botAI, GuidVector const& attackers,
+                                      std::initializer_list<char const*> names)
+{
+    return Aq40BossHelper::FindUnitsByAnyName(botAI, attackers, names);
+}
+
+Unit* FindTrashTarget(PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    // Simplified: only Anubisath Defenders trigger the trash strategy now.
+    // Pick the lowest-health defender, falling back to closest attacker.
+    return Aq40BossHelper::FindLowestHealthUnitByAnyName(botAI, attackers, { "anubisath defender" });
+}
+}    // namespace Aq40BossActions
+
+namespace
+{
+Unit* FindClosestAq40PlagueSeparationRisk(Player* bot, PlayerbotAI* botAI, float& distanceToCreate)
+{
+    distanceToCreate = 0.0f;
+    if (!bot || !botAI)
+        return nullptr;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    Unit* riskiestMember = nullptr;
+    float largestDeficit = 0.0f;
+
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || !Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+
+        float const currentDistance = bot->GetDistance2d(member);
+        float const requiredDistance =
+            Aq40SpellIds::HasAnyAura(botAI, member, { Aq40SpellIds::Aq40DefenderPlague }) ? 28.0f : 20.0f;
+        float const deficit = requiredDistance - currentDistance;
+        if (deficit <= 0.0f || deficit <= largestDeficit)
+            continue;
+
+        largestDeficit = deficit;
+        riskiestMember = member;
+    }
+
+    distanceToCreate = largestDeficit;
+    return riskiestMember;
+}
+
+struct Aq40TankRetreatResult
+{
+    bool valid = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
 
 // Compute a short retreat position toward the encounter tank, away from a danger source.
 // Returns invalid if no tank is available or the candidate would push the bot farther from
