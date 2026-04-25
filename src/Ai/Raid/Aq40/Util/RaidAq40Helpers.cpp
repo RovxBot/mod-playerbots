@@ -41,6 +41,9 @@ std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
+// Caches whether Vek'lor is on the "low" axis side.  Only updated when bosses
+// are well-separated (>40y) to prevent flicker during teleport transitions.
+std::unordered_map<uint32, bool> sCachedTwinVeklorIsLowSide;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 
 struct TwinHealerFocusState
@@ -476,6 +479,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         {
             sTwinAssignments.erase(instanceId);
             sCachedTwinSplitByX.erase(instanceId);
+            sCachedTwinVeklorIsLowSide.erase(instanceId);
             sTwinSideZeroIsLowSide.erase(instanceId);
             sTwinKnownTwinBosses.erase(instanceId);
         }
@@ -636,8 +640,23 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
 
     float veklorAxis = splitByX ? result.veklor->GetPositionX() : result.veklor->GetPositionY();
     float veknilashAxis = splitByX ? result.veknilash->GetPositionX() : result.veknilash->GetPositionY();
-    Unit* lowSide = veklorAxis < veknilashAxis ? result.veklor : result.veknilash;
-    Unit* highSide = lowSide == result.veklor ? result.veknilash : result.veklor;
+
+    // Determine which boss is on the "low" side of the split axis.
+    // Cache the result and only update when bosses are well-separated (>40y)
+    // to prevent flicker during teleport transitions when they briefly overlap.
+    bool veklorIsLow;
+    auto lowSideIt = sCachedTwinVeklorIsLowSide.find(instanceId);
+    if (lowSideIt != sCachedTwinVeklorIsLowSide.end() && separation <= 40.0f)
+    {
+        veklorIsLow = lowSideIt->second;
+    }
+    else
+    {
+        veklorIsLow = (veklorAxis < veknilashAxis);
+        sCachedTwinVeklorIsLowSide[instanceId] = veklorIsLow;
+    }
+    Unit* lowSide = veklorIsLow ? result.veklor : result.veknilash;
+    Unit* highSide = veklorIsLow ? result.veknilash : result.veklor;
 
     bool sideZeroIsLowSide = true;
     auto sideMappingIt = sTwinSideZeroIsLowSide.find(instanceId);
@@ -1294,6 +1313,7 @@ bool ResetEncounterState(Player* bot)
     erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
     erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
+    erased = sCachedTwinVeklorIsLowSide.erase(instanceId) > 0 || erased;
     erased = sTwinSideZeroIsLowSide.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
 
@@ -1310,6 +1330,7 @@ bool HasPersistentEncounterState(Player* bot)
            sTwinKnownTwinBosses.find(instanceId) != sTwinKnownTwinBosses.end() ||
            sCthunPhase2StartByInstance.find(instanceId) != sCthunPhase2StartByInstance.end() ||
            sCachedTwinSplitByX.find(instanceId) != sCachedTwinSplitByX.end() ||
+           sCachedTwinVeklorIsLowSide.find(instanceId) != sCachedTwinVeklorIsLowSide.end() ||
            sTwinSideZeroIsLowSide.find(instanceId) != sTwinSideZeroIsLowSide.end() ||
            sSkeramPostBlinkHoldUntilByInstance.find(instanceId) != sSkeramPostBlinkHoldUntilByInstance.end();
 }
