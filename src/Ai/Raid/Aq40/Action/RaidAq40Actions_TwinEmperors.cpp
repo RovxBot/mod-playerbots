@@ -234,12 +234,34 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         return moved || bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f;
     }
 
-    // Healers move to their assigned side so they're already in range when
-    // combat starts, avoiding the post-pull repositioning that prevents healing.
+    // Healers move to the far side of their assigned boss (away from center,
+    // same side as tanks) so they start combat within heal range of tanks.
+    // GetTwinSideAnchor() goes toward center — healers need the opposite.
     if (botAI->IsHeal(bot))
     {
         uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
-        Position anchor = GetTwinSideAnchor(sideIndex);
+        float bossX, bossY, bossZ;
+        if (sideIndex == 1u)
+        {
+            bossX = kTwinInitialVeklorX;  bossY = kTwinInitialVeklorY;  bossZ = kTwinInitialVeklorZ;
+        }
+        else
+        {
+            bossX = kTwinInitialVeknilashX;  bossY = kTwinInitialVeknilashY;  bossZ = kTwinInitialVeknilashZ;
+        }
+
+        // Direction: boss AWAY from center (far side).
+        float const dirX = bossX - kTwinRoomCenterX;
+        float const dirY = bossY - kTwinRoomCenterY;
+        float const length = std::sqrt(dirX * dirX + dirY * dirY);
+        float constexpr kHealerStageDistance = 30.0f;
+        Position anchor;
+        if (length > 0.1f)
+            anchor.Relocate(bossX + (dirX / length) * kHealerStageDistance,
+                            bossY + (dirY / length) * kHealerStageDistance,
+                            bossZ);
+        else
+            anchor.Relocate(bossX, bossY, bossZ);
 
         {
             std::ostringstream fields;
@@ -405,23 +427,24 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         reason = "explode_bug";
     }
 
-    // Hunters also prioritize mutate bugs, then Vek'nilash (physical damage).
-    if (isHunter)
+    // All ranged DPS (casters + hunters) prioritize mutate bugs — these are
+    // the scarabs/scorpions mutated by Vek'nilash and must die fast.
+    if (!desiredTarget && (isRangedDps || isHunter))
     {
-        if (!desiredTarget)
+        Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
+        if (mutateBug && mutateBug->IsAlive())
         {
-            Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
-            if (mutateBug && mutateBug->IsAlive())
-            {
-                desiredTarget = mutateBug;
-                isBugTarget = true;
-                reason = "mutate_bug";
-            }
+            desiredTarget = mutateBug;
+            isBugTarget = true;
+            reason = "mutate_bug";
         }
+    }
 
+    if (!desiredTarget)
+    {
         // Hunters do primarily physical damage — Vek'lor is IMMUNE.
         // Fall back to Vek'nilash instead.
-        if (!desiredTarget)
+        if (isHunter)
         {
             desiredTarget = assignment.veknilash ? assignment.veknilash : assignment.veklor;
             reason = assignment.veknilash ? "hunter_veknilash" : "hunter_fallback";
@@ -429,11 +452,7 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
                 Aq40Helpers::LogAq40Warn(bot, "wrong_immune_target", "twins:hunter_veklor",
                     "boss=twins reason=no_veknilash target=" + Aq40Helpers::GetAq40LogUnit(desiredTarget));
         }
-    }
-
-    if (!desiredTarget)
-    {
-        if (isRangedDps)
+        else if (isRangedDps)
         {
             desiredTarget = assignment.veklor ? assignment.veklor : assignment.veknilash;
             reason = assignment.veklor ? "ranged_veklor" : "ranged_fallback";
