@@ -112,34 +112,6 @@ bool GetFarSidePosition(Player* bot, Unit* boss, Unit* otherBoss,
     return false;
 }
 
-bool IsWithinHealCoverage(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets)
-{
-    if (!bot || !botAI)
-        return false;
-
-    float const healRange = botAI->GetRange("heal");
-    for (ObjectGuid const guid : focusTargets)
-    {
-        Unit* target = botAI->GetUnit(guid);
-        if (!target || !target->IsAlive() || target->GetMapId() != bot->GetMapId())
-            continue;
-        if (bot->GetDistance2d(target) <= healRange && bot->IsWithinLOSInMap(target))
-            return true;
-    }
-
-    return false;
-}
-
-bool IsTooCloseToTwinBoss(Player* bot, Aq40Helpers::TwinAssignments const& assignment)
-{
-    if (!bot)
-        return false;
-
-    float constexpr kSafeBossDistance = 21.0f;
-    return (assignment.veklor && bot->GetDistance2d(assignment.veklor) < kSafeBossDistance) ||
-           (assignment.veknilash && bot->GetDistance2d(assignment.veknilash) < kSafeBossDistance);
-}
-
 void DisableTwinPetTauntAutocast(Pet* pet)
 {
     if (!pet)
@@ -253,8 +225,8 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 }
 
 // ---------------------------------------------------------------------------
-// HealerSupportAction - locks healers to their stable room side and focuses
-// their generic heal logic on the tanks assigned to that side.
+// HealerSupportAction - supplies side-local focus targets, then gets out of
+// the way so the normal class healer AI chooses spells and healing movement.
 // ---------------------------------------------------------------------------
 bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
 {
@@ -264,32 +236,44 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
         context->GetValue<GuidVector>("attackers")->Get());
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
-    if (!assignment.veklor && !assignment.veknilash)
-        return Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+    if (!assignment.veklor || !assignment.veknilash || !assignment.sideEmperor)
+    {
+        Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+        return false;
+    }
+
+    Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
 
     std::list<ObjectGuid> const focusTargets = Aq40Helpers::GetTwinHealerFocusTargets(bot, botAI, assignment);
     if (focusTargets.empty())
-        return Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+    {
+        Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
+        return false;
+    }
 
     Aq40Helpers::ApplyTwinHealerFocusTargets(bot, botAI, focusTargets);
+
+    Unit* partyMemberToHeal = AI_VALUE(Unit*, "party member to heal");
+    if (partyMemberToHeal && partyMemberToHeal->IsAlive() && partyMemberToHeal->GetMapId() == bot->GetMapId() &&
+        bot->GetDistance2d(partyMemberToHeal) <= botAI->GetRange("heal") && bot->IsWithinLOSInMap(partyMemberToHeal))
+        return false;
+
+    if (bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) || bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        return false;
+
+    if (!Aq40Helpers::IsTwinHealerOutsideSideLeash(bot, assignment))
+        return false;
 
     Unit* healBoss = assignment.sideEmperor;
     if (!healBoss)
         return false;
 
     Position healPos;
-    if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 28.0f, healPos))
+    if (!GetFarSidePosition(bot, healBoss, assignment.oppositeEmperor, 32.0f, healPos))
         return false;
 
     float const distToHealPos = bot->GetExactDist2d(healPos.GetPositionX(), healPos.GetPositionY());
-    bool const hasHealCoverage = IsWithinHealCoverage(bot, botAI, focusTargets);
-    bool const tooCloseToBoss = IsTooCloseToTwinBoss(bot, assignment);
-
-    // If the healer can already cover their side tanks and is near their side
-    // anchor, avoid movement so class healing can fire immediately.
-    if (hasHealCoverage && !tooCloseToBoss && distToHealPos <= 18.0f)
-        return false;
-    if (distToHealPos <= 8.0f && !tooCloseToBoss)
+    if (distToHealPos <= 8.0f)
         return false;
 
     bool moved = MoveTo(bot->GetMapId(), healPos.GetPositionX(), healPos.GetPositionY(),
@@ -318,6 +302,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (!assignment.veklor && !assignment.veknilash)
         return false;
 
+    Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
+
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
 
@@ -332,20 +318,26 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool const isRangedDps = botAI->IsRanged(bot);
 
     Unit* desiredTarget = nullptr;
+    bool isBugTarget = false;
 
-    // Hunters prioritize dangerous bugs, then Vek'nilash (physical damage).
-    // Explode bugs first (AoE raid damage), then mutate bugs.
+    Unit* explodeBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "explode bug" });
+    if (explodeBug && explodeBug->IsAlive())
+    {
+        desiredTarget = explodeBug;
+        isBugTarget = true;
+    }
+
+    // Hunters also prioritize mutate bugs, then Vek'nilash (physical damage).
     if (isHunter)
     {
-        Unit* explodeBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "explode bug" });
-        if (explodeBug && explodeBug->IsAlive())
-            desiredTarget = explodeBug;
-
         if (!desiredTarget)
         {
             Unit* mutateBug = Aq40BossHelper::FindUnitByAnyName(botAI, encounterUnits, { "mutate bug" });
             if (mutateBug && mutateBug->IsAlive())
+            {
                 desiredTarget = mutateBug;
+                isBugTarget = true;
+            }
         }
 
         // Hunters do primarily physical damage — Vek'lor is IMMUNE.
@@ -367,7 +359,9 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     // Always keep the target pinned and set RTI for base AI integration.
     PinTwinTarget(botAI, context, desiredTarget);
-    if (isRangedDps && !isHunter)
+    if (isBugTarget)
+        SetRtiTarget(botAI, "skull", desiredTarget);
+    else if (isRangedDps && !isHunter)
         SetRtiTarget(botAI, "square", desiredTarget);   // Vek'lor = square
     else if (!isRangedDps)
         SetRtiTarget(botAI, "diamond", desiredTarget);  // Vek'nilash = diamond
@@ -427,6 +421,8 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor && !assignment.veknilash)
         return false;
+
+    Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
 
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
@@ -529,6 +525,8 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
     if (!assignment.veklor)
         return false;
+
+    Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
 
     if (!Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
         return false;

@@ -410,9 +410,6 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         dynamic_cast<FleeAction*>(action))
         return 0.0f;
 
-    if (botAI->IsHeal(bot) && dynamic_cast<ReachPartyMemberToHealAction*>(action))
-        return 0.0f;
-
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
         return 0.0f;
 
@@ -423,6 +420,9 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     // Destruction rotation doesn't override the threat-generation priority.
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
     {
+        if (actionName == "life tap")
+            return 0.0f;
+
         CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
         if (spellAction && spellAction->GetTargetName() == "current target")
             return 0.0f;

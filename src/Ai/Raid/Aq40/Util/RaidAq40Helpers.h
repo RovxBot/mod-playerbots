@@ -50,6 +50,9 @@ bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignmen
 std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets);
 bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI);
+bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment);
+bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI);
+bool ClearTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
 
