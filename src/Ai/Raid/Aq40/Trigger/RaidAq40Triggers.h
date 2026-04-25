@@ -134,41 +134,6 @@ public:
     bool IsActive() override;
 };
 
-class Aq40TrashMindslayerCastTrigger : public Trigger
-{
-public:
-    Aq40TrashMindslayerCastTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash mindslayer cast") {}
-    bool IsActive() override;
-};
-
-class Aq40TrashMindControlTrigger : public Trigger
-{
-public:
-    Aq40TrashMindControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash mc detected") {}
-    bool IsActive() override;
-};
-
-class Aq40TrashSlayerEnrageTrigger : public Trigger
-{
-public:
-    Aq40TrashSlayerEnrageTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash slayer enrage") {}
-    bool IsActive() override;
-};
-
-class Aq40TrashChampionFearTrigger : public Trigger
-{
-public:
-    Aq40TrashChampionFearTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash champion fear") {}
-    bool IsActive() override;
-};
-
-class Aq40TrashChampionVengeanceTrigger : public Trigger
-{
-public:
-    Aq40TrashChampionVengeanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 trash champion vengeance") {}
-    bool IsActive() override;
-};
-
 class Aq40HuhuranActiveTrigger : public Trigger
 {
 public:

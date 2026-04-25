@@ -621,12 +621,7 @@ inline bool IsBossEncounterActive(PlayerbotAI* botAI, GuidVector const& attacker
 
 inline bool IsTrashEncounterActive(PlayerbotAI* botAI, GuidVector const& attackers)
 {
-    return HasAnyNamedUnit(botAI, attackers,
-                           { "anubisath warder", "anubisath defender", "obsidian eradicator", "obsidian nullifier",
-                             "vekniss stinger", "qiraji slayer", "qiraji champion", "qiraji mindslayer",
-                             "qiraji brainwasher", "qiraji battleguard", "anubisath sentinel", "qiraji lasher",
-                             "vekniss warrior", "vekniss guardian", "vekniss drone", "vekniss soldier",
-                             "vekniss wasp", "scarab", "qiraji scarab", "spitting scarab", "scorpion" });
+    return HasAnyNamedUnit(botAI, attackers, { "anubisath defender" });
 }
 
 // -----------------------------------------------------------------------

@@ -144,16 +144,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40TrashInterruptMindBlastAction : public AttackAction
-{
-public:
-    Aq40TrashInterruptMindBlastAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "aq40 trash interrupt mind blast")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
 class Aq40TrashAvoidDangerousAoeAction : public MovementAction
 {
 public:
@@ -162,37 +152,6 @@ public:
     {
     }
     bool isUseful() override;
-    bool Execute(Event event) override;
-};
-
-class Aq40TrashControlMindControlAction : public AttackAction
-{
-public:
-    Aq40TrashControlMindControlAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "aq40 trash control mind control")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
-class Aq40TrashTranqEnrageAction : public Action
-{
-public:
-    Aq40TrashTranqEnrageAction(PlayerbotAI* botAI) : Action(botAI, "aq40 trash tranq enrage") {}
-    bool Execute(Event event) override;
-};
-
-class Aq40TrashDispelVengeanceAction : public Action
-{
-public:
-    Aq40TrashDispelVengeanceAction(PlayerbotAI* botAI) : Action(botAI, "aq40 trash dispel vengeance") {}
-    bool Execute(Event event) override;
-};
-
-class Aq40TrashFearWardAction : public Action
-{
-public:
-    Aq40TrashFearWardAction(PlayerbotAI* botAI) : Action(botAI, "aq40 trash fear ward") {}
     bool Execute(Event event) override;
 };
 

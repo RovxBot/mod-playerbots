@@ -21,10 +21,7 @@
 
 namespace
 {
-// Returns true only for the approved AQ40 trash movement cases:
-// - Mindslayer Mind Flay (ranged/healers within 30y)
-// - Defender Thunderclap (ranged/healers within 24y)
-// Eradicator Shock Blast and Warder Fire Nova are intentionally excluded.
+// Returns true only for Defender Thunderclap (ranged/healers within 24y).
 bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& encounterUnits)
 {
     if (!botAI || !bot)
@@ -43,12 +40,6 @@ bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& 
         if (spell &&
             Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::Aq40DefenderThunderclap }) &&
             bot->GetDistance2d(unit) < 24.0f)
-            return true;
-
-        Spell* channel = unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (channel &&
-            Aq40SpellIds::MatchesAnySpellId(channel->GetSpellInfo(), { Aq40SpellIds::Aq40MindslayerMindFlay }) &&
-            bot->GetDistance2d(unit) < 30.0f)
             return true;
     }
 
