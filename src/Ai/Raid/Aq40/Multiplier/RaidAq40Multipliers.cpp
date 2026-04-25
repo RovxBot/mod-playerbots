@@ -406,8 +406,11 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (dynamic_cast<FollowAction*>(action))
         return 0.0f;
 
-    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
-        dynamic_cast<FleeAction*>(action))
+    // Healers need CombatFormation (disperse) and Flee (dodge Blizzard, keep
+    // range) to function.  Only suppress these for non-healers.
+    if (!botAI->IsHeal(bot) &&
+        (dynamic_cast<CombatFormationMoveAction*>(action) ||
+         dynamic_cast<FleeAction*>(action)))
         return 0.0f;
 
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
