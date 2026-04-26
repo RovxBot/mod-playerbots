@@ -357,10 +357,23 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         if (actionName == "aq40 twin emperors pre pull stage")
             return 4.0f;
 
-        // Suppress follow during pre-pull staging.  Gated behind
-        // IsTwinPrePullReady (requires LOS to bosses) so bots can still
-        // follow through the corridor before entering the room.
-        if (dynamic_cast<FollowAction*>(action))
+        // During Twin staging, keep the action engine boring: one AQ40 action
+        // owns movement and clears targeting until the real pull starts.
+        if (actionName == "aq40 choose target" ||
+            dynamic_cast<MovementAction*>(action) ||
+            dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action) ||
+            dynamic_cast<CombatFormationMoveAction*>(action) ||
+            dynamic_cast<AttackAction*>(action) ||
+            dynamic_cast<ReachTargetAction*>(action) ||
+            dynamic_cast<CastReachTargetSpellAction*>(action) ||
+            dynamic_cast<PetAttackAction*>(action) ||
+            dynamic_cast<DpsAssistAction*>(action) ||
+            dynamic_cast<TankAssistAction*>(action))
+            return 0.0f;
+
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        if (spellAction && spellAction->GetTargetName() == "current target")
             return 0.0f;
     }
 
