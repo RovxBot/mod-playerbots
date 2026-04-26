@@ -101,6 +101,14 @@ void AppendUniqueFocusTarget(std::list<ObjectGuid>& focusTargets, Player* target
         focusTargets.push_back(guid);
 }
 
+void AppendUniqueFocusTargetCapped(std::list<ObjectGuid>& focusTargets, Player* target, size_t maxTargets)
+{
+    if (focusTargets.size() >= maxTargets)
+        return;
+
+    AppendUniqueFocusTarget(focusTargets, target);
+}
+
 bool IsTwinBossUnit(PlayerbotAI* botAI, Unit* unit)
 {
     return botAI && unit && Aq40BossHelper::IsUnitNamedAny(botAI, unit,
@@ -740,7 +748,7 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
     std::vector<Player*> primaryTargets;
     std::vector<Player*> reserveTargets;
     std::vector<Player*> sideHealers;
-    std::vector<Player*> sideMembers;
+    constexpr size_t kMaxTwinHealerFocusTargets = 5;
     for (GroupReference const* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -779,21 +787,68 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
 
             continue;
         }
-
-        if (IsLikelyOnSameTwinSide(member, assignment.sideEmperor, assignment.oppositeEmperor))
-            sideMembers.push_back(member);
     }
 
     for (Player* target : primaryTargets)
-        AppendUniqueFocusTarget(focusTargets, target);
+        AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
     for (Player* target : reserveTargets)
-        AppendUniqueFocusTarget(focusTargets, target);
+        AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
+
+    // Keep the local healer in the compact focus set so base healer AI can
+    // still self-heal after Twin splash/AOE without reintroducing the broad
+    // raid-sized focus list that starved tank healing.
     for (Player* target : sideHealers)
-        AppendUniqueFocusTarget(focusTargets, target);
-    for (Player* target : sideMembers)
-        AppendUniqueFocusTarget(focusTargets, target);
+    {
+        if (target == bot)
+        {
+            AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
+            break;
+        }
+    }
+
+    for (Player* target : sideHealers)
+        AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
 
     return focusTargets;
+}
+
+Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits, uint32 auraSpellId)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    Unit* fallback = nullptr;
+    Unit* closestMarked = nullptr;
+    float closestMarkedDistance = 0.0f;
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() ||
+            unit->IsFriendlyTo(bot))
+            continue;
+
+        bool const isQirajiBug = Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji scarab", "qiraji scorpion" });
+        if (isQirajiBug && Aq40SpellIds::HasAnyAura(botAI, unit, { auraSpellId }))
+        {
+            float const distance = bot->GetDistance2d(unit);
+            if (!closestMarked || distance < closestMarkedDistance)
+            {
+                closestMarked = unit;
+                closestMarkedDistance = distance;
+            }
+            continue;
+        }
+
+        bool const isFallbackName =
+            (auraSpellId == Aq40SpellIds::TwinExplodeBug &&
+             Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "explode bug" })) ||
+            (auraSpellId == Aq40SpellIds::TwinMutateBug &&
+             Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "mutate bug" }));
+        if (!fallback && isFallbackName)
+            fallback = unit;
+    }
+
+    return closestMarked ? closestMarked : fallback;
 }
 
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets)
