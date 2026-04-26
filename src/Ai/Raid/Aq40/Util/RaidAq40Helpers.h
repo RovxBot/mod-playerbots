@@ -49,6 +49,7 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
 bool HasTwinBossAggro(Player* member, Unit* boss);
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
 std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits, uint32 auraSpellId);
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets);
 bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI);
 bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment);
