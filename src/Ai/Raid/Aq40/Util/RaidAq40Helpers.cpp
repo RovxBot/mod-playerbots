@@ -38,6 +38,7 @@ float constexpr kTwinRoomCenterZ = -112.62047f;
 float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
 float constexpr kTwinPrePullDetectionRange = 320.0f;
+uint32 constexpr kTwinTankHealersPerSide = 2;
 
 TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
@@ -570,34 +571,35 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
         if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
             continue;
 
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
         bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
         bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
-        bool const isHealer = PlayerbotAI::IsHeal(member);
-
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (isWarlockTank || isMeleeTank || isHealer)
+        if (isWarlockTank || isMeleeTank)
         {
             if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.sideIndex)
                 continue;
 
-            if (isWarlockTank || isMeleeTank)
-            {
-                bool const isPrimaryForCurrentBoss =
-                    (isWarlockTank && assignment.veklor && assignment.veklorSideIndex == assignment.sideIndex) ||
-                    (isMeleeTank && assignment.veknilash && assignment.veknilashSideIndex == assignment.sideIndex);
+            bool const isPrimaryForCurrentBoss =
+                (isWarlockTank && assignment.veklor && assignment.veklorSideIndex == assignment.sideIndex) ||
+                (isMeleeTank && assignment.veknilash && assignment.veknilashSideIndex == assignment.sideIndex);
 
-                if (isPrimaryForCurrentBoss)
-                    primaryTargets.push_back(member);
-                else
-                    reserveTargets.push_back(member);
-            }
+            if (isPrimaryForCurrentBoss)
+                primaryTargets.push_back(member);
             else
-            {
-                sideHealers.push_back(member);
-            }
+                reserveTargets.push_back(member);
 
             continue;
         }
+
+        if (!PlayerbotAI::IsHeal(member))
+            continue;
+
+        uint32 healerSide = 0;
+        if (!GetTwinDedicatedTankHealerSide(member, memberAI ? memberAI : botAI, healerSide) ||
+            healerSide != assignment.sideIndex)
+            continue;
+
+        sideHealers.push_back(member);
     }
 
     for (Player* target : primaryTargets)
@@ -823,6 +825,63 @@ bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignmen
 
     if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
         return assignment.veknilash && !assignment.isTankBackup;
+
+    return false;
+}
+
+bool GetTwinDedicatedTankHealerSide(Player* bot, PlayerbotAI* /*botAI*/, uint32& sideIndex)
+{
+    sideIndex = 0;
+    if (!bot || !PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    std::vector<Player*> healers;
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->IsGameMaster())
+            continue;
+        if (member->GetMapId() != bot->GetMapId())
+            continue;
+        if (!PlayerbotAI::IsHeal(member))
+            continue;
+        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
+            continue;
+
+        healers.push_back(member);
+    }
+
+    std::sort(healers.begin(), healers.end(), [bot](Player const* left, Player const* right)
+    {
+        uint32 const leftOrder = GetGroupMemberOrder(bot, const_cast<Player*>(left));
+        uint32 const rightOrder = GetGroupMemberOrder(bot, const_cast<Player*>(right));
+        if (leftOrder != rightOrder)
+            return leftOrder < rightOrder;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    uint32 sideCounts[2] = { 0, 0 };
+    uint32 slot = 0;
+    for (Player* healer : healers)
+    {
+        uint32 assignedSide = GetTwinRoleSideForSlot(TwinRoleCohort::Healer, slot++);
+        if (sideCounts[assignedSide] >= kTwinTankHealersPerSide)
+            assignedSide = 1u - assignedSide;
+        if (sideCounts[assignedSide] >= kTwinTankHealersPerSide)
+            continue;
+
+        ++sideCounts[assignedSide];
+        if (healer == bot)
+        {
+            sideIndex = assignedSide;
+            return true;
+        }
+    }
 
     return false;
 }
@@ -1101,8 +1160,11 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return result;
     }
 
-    // Healers: use stable room-side index.
-    uint32 const sideIndex = GetStableTwinRoleIndex(bot, botAI);
+    // Dedicated tank healers bind to their assigned side; raid healers stay
+    // central and only keep a stable side index for callers that need one.
+    uint32 dedicatedHealerSide = 0;
+    uint32 const sideIndex = GetTwinDedicatedTankHealerSide(bot, botAI, dedicatedHealerSide) ?
+        dedicatedHealerSide : GetStableTwinRoleIndex(bot, botAI);
     result.sideIndex = sideIndex;
     result.sideEmperor = sideIndex == 0 ? sideZeroBoss : sideOneBoss;
     result.oppositeEmperor = sideIndex == 0 ? sideOneBoss : sideZeroBoss;
