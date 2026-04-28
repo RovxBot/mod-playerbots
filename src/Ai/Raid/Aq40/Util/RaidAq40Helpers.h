@@ -8,6 +8,7 @@
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "Position.h"
 
 class GameObject;
 
@@ -46,11 +47,17 @@ bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI);
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor);
 bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
+uint32 GetTwinPostSwapElapsedMs(Player* bot, TwinAssignments const& assignment);
+bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool HasTwinBossAggro(Player* member, Unit* boss);
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment);
 bool GetTwinDedicatedTankHealerSide(Player* bot, PlayerbotAI* botAI, uint32& sideIndex);
 std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits, uint32 auraSpellId);
+Unit* FindTwinHostileBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits);
+Position GetTwinRoomCenterPosition();
+Position GetTwinRoomSideAnchor(uint32 sideIndex);
+Position GetTwinRoomSideHealerAnchor(uint32 sideIndex);
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets);
 bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI);
 bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment);

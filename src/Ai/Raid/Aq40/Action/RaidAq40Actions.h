@@ -189,6 +189,46 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsPostSwapHoldAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsPostSwapHoldAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors post swap hold")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsDodgeBlizzardAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsDodgeBlizzardAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors dodge blizzard")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsDodgeExplodeBugAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsDodgeExplodeBugAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors dodge explode bug")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinEmperorsAvoidVeklorAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsAvoidVeklorAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors avoid veklor")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinEmperorsHoldSplitAction : public AttackAction
 {
 public:

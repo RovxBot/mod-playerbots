@@ -389,11 +389,35 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     bool isTwinControlAction =
         actionName == "aq40 twin emperors choose target" ||
         actionName == "aq40 twin emperors healer support" ||
+        actionName == "aq40 twin emperors post swap hold" ||
+        actionName == "aq40 twin emperors dodge blizzard" ||
+        actionName == "aq40 twin emperors dodge explode bug" ||
+        actionName == "aq40 twin emperors avoid veklor" ||
         actionName == "aq40 twin emperors pre pull stage" ||
         actionName == "aq40 twin emperors hold split" ||
         actionName == "aq40 twin emperors warlock tank";
     if (isTwinControlAction)
         return 1.0f;
+
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, activeUnits);
+    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
+    bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    bool const postSwapThreatHold =
+        assignment.veklor && !isWarlockTank && !isMeleeTank && !botAI->IsHeal(bot) &&
+        Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment);
+    if (postSwapThreatHold)
+    {
+        Unit* currentTarget = AI_VALUE(Unit*, "current target");
+        if (currentTarget == assignment.veklor)
+        {
+            CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+            if ((spellAction && spellAction->GetTargetName() == "current target") ||
+                dynamic_cast<ReachTargetAction*>(action) ||
+                dynamic_cast<AttackAction*>(action) ||
+                dynamic_cast<PetAttackAction*>(action))
+                return 0.0f;
+        }
+    }
 
     // Twin Emperors are immune to taunt.
     if (dynamic_cast<CastTauntAction*>(action) ||

@@ -29,6 +29,10 @@ public:
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
         creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
         creators["aq40 twin emperors healer support"] = &RaidAq40ActionContext::twin_emperors_healer_support;
+        creators["aq40 twin emperors post swap hold"] = &RaidAq40ActionContext::twin_emperors_post_swap_hold;
+        creators["aq40 twin emperors dodge blizzard"] = &RaidAq40ActionContext::twin_emperors_dodge_blizzard;
+        creators["aq40 twin emperors dodge explode bug"] = &RaidAq40ActionContext::twin_emperors_dodge_explode_bug;
+        creators["aq40 twin emperors avoid veklor"] = &RaidAq40ActionContext::twin_emperors_avoid_veklor;
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors pre pull stage"] = &RaidAq40ActionContext::twin_emperors_pre_pull_stage;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
@@ -99,6 +103,22 @@ private:
     static Action* twin_emperors_healer_support(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsHealerSupportAction(botAI);
+    }
+    static Action* twin_emperors_post_swap_hold(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsPostSwapHoldAction(botAI);
+    }
+    static Action* twin_emperors_dodge_blizzard(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsDodgeBlizzardAction(botAI);
+    }
+    static Action* twin_emperors_dodge_explode_bug(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsDodgeExplodeBugAction(botAI);
+    }
+    static Action* twin_emperors_avoid_veklor(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsAvoidVeklorAction(botAI);
     }
     static Action* twin_emperors_hold_split(PlayerbotAI* botAI) { return new Aq40TwinEmperorsHoldSplitAction(botAI); }
     static Action* twin_emperors_pre_pull_stage(PlayerbotAI* botAI)

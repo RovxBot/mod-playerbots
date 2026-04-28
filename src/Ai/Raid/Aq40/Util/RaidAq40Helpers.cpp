@@ -35,9 +35,18 @@ struct TwinKnownBossGuids
 float constexpr kTwinRoomCenterX = -8954.855f;
 float constexpr kTwinRoomCenterY = 1235.7107f;
 float constexpr kTwinRoomCenterZ = -112.62047f;
+float constexpr kTwinInitialVeklorX = -8868.31f;
+float constexpr kTwinInitialVeklorY = 1205.97f;
+float constexpr kTwinInitialVeklorZ = -104.231f;
+float constexpr kTwinInitialVeknilashX = -9023.67f;
+float constexpr kTwinInitialVeknilashY = 1176.24f;
+float constexpr kTwinInitialVeknilashZ = -104.226f;
+float constexpr kTwinSideHealerAnchorDistance = 120.0f;
+float constexpr kTwinSideTankCornerDistance = 150.0f;
 float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
 float constexpr kTwinPrePullDetectionRange = 320.0f;
+uint32 constexpr kTwinPostSwapThreatHoldMs = 6000;
 uint32 constexpr kTwinTankHealersPerSide = 2;
 
 TwinInstanceAssignments sTwinAssignments;
@@ -48,6 +57,8 @@ std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 // Caches whether Vek'lor is on the "low" axis side.  Only updated when bosses
 // are well-separated (>40y) to prevent flicker during teleport transitions.
 std::unordered_map<uint32, bool> sCachedTwinVeklorIsLowSide;
+std::unordered_map<uint32, uint32> sTwinLastVeklorSideByInstance;
+std::unordered_map<uint32, uint32> sTwinLastVeklorSideChangedMsByInstance;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 struct TwinHealerFocusState
 {
@@ -94,6 +105,44 @@ bool HasTwinTemporaryStrategyState(Player* bot)
 {
     return bot && sTwinTemporaryStrategyStateByBot.find(bot->GetGUID().GetRawValue()) !=
                       sTwinTemporaryStrategyStateByBot.end();
+}
+
+void GetTwinInitialBossPosition(uint32 sideIndex, float& bossX, float& bossY, float& bossZ)
+{
+    if (sideIndex == 1u)
+    {
+        bossX = kTwinInitialVeklorX;
+        bossY = kTwinInitialVeklorY;
+        bossZ = kTwinInitialVeklorZ;
+        return;
+    }
+
+    bossX = kTwinInitialVeknilashX;
+    bossY = kTwinInitialVeknilashY;
+    bossZ = kTwinInitialVeknilashZ;
+}
+
+Position GetTwinInitialRadialAnchor(uint32 sideIndex, float distance)
+{
+    float bossX, bossY, bossZ;
+    GetTwinInitialBossPosition(sideIndex, bossX, bossY, bossZ);
+
+    float const dirX = kTwinRoomCenterX - bossX;
+    float const dirY = kTwinRoomCenterY - bossY;
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+
+    Position anchor;
+    if (length < 0.1f)
+    {
+        anchor.Relocate(bossX, bossY, bossZ);
+        return anchor;
+    }
+
+    float const zRatio = std::min(distance / length, 1.0f);
+    anchor.Relocate(bossX + (dirX / length) * distance,
+                    bossY + (dirY / length) * distance,
+                    bossZ + (kTwinRoomCenterZ - bossZ) * zRatio);
+    return anchor;
 }
 
 void AppendUniqueFocusTarget(std::list<ObjectGuid>& focusTargets, Player* target)
@@ -664,6 +713,53 @@ Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encou
     return closestMarked ? closestMarked : fallback;
 }
 
+Unit* FindTwinHostileBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    Unit* closestBug = nullptr;
+    float closestDistance = 0.0f;
+    for (ObjectGuid const guid : encounterUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() ||
+            unit->IsFriendlyTo(bot))
+            continue;
+
+        bool const isTwinBug = Aq40BossHelper::IsUnitNamedAny(botAI, unit,
+            { "qiraji scarab", "qiraji scorpion", "explode bug", "mutate bug" });
+        if (!isTwinBug)
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        if (!closestBug || distance < closestDistance)
+        {
+            closestBug = unit;
+            closestDistance = distance;
+        }
+    }
+
+    return closestBug;
+}
+
+Position GetTwinRoomCenterPosition()
+{
+    Position center;
+    center.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
+    return center;
+}
+
+Position GetTwinRoomSideAnchor(uint32 sideIndex)
+{
+    return GetTwinInitialRadialAnchor(sideIndex, kTwinSideTankCornerDistance);
+}
+
+Position GetTwinRoomSideHealerAnchor(uint32 sideIndex)
+{
+    return GetTwinInitialRadialAnchor(sideIndex, kTwinSideHealerAnchorDistance);
+}
+
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets)
 {
     if (!bot || !botAI)
@@ -918,6 +1014,8 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
             sCachedTwinSplitByX.erase(instanceId);
             sCachedTwinVeklorIsLowSide.erase(instanceId);
             sTwinSideZeroIsLowSide.erase(instanceId);
+            sTwinLastVeklorSideByInstance.erase(instanceId);
+            sTwinLastVeklorSideChangedMsByInstance.erase(instanceId);
             sTwinKnownTwinBosses.erase(instanceId);
         }
     }
@@ -1119,6 +1217,19 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
     result.veklorSideIndex = getBossSideIndex(result.veklor);
     result.veknilashSideIndex = getBossSideIndex(result.veknilash);
 
+    uint32 const now = getMSTime();
+    auto lastSideItr = sTwinLastVeklorSideByInstance.find(instanceId);
+    if (lastSideItr == sTwinLastVeklorSideByInstance.end())
+    {
+        sTwinLastVeklorSideByInstance[instanceId] = result.veklorSideIndex;
+        sTwinLastVeklorSideChangedMsByInstance[instanceId] = now;
+    }
+    else if (lastSideItr->second != result.veklorSideIndex)
+    {
+        lastSideItr->second = result.veklorSideIndex;
+        sTwinLastVeklorSideChangedMsByInstance[instanceId] = now;
+    }
+
     if (cohort == TwinRoleCohort::Other)
     {
         if (PlayerbotAI::IsRanged(bot))
@@ -1314,6 +1425,38 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
     }
 
     return false;
+}
+
+uint32 GetTwinPostSwapElapsedMs(Player* bot, TwinAssignments const& assignment)
+{
+    if (!bot || !bot->GetMap() || !assignment.veklor)
+        return std::numeric_limits<uint32>::max();
+
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    auto lastSideItr = sTwinLastVeklorSideByInstance.find(instanceId);
+    if (lastSideItr == sTwinLastVeklorSideByInstance.end())
+        return std::numeric_limits<uint32>::max();
+
+    if (lastSideItr->second != assignment.veklorSideIndex)
+        return 0;
+
+    auto changedItr = sTwinLastVeklorSideChangedMsByInstance.find(instanceId);
+    if (changedItr == sTwinLastVeklorSideChangedMsByInstance.end())
+        return std::numeric_limits<uint32>::max();
+
+    return getMSTime() - changedItr->second;
+}
+
+bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
+{
+    if (!bot || !botAI || !assignment.veklor)
+        return false;
+
+    uint32 const elapsed = GetTwinPostSwapElapsedMs(bot, assignment);
+    if (elapsed < kTwinPostSwapThreatHoldMs)
+        return true;
+
+    return !IsTwinWarlockPickupEstablished(bot, botAI, assignment);
 }
 
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)

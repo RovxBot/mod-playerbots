@@ -8,8 +8,10 @@
 
 #include "CharmInfo.h"
 #include "CreatureAI.h"
+#include "DynamicObject.h"
 #include "Pet.h"
 #include "SharedDefines.h"
+#include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "../RaidAq40BossHelper.h"
@@ -103,6 +105,32 @@ bool GetTwinBossSideCastAnchor(Player* bot, Unit* boss, uint32 sideIndex, float 
     return true;
 }
 
+bool GetTwinCentralCastAnchor(Player* bot, Unit* boss, float desiredRange, Position& outPosition)
+{
+    if (!bot || !boss || !bot->GetMap())
+        return false;
+
+    float const dirX = kTwinRoomCenterX - boss->GetPositionX();
+    float const dirY = kTwinRoomCenterY - boss->GetPositionY();
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 0.1f)
+    {
+        outPosition.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
+        return true;
+    }
+
+    float const anchorRange = std::min(desiredRange, length);
+    float targetX = boss->GetPositionX() + (dirX / length) * anchorRange;
+    float targetY = boss->GetPositionY() + (dirY / length) * anchorRange;
+    float targetZ = boss->GetPositionZ();
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+            bot->GetPositionZ(), targetX, targetY, targetZ))
+        return false;
+
+    outPosition.Relocate(targetX, targetY, targetZ);
+    return true;
+}
+
 void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
 {
     if (!botAI || !context || !target)
@@ -111,6 +139,82 @@ void PinTwinTarget(PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
     ObjectGuid const guid = target->GetGUID();
     botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({ guid });
     context->GetValue<ObjectGuid>("pull target")->Set(guid);
+}
+
+void ClearTwinPinnedTarget(PlayerbotAI* botAI, AiObjectContext* context)
+{
+    if (!botAI || !context)
+        return;
+
+    GuidVector emptyTargets;
+    botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set(emptyTargets);
+    context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
+    context->GetValue<Unit*>("current target")->Set(nullptr);
+}
+
+bool IsTwinTankRole(Player* bot)
+{
+    return Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
+           (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+}
+
+bool StopTwinPetAttackOnTarget(Player* bot, Unit* target)
+{
+    if (!bot || !target)
+        return false;
+
+    Pet* pet = bot->GetPet();
+    if (!pet || (pet->GetVictim() != target && pet->GetTarget() != target->GetGUID()))
+        return false;
+
+    pet->AttackStop();
+    pet->SetTarget(ObjectGuid::Empty);
+    if (CharmInfo* charmInfo = pet->GetCharmInfo())
+        charmInfo->SetIsCommandAttack(false);
+
+    return true;
+}
+
+void StopTwinDamageOn(Player* bot, PlayerbotAI* botAI, AiObjectContext* context, Unit* target)
+{
+    if (!bot || !botAI || !context || !target)
+        return;
+
+    bool stopped = false;
+
+    if (bot->GetVictim() == target)
+    {
+        bot->AttackStop();
+        stopped = true;
+    }
+
+    if (bot->GetTarget() == target->GetGUID())
+    {
+        bot->SetTarget(ObjectGuid::Empty);
+        stopped = true;
+    }
+
+    if (AI_VALUE(Unit*, "current target") == target)
+    {
+        ClearTwinPinnedTarget(botAI, context);
+        stopped = true;
+    }
+
+    stopped = StopTwinPetAttackOnTarget(bot, target) || stopped;
+
+    if (stopped)
+        botAI->RequestSpellInterrupt();
+}
+
+bool GetTwinCentralWaitAnchor(Player* bot, Unit* veklor, Position& anchor)
+{
+    if (!bot || !veklor)
+        return false;
+
+    if (!GetTwinCentralCastAnchor(bot, veklor, 28.0f, anchor))
+        anchor.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
+
+    return true;
 }
 
 void ClearTwinPrePullTargeting(Player* bot, PlayerbotAI* botAI, AiObjectContext* context)
@@ -297,6 +401,17 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
         Aq40Helpers::LogAq40Info(bot, "healer_mode", "twins:raid_healer",
             "boss=twins mode=raid_healer", 10000);
+
+        Position center = Aq40Helpers::GetTwinRoomCenterPosition();
+        if (!bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
+            bot->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) > 35.0f)
+        {
+            Aq40Helpers::LogAq40Info(bot, "healer_position", "twins:raid_healer:center",
+                "boss=twins mode=raid_healer reason=center", 10000);
+            return MoveTo(bot->GetMapId(), center.GetPositionX(), center.GetPositionY(), center.GetPositionZ(),
+                          false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
+
         return false;
     }
 
@@ -330,7 +445,195 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         " count=" + std::to_string(focusTargets.size()) +
         " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 10000);
 
+    Position healerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(assignment.sideIndex);
+    if (!bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
+        bot->GetExactDist2d(healerAnchor.GetPositionX(), healerAnchor.GetPositionY()) > 20.0f)
+    {
+        Aq40Helpers::LogAq40Info(bot, "healer_position",
+            "twins:tank_healer:" + std::to_string(assignment.sideIndex),
+            "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex), 10000);
+        return MoveTo(bot->GetMapId(), healerAnchor.GetPositionX(), healerAnchor.GetPositionY(),
+                      healerAnchor.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+    }
+
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// PostSwapHoldAction - after Vek'lor changes sides, non-tank casters and pets
+// wait until the side warlock has pickup before touching him.
+// ---------------------------------------------------------------------------
+bool Aq40TwinEmperorsPostSwapHoldAction::Execute(Event /*event*/)
+{
+    if (botAI->IsHeal(bot) || IsTwinTankRole(bot) || !botAI->IsRanged(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor)
+        return false;
+
+    if (!Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment))
+        return false;
+
+    StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+
+    // Bug duty overrides the Vek'lor hold: ranged DPS should still clear bugs.
+    Unit* explodeBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinExplodeBug);
+    Unit* mutateBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinMutateBug);
+    Unit* hostileBug = Aq40Helpers::FindTwinHostileBug(bot, botAI, encounterUnits);
+    if ((explodeBug && explodeBug->IsAlive()) || (mutateBug && mutateBug->IsAlive()) ||
+        (hostileBug && hostileBug->IsAlive()))
+        return false;
+
+    std::ostringstream fields;
+    fields << "boss=twins reason=post_swap_hold elapsed_ms="
+           << Aq40Helpers::GetTwinPostSwapElapsedMs(bot, assignment)
+           << " target=" << Aq40Helpers::GetAq40LogUnit(assignment.veklor);
+    Aq40Helpers::LogAq40Info(bot, "post_swap_hold",
+        "twins:veklor:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), fields.str(), 3000);
+
+    Position anchor;
+    if (GetTwinCentralWaitAnchor(bot, assignment.veklor, anchor) &&
+        bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f)
+    {
+        botAI->RequestSpellInterrupt();
+        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+    }
+
+    return true;
+}
+
+bool Aq40TwinEmperorsDodgeBlizzardAction::Execute(Event /*event*/)
+{
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor && !assignment.veknilash)
+        return false;
+
+    Aura* areaAura = AI_VALUE(Aura*, "area debuff");
+    bool blizzardAura = Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }) ||
+                        botAI->HasAura("blizzard", bot);
+    DynamicObject* blizzardObject = nullptr;
+    float blizzardRadius = 8.0f;
+    if (areaAura && !areaAura->IsRemoved() && !areaAura->IsExpired())
+    {
+        SpellInfo const* spellInfo = areaAura->GetSpellInfo();
+        if (Aq40SpellIds::MatchesAnySpellId(spellInfo, { Aq40SpellIds::TwinBlizzard }) ||
+            (spellInfo && std::string(spellInfo->SpellName[LOCALE_enUS]) == "Blizzard"))
+        {
+            blizzardAura = true;
+            blizzardObject = areaAura->GetDynobjOwner();
+            if (blizzardObject)
+                blizzardRadius = std::max(blizzardObject->GetRadius(), blizzardRadius);
+        }
+    }
+
+    if (!blizzardAura)
+        return false;
+
+    botAI->RequestSpellInterrupt();
+
+    Position dangerPosition;
+    if (blizzardObject)
+        dangerPosition = blizzardObject->GetPosition();
+    else if (assignment.veklor)
+        dangerPosition = assignment.veklor->GetPosition();
+    else
+        dangerPosition = bot->GetPosition();
+
+    Aq40Helpers::LogAq40Info(bot, "dodge_blizzard",
+        "twins:blizzard:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor),
+        "boss=twins hazard=blizzard source=" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), 3000);
+
+    if (FleePosition(dangerPosition, blizzardRadius + 3.0f, 250U))
+        return true;
+
+    Position anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+    if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f)
+        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+
+    return true;
+}
+
+bool Aq40TwinEmperorsDodgeExplodeBugAction::Execute(Event /*event*/)
+{
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment))
+        return false;
+
+    Unit* explodeBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinExplodeBug);
+    if (!explodeBug || !explodeBug->IsAlive())
+        return false;
+
+    float constexpr kExplodeBugSafeDistance = 16.0f;
+    if (bot->GetDistance2d(explodeBug) > kExplodeBugSafeDistance)
+        return false;
+
+    botAI->RequestSpellInterrupt();
+    Aq40Helpers::LogAq40Info(bot, "dodge_explode_bug",
+        "twins:explode_bug:" + Aq40Helpers::GetAq40LogUnit(explodeBug),
+        "boss=twins hazard=explode_bug target=" + Aq40Helpers::GetAq40LogUnit(explodeBug), 3000);
+
+    if (FleePosition(explodeBug->GetPosition(), kExplodeBugSafeDistance, 250U))
+        return true;
+
+    Position anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+    if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f)
+        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+
+    return true;
+}
+
+bool Aq40TwinEmperorsAvoidVeklorAction::Execute(Event /*event*/)
+{
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor || !assignment.veklor->IsAlive())
+        return false;
+
+    bool const isActiveWarlockTank =
+        Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
+        Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
+    if (isActiveWarlockTank)
+        return false;
+
+    float constexpr kArcaneBurstSafeDistance = 21.0f;
+    if (bot->GetDistance2d(assignment.veklor) >= kArcaneBurstSafeDistance)
+        return false;
+
+    StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+    Aq40Helpers::LogAq40Info(bot, "avoid_veklor",
+        "twins:arcane_burst:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor),
+        "boss=twins hazard=arcane_burst target=" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), 3000);
+
+    botAI->RequestSpellInterrupt();
+    if (FleePosition(assignment.veklor->GetPosition(), kArcaneBurstSafeDistance, 250U))
+        return true;
+
+    Position anchor;
+    uint32 sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
+    if (IsTwinTankRole(bot))
+        anchor = Aq40Helpers::GetTwinRoomSideAnchor(sideIndex);
+    else if (botAI->IsHeal(bot))
+        anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+    else if (!GetTwinCentralWaitAnchor(bot, assignment.veklor, anchor))
+        anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+
+    if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f)
+        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +643,7 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
 //
 // Warlock tank  -> defer to WarlockTankAction
 // Melee tank    -> defer to HoldSplit for positioning
-// Ranged DPS    -> Vek'lor
+// Ranged DPS    -> hostile bugs, then threat-gated Vek'lor
 // Melee DPS     -> Vek'nilash
 // Hunter        -> dangerous bugs first, then Vek'nilash
 // Healer        -> return false (class AI handles healing)
@@ -399,6 +702,17 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     if (!desiredTarget)
     {
+        Unit* hostileBug = Aq40Helpers::FindTwinHostileBug(bot, botAI, encounterUnits);
+        if (hostileBug && hostileBug->IsAlive() && (isRangedDps || isHunter))
+        {
+            desiredTarget = hostileBug;
+            isBugTarget = true;
+            reason = "hostile_bug";
+        }
+    }
+
+    if (!desiredTarget)
+    {
         // Hunters do primarily physical damage — Vek'lor is IMMUNE.
         // Fall back to Vek'nilash instead.
         if (isHunter)
@@ -429,6 +743,25 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     if (!desiredTarget || !desiredTarget->IsAlive())
         return false;
+
+    if (desiredTarget == assignment.veklor && isRangedDps && !isHunter &&
+        Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment))
+    {
+        StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+        Position anchor;
+        if (GetTwinCentralWaitAnchor(bot, assignment.veklor, anchor) &&
+            bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 5.0f)
+        {
+            botAI->RequestSpellInterrupt();
+            return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                          false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
+
+        Aq40Helpers::LogAq40Info(bot, "post_swap_hold",
+            "twins:choose_target:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor),
+            "boss=twins reason=veklor_threat_hold target=" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), 3000);
+        return true;
+    }
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (currentTarget != desiredTarget)
@@ -489,7 +822,26 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (distance > attackRange || !bot->IsWithinLOSInMap(desiredTarget))
     {
         float const moveRange = isRangedDps ? 25.0f : 3.0f;
-        if (!isBugTarget && assignment.oppositeEmperor)
+        if (!isBugTarget && desiredTarget == assignment.veklor && isRangedDps && !isHunter)
+        {
+            Position attackPos;
+            if (GetTwinCentralWaitAnchor(bot, desiredTarget, attackPos))
+            {
+                float const distToAttackPos =
+                    bot->GetExactDist2d(attackPos.GetPositionX(), attackPos.GetPositionY());
+                if (distToAttackPos > 4.0f)
+                {
+                    botAI->RequestSpellInterrupt();
+                    bool moved = MoveTo(bot->GetMapId(), attackPos.GetPositionX(), attackPos.GetPositionY(),
+                                        attackPos.GetPositionZ(), false, false, false, true,
+                                        MovementPriority::MOVEMENT_COMBAT, true, false);
+                    if (!moved && distance > attackRange)
+                        return true;
+                    return moved;
+                }
+            }
+        }
+        else if (!isBugTarget && assignment.oppositeEmperor)
         {
             Position attackPos;
             float const desiredBossRange = isRangedDps ? 28.0f : 3.0f;
@@ -517,6 +869,18 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     }
 
     // In range - attack if not already, then return false so class AI casts spells.
+    if (desiredTarget == assignment.veklor && isRangedDps && !isHunter)
+    {
+        Position attackPos;
+        if (GetTwinCentralWaitAnchor(bot, desiredTarget, attackPos) &&
+            bot->GetExactDist2d(attackPos.GetPositionX(), attackPos.GetPositionY()) > 7.0f &&
+            !bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        {
+            return MoveTo(bot->GetMapId(), attackPos.GetPositionX(), attackPos.GetPositionY(), attackPos.GetPositionZ(),
+                          false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+        }
+    }
+
     if (bot->GetVictim() != desiredTarget)
         Attack(desiredTarget);
 
@@ -548,11 +912,28 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (splitRisk)
     {
         std::ostringstream fields;
-        fields << "boss=twins risk=split_failure separation="
+        fields << "boss=twins risk=split_failure terminal=1 reason=tank_swap_failure separation="
                << static_cast<uint32>(assignment.veklor->GetDistance2d(assignment.veknilash))
                << " veklor=" << Aq40Helpers::GetAq40LogUnit(assignment.veklor)
                << " veknilash=" << Aq40Helpers::GetAq40LogUnit(assignment.veknilash);
         Aq40Helpers::LogAq40Warn(bot, "split_risk", "twins:bosses_close", fields.str());
+    }
+
+    for (Unit* boss : { assignment.veklor, assignment.veknilash })
+    {
+        if (!boss)
+            continue;
+
+        Spell* healSpell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!healSpell)
+            healSpell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (!healSpell ||
+            !Aq40SpellIds::MatchesAnySpellId(healSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }))
+            continue;
+
+        Aq40Helpers::LogAq40Warn(bot, "heal_brother_terminal",
+            "twins:" + Aq40Helpers::GetAq40LogUnit(boss),
+            "boss=twins terminal=1 reason=tank_swap_failure caster=" + Aq40Helpers::GetAq40LogUnit(boss), 10000);
     }
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
@@ -704,8 +1085,6 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
-    bool const splitRisk =
-        assignment.veknilash && veklor->GetDistance2d(assignment.veknilash) < kTwinSplitRiskDistance;
     auto moveWarlockSideCastAnchor = [&](std::string const& reason) -> bool
     {
         Position anchorPosition;
@@ -738,6 +1117,15 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     // without ever entering the old narrow casting window.
     if (rangeToVeklor <= maxRange && hasLOS)
     {
+        if (botAI->CanCastSpell("searing pain", veklor))
+        {
+            Aq40Helpers::LogAq40Info(bot, "tank_pickup",
+                "twins:warlock:" + Aq40Helpers::GetAq40LogUnit(veklor),
+                "boss=twins tank=warlock spell=searing_pain target=" +
+                Aq40Helpers::GetAq40LogUnit(veklor));
+            return botAI->CastSpell("searing pain", veklor);
+        }
+
         if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
         {
             bool const casted = botAI->CastSpell("shadow ward", bot);
@@ -748,19 +1136,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
                     Aq40Helpers::GetAq40LogUnit(veklor));
         }
 
-        if (botAI->CanCastSpell("searing pain", veklor))
-        {
-            Aq40Helpers::LogAq40Info(bot, "tank_pickup",
-                "twins:warlock:" + Aq40Helpers::GetAq40LogUnit(veklor),
-                "boss=twins tank=warlock spell=searing_pain target=" +
-                Aq40Helpers::GetAq40LogUnit(veklor));
-            return botAI->CastSpell("searing pain", veklor);
-        }
-
         if (bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) || bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-            return true;
-
-        if (splitRisk && moveWarlockSideCastAnchor("split_risk"))
             return true;
 
         // On GCD or casting — ensure we're attacking and hold the action slot.
