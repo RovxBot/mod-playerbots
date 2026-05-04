@@ -1583,65 +1583,13 @@ static GuidVector GetRawObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* b
     return observedUnits;
 }
 
-static bool IsUnitActivelyFightingSkeram(Player* bot, PlayerbotAI* botAI, Unit* unit)
-{
-    if (!bot || !botAI || !unit || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() || !unit->IsInCombat())
-        return false;
-
-    Unit* victim = unit->GetVictim();
-    return Aq40BossHelper::IsUnitNamedAny(botAI, victim, { "the prophet skeram" });
-}
-
 bool IsSkeramEncounterLive(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
     if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
         return false;
 
-    GuidVector const observedUnits = GetRawObservedSkeramEncounterUnits(bot, botAI, attackers);
-    if (observedUnits.empty())
-        return false;
-
-    for (ObjectGuid const guid : observedUnits)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        bool const hasThreatVictim = unit->IsCreature() && unit->GetThreatMgr().GetCurrentVictim();
-        if (unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || hasThreatVictim)
-            return true;
-    }
-
-    if (IsUnitActivelyFightingSkeram(bot, botAI, bot))
-        return true;
-
-    if (Pet* pet = bot->GetPet())
-    {
-        if (IsUnitActivelyFightingSkeram(bot, botAI, pet))
-            return true;
-    }
-
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member == bot || !Aq40BossHelper::IsSameInstance(bot, member))
-            continue;
-
-        if (IsUnitActivelyFightingSkeram(bot, botAI, member))
-            return true;
-
-        if (Pet* pet = member->GetPet())
-        {
-            if (IsUnitActivelyFightingSkeram(bot, botAI, pet))
-                return true;
-        }
-    }
-
-    return false;
+    GuidVector const activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits, { "the prophet skeram" });
 }
 
 GuidVector GetObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
