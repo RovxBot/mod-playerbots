@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "AiObjectContext.h"
 #include "Group.h"
 #include "Pet.h"
 #include "RtiTargetValue.h"
