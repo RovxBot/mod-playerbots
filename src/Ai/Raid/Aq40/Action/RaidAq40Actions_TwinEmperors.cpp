@@ -280,6 +280,51 @@ bool GetFarSidePosition(Player* bot, Unit* boss, Unit* otherBoss,
     return false;
 }
 
+bool GetTwinRecoveryStepTowardAnchor(Player* bot, Position const& anchor, float maxStepDistance, Position& outPosition)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    float const dirX = anchor.GetPositionX() - bot->GetPositionX();
+    float const dirY = anchor.GetPositionY() - bot->GetPositionY();
+    float const dirZ = anchor.GetPositionZ() - bot->GetPositionZ();
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 1.0f)
+        return false;
+
+    float const maxStep = std::min(maxStepDistance, length);
+    float const minStep = std::min(4.0f, maxStep);
+    static constexpr float kStepFractions[] = { 1.0f, 0.75f, 0.5f, 0.33f };
+    for (float fraction : kStepFractions)
+    {
+        float const stepDistance = std::max(minStep, maxStep * fraction);
+        float targetX = bot->GetPositionX() + (dirX / length) * stepDistance;
+        float targetY = bot->GetPositionY() + (dirY / length) * stepDistance;
+        float targetZ = bot->GetPositionZ() + (dirZ / std::max(length, 1.0f)) * stepDistance;
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                bot->GetPositionZ(), targetX, targetY, targetZ))
+        {
+            continue;
+        }
+
+        outPosition.Relocate(targetX, targetY, targetZ);
+        return true;
+    }
+
+    return false;
+}
+
+bool IsTwinNonInstantCastActive(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    if (Spell* spell = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+        return spell->GetCastTime() > 0;
+
+    return bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) != nullptr;
+}
+
 void DisableTwinPetTauntAutocast(Pet* pet)
 {
     if (!pet)
@@ -377,6 +422,7 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 
         std::ostringstream fields;
         fields << "boss=twins phase=prepull side=" << sideIndex
+               << " staged_side=" << sideIndex
                << " role=" << role
                << " anchor_x=" << anchor.GetPositionX()
                << " anchor_y=" << anchor.GetPositionY();
@@ -387,7 +433,7 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
         anchor.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
         std::string const role = isHealer ? "raid_healer" : "raid";
         stageKey = "twins:" + role + ":center";
-        stageFields = "boss=twins phase=prepull side=center role=" + role;
+        stageFields = "boss=twins phase=prepull side=center staged_side=center role=" + role;
     }
 
     Aq40Helpers::LogAq40Info(bot, "prepull_stage", stageKey, stageFields, 30000);
@@ -418,8 +464,9 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
             "boss=twins mode=raid_healer", 10000);
 
         Position center = Aq40Helpers::GetTwinRoomCenterPosition();
+        float constexpr kTwinRaidHealerCenterLeash = 25.0f;
         if (!bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
-            bot->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) > 35.0f)
+            bot->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) > kTwinRaidHealerCenterLeash)
         {
             Aq40Helpers::LogAq40Info(bot, "healer_position", "twins:raid_healer:center",
                 "boss=twins mode=raid_healer reason=center", 10000);
@@ -461,15 +508,54 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 10000);
 
     Position healerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(assignment.sideIndex);
-    if (!bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
-        bot->GetExactDist2d(healerAnchor.GetPositionX(), healerAnchor.GetPositionY()) > 20.0f)
+    bool const wrongSide =
+        !Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.sideEmperor, assignment.oppositeEmperor);
+    bool const outsideSideLeash = Aq40Helpers::IsTwinHealerOutsideSideLeash(bot, assignment);
+    float constexpr kTwinSideHealerAnchorLeash = 18.0f;
+    bool const tooFarFromAnchor =
+        bot->GetExactDist2d(healerAnchor.GetPositionX(), healerAnchor.GetPositionY()) > kTwinSideHealerAnchorLeash;
+    if (wrongSide || outsideSideLeash || tooFarFromAnchor)
     {
+        std::string const recoveryReason = wrongSide ? "wrong_side" :
+            (outsideSideLeash ? "outside_leash" : "side_anchor");
+        if (IsTwinNonInstantCastActive(bot))
+            botAI->RequestSpellInterrupt();
+
+        Position moveTarget = healerAnchor;
+        std::string recoveryPath = "healer_anchor";
+        bool moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                            moveTarget.GetPositionZ(), false, false, false, true,
+                            MovementPriority::MOVEMENT_COMBAT, true, false);
+        if (!moved)
+        {
+            Position recoveryStep;
+            if (GetTwinRecoveryStepTowardAnchor(bot, healerAnchor, 12.0f, recoveryStep))
+            {
+                recoveryPath = "side_anchor_step";
+                moveTarget = recoveryStep;
+                moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                               moveTarget.GetPositionZ(), false, false, false, true,
+                               MovementPriority::MOVEMENT_COMBAT, true, false);
+            }
+        }
+
         Aq40Helpers::LogAq40Info(bot, "healer_position",
-            "twins:tank_healer:" + std::to_string(assignment.sideIndex),
-            "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex), 10000);
-        return MoveTo(bot->GetMapId(), healerAnchor.GetPositionX(), healerAnchor.GetPositionY(),
-                      healerAnchor.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT, true, false);
+            "twins:tank_healer:" + std::to_string(assignment.sideIndex) + ":" + recoveryPath,
+            "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex) +
+            " staged_side=" + std::to_string(tankHealerSide) +
+            " live_side=" + std::to_string(assignment.sideIndex) +
+            " reason=" + recoveryReason +
+            " path=" + recoveryPath, 5000);
+
+        if (!moved)
+        {
+            Aq40Helpers::LogAq40Warn(bot, "movement_failure",
+                "twins:tank_healer:" + std::to_string(assignment.sideIndex) + ":anchor",
+                "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex) +
+                " reason=" + recoveryReason + " path=none", 5000);
+        }
+
+        return moved;
     }
 
     return false;
@@ -925,10 +1011,27 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         Aq40TwinEmperors::SyncLocalRti(botAI, assignment.veknilash, assignment.veklor, assignment.veknilash, nullptr);
 
         Position tankPos;
-        bool hasFarPos =
+        std::string recoveryPath;
+        bool hasRecoveryPos =
             GetTwinBossSideCastAnchor(bot, assignment.veknilash, assignment.veknilashSideIndex, 3.0f, tankPos);
-        if (!hasFarPos && assignment.veklor)
-            hasFarPos = GetFarSidePosition(bot, assignment.veknilash, assignment.veklor, 3.0f, tankPos);
+        if (hasRecoveryPos)
+        {
+            recoveryPath = "side_cast_anchor";
+        }
+        else if (assignment.veklor && GetFarSidePosition(bot, assignment.veknilash, assignment.veklor, 3.0f, tankPos))
+        {
+            hasRecoveryPos = true;
+            recoveryPath = "far_side_anchor";
+        }
+        else
+        {
+            Position const sideAnchor = Aq40Helpers::GetTwinRoomSideAnchor(assignment.veknilashSideIndex);
+            if (GetTwinRecoveryStepTowardAnchor(bot, sideAnchor, 16.0f, tankPos))
+            {
+                hasRecoveryPos = true;
+                recoveryPath = "side_anchor_step";
+            }
+        }
 
         float const range = bot->GetDistance2d(assignment.veknilash);
         bool const pickupEstablished = Aq40Helpers::IsTwinMeleePickupEstablished(bot, botAI, assignment);
@@ -936,16 +1039,19 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         bool const recoveryActive = Aq40TwinEmperors::RefreshMeleeRecoveryState(
             bot, botAI, assignment.veknilash, assignment.veklorSideIndex, pickupEstablished, &recoveryReason);
 
-        if (hasFarPos)
+        if (hasRecoveryPos)
         {
             float const distToPos = bot->GetExactDist2d(tankPos.GetPositionX(), tankPos.GetPositionY());
             if (recoveryActive || distToPos > 5.0f || range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
             {
-                std::string const reason = recoveryActive ? recoveryReason : "side_anchor";
+                std::string const reason = recoveryActive ? recoveryReason : "side_recovery";
                 Aq40Helpers::LogAq40Info(bot, "tank_position",
-                    "twins:melee:" + reason + ":" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
-                    "boss=twins tank=melee reason=" + reason + " target=" +
-                    Aq40Helpers::GetAq40LogUnit(assignment.veknilash));
+                    "twins:melee:" + recoveryPath + ":" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
+                    "boss=twins tank=melee reason=" + reason +
+                    " staged_side=" + std::to_string(assignment.tankStageSide) +
+                    " live_side=" + std::to_string(assignment.veknilashSideIndex) +
+                    " path=" + recoveryPath +
+                    " target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
                 bool moved = MoveTo(bot->GetMapId(), tankPos.GetPositionX(), tankPos.GetPositionY(),
                                     tankPos.GetPositionZ(), false, false, false, true,
                                     MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -958,8 +1064,10 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         {
             Aq40Helpers::LogAq40Warn(bot, "movement_failure",
                 "twins:melee:no_side_anchor:" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
-                "boss=twins tank=melee reason=no_side_anchor target=" +
-                Aq40Helpers::GetAq40LogUnit(assignment.veknilash));
+                "boss=twins tank=melee reason=no_side_anchor" +
+                " staged_side=" + std::to_string(assignment.tankStageSide) +
+                " live_side=" + std::to_string(assignment.veknilashSideIndex) +
+                " path=move_near target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
             bool moved = MoveNear(assignment.veknilash, 3.0f, MovementPriority::MOVEMENT_COMBAT);
             if (!moved && range > 5.0f)
                 return true;

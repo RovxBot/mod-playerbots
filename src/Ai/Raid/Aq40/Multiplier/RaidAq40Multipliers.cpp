@@ -417,8 +417,17 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     if (dynamic_cast<FollowAction*>(action))
         return 0.0f;
 
-    // Healers need CombatFormation (disperse) and Flee (dodge Blizzard, keep
-    // range) to function.  Only suppress these for non-healers.
+    // Twin-specific movement owns healer positioning during the encounter:
+    // dedicated tank-healers must stay side-bound, and central raid-healers
+    // only leave center when an explicit Twin dodge/support action fires.
+    // Keep the generic movement engine from overriding that ownership.
+    if (botAI->IsHeal(bot) &&
+        (dynamic_cast<CombatFormationMoveAction*>(action) ||
+         dynamic_cast<FleeAction*>(action) ||
+         dynamic_cast<ReachTargetAction*>(action) ||
+         dynamic_cast<CastReachTargetSpellAction*>(action)))
+        return 0.0f;
+
     if (!botAI->IsHeal(bot) &&
         (dynamic_cast<CombatFormationMoveAction*>(action) ||
          dynamic_cast<FleeAction*>(action)))

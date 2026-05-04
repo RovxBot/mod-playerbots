@@ -73,6 +73,8 @@ bool IsTwinRaidCombatActiveInternal(Player* bot);
 bool HasTwinPrePullVisibility(Player* bot, PlayerbotAI* botAI, GuidVector* outUnits = nullptr);
 void UpdateTwinBossCache(Player* bot, PlayerbotAI* botAI, GuidVector const& units);
 void AppendKnownTwinBosses(Player* bot, GuidVector& units);
+bool IsTwinWipeCleanupEligible(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers,
+                               std::string* outReason = nullptr, bool logBlocked = false);
 
 std::list<ObjectGuid> GetFocusHealTargets(PlayerbotAI* botAI)
 {
@@ -515,6 +517,109 @@ bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assign
     return true;
 }
 
+bool IsTwinWipeCleanupEligible(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers,
+                               std::string* outReason, bool logBlocked)
+{
+    if (!bot || !botAI || !bot->GetMap() || !IsInTwinRoomBounds(bot))
+        return false;
+
+    // Fresh pre-pull staging only creates stable-side assignments; only treat
+    // in-room cleanup as a wipe reset when encounter-owned Twin combat residue
+    // is still hanging around.
+    if (!Aq40TwinEmperors::HasPersistentState(bot))
+        return false;
+
+    GuidVector visibleTwins;
+    if (!HasTwinPrePullVisibility(bot, botAI, &visibleTwins))
+        return false;
+
+    GuidVector observedUnits = BuildTwinObservedUnits(bot, botAI, attackers);
+    std::set<uint64> twinBossGuids;
+    for (ObjectGuid const guid : observedUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsTwinBossUnit(botAI, unit))
+            continue;
+
+        twinBossGuids.insert(unit->GetGUID().GetRawValue());
+    }
+
+    auto hasAliveTwinTargeting = [&]() -> bool
+    {
+        if (twinBossGuids.empty())
+            return false;
+
+        auto isTwinBossGuid = [&twinBossGuids](ObjectGuid const& guid) -> bool
+        {
+            return guid && twinBossGuids.find(guid.GetRawValue()) != twinBossGuids.end();
+        };
+
+        Group const* group = bot->GetGroup();
+        if (!group)
+        {
+            if ((bot->IsInCombat() && isTwinBossGuid(bot->GetTarget())) ||
+                (bot->GetVictim() && isTwinBossGuid(bot->GetVictim()->GetGUID())))
+            {
+                return true;
+            }
+
+            Pet* pet = bot->GetPet();
+            return pet && pet->IsAlive() &&
+                   ((pet->IsInCombat() && isTwinBossGuid(pet->GetTarget())) ||
+                    (pet->GetVictim() && isTwinBossGuid(pet->GetVictim()->GetGUID())));
+        }
+
+        uint32 const instanceId = bot->GetMap()->GetInstanceId();
+        for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive())
+                continue;
+            if (member->GetMapId() != bot->GetMapId())
+                continue;
+            if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+                continue;
+
+            if ((member->IsInCombat() && isTwinBossGuid(member->GetTarget())) ||
+                (member->GetVictim() && isTwinBossGuid(member->GetVictim()->GetGUID())))
+            {
+                return true;
+            }
+
+            Pet* pet = member->GetPet();
+            if (!pet || !pet->IsAlive())
+                continue;
+
+            if ((pet->IsInCombat() && isTwinBossGuid(pet->GetTarget())) ||
+                (pet->GetVictim() && isTwinBossGuid(pet->GetVictim()->GetGUID())))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }();
+
+    bool const twinCombatLive = IsTwinCombatInProgress(bot, botAI, attackers);
+    bool const encounterCombatActive = Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot);
+    if (encounterCombatActive || twinCombatLive || hasAliveTwinTargeting)
+    {
+        if (logBlocked)
+        {
+            std::string blocker = encounterCombatActive ? "combat_active" :
+                (twinCombatLive ? "combat_live" : "active_targeting");
+            LogAq40Info(bot, "encounter_reset", "twins:blocked:" + blocker,
+                "boss=twins state=blocked reason=room_visibility_blocked blocker=" + blocker, 10000);
+        }
+        return false;
+    }
+
+    if (outReason)
+        *outReason = "wipe_cleanup";
+
+    return true;
+}
+
 }  // namespace
 
 std::string GetAq40LogToken(std::string value)
@@ -580,7 +685,7 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
     std::vector<Player*> primaryTargets;
     std::vector<Player*> reserveTargets;
     std::vector<Player*> sideHealers;
-    constexpr size_t kMaxTwinHealerFocusTargets = 5;
+    constexpr size_t kMaxTwinHealerFocusTargets = 4;
     for (GroupReference const* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -627,20 +732,18 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
     for (Player* target : reserveTargets)
         AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
 
-    // Keep the local healer in the compact focus set so base healer AI can
-    // still self-heal after Twin splash/AOE without reintroducing the broad
-    // raid-sized focus list that starved tank healing.
+    // Keep the local tank-healer in the side-local focus set so the base
+    // healer AI can still self-heal without falling back to a broad raid list.
+    AppendUniqueFocusTargetCapped(focusTargets, bot, kMaxTwinHealerFocusTargets);
+
     for (Player* target : sideHealers)
     {
-        if (target == bot)
+        if (target != bot)
         {
             AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
             break;
         }
     }
-
-    for (Player* target : sideHealers)
-        AppendUniqueFocusTargetCapped(focusTargets, target, kMaxTwinHealerFocusTargets);
 
     return focusTargets;
 }
@@ -994,14 +1097,32 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
     bool const encounterActive = Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot);
-    bool const twinVisiblePrePull = botAI && HasTwinPrePullVisibility(bot, botAI);
     if (!encounterActive)
     {
-        if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull && !IsAnyGroupMemberInTwinRoomInternal(bot))
+        PlayerbotAI* cleanupAI = (botAI && botAI->GetBot() == bot) ? botAI : GET_PLAYERBOT_AI(bot);
+        GuidVector attackers;
+        if (cleanupAI && cleanupAI->GetAiObjectContext())
+            attackers = cleanupAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+
+        if (cleanupAI && IsTwinWipeCleanupEligible(bot, cleanupAI, attackers, nullptr, true))
         {
-            sTwinAssignments.erase(instanceId);
-            sTwinKnownTwinBosses.erase(instanceId);
-            Aq40TwinEmperors::ResetState(bot);
+            ClearTwinHealerFocusTargets(bot, cleanupAI);
+            ClearTwinTemporaryCombatStrategies(bot, cleanupAI);
+            ResetEncounterState(bot);
+        }
+        else
+        {
+            bool const twinVisiblePrePull = cleanupAI && HasTwinPrePullVisibility(bot, cleanupAI);
+            if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull && !IsAnyGroupMemberInTwinRoomInternal(bot))
+            {
+                if (cleanupAI)
+                {
+                    ClearTwinHealerFocusTargets(bot, cleanupAI);
+                    ClearTwinTemporaryCombatStrategies(bot, cleanupAI);
+                }
+
+                ResetEncounterState(bot);
+            }
         }
     }
 
@@ -1616,6 +1737,14 @@ bool ResetEncounterState(Player* bot)
 
     uint32 const instanceId = bot->GetMap()->GetInstanceId();
     bool erased = false;
+    std::string resetReason = "shared_cleanup";
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+    {
+        GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+        std::string twinResetReason;
+        if (IsTwinWipeCleanupEligible(bot, botAI, attackers, &twinResetReason, false))
+            resetReason = twinResetReason;
+    }
 
     erased = sTwinAssignments.erase(instanceId) > 0 || erased;
     erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
@@ -1624,8 +1753,18 @@ bool ResetEncounterState(Player* bot)
     erased = Aq40TwinEmperors::ResetState(bot) || erased;
 
     if (erased)
-        LogAq40Info(bot, "encounter_reset", "shared:" + std::to_string(instanceId),
-            "boss=shared state=reset instance=" + std::to_string(instanceId), 30000);
+    {
+        if (resetReason == "wipe_cleanup")
+        {
+            LogAq40Info(bot, "encounter_reset", "twins:reset:" + std::to_string(instanceId),
+                "boss=twins state=reset reason=wipe_cleanup instance=" + std::to_string(instanceId), 30000);
+        }
+        else
+        {
+            LogAq40Info(bot, "encounter_reset", "shared:" + std::to_string(instanceId),
+                "boss=shared state=reset instance=" + std::to_string(instanceId), 30000);
+        }
+    }
 
     return erased;
 }
@@ -1708,6 +1847,10 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (!hasPersistentEncounterState)
         return false;
 
+    GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+    if (IsTwinWipeCleanupEligible(bot, botAI, attackers, nullptr, true))
+        return true;
+
     if (IsAnyGroupMemberInTwinRoomInternal(bot))
         return false;
 
@@ -1720,7 +1863,6 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (IsTwinRaidCombatActiveInternal(bot))
         return false;
 
-    GuidVector const attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     if (!Aq40BossHelper::GetActiveCombatUnits(botAI, attackers).empty())
         return false;
 
