@@ -91,12 +91,12 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         {
             NextAction("aq40 twin emperors dodge blizzard", ACTION_RAID + 10),
             NextAction("aq40 twin emperors dodge explode bug", ACTION_RAID + 9),
-            NextAction("aq40 twin emperors avoid veklor", ACTION_RAID + 8),
-            NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 7),
-            NextAction("aq40 twin emperors hold split", ACTION_RAID + 6),
+            NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 8),
+            NextAction("aq40 twin emperors hold split", ACTION_RAID + 7),
+            NextAction("aq40 twin emperors post swap hold", ACTION_RAID + 6),
             NextAction("aq40 twin emperors healer support", ACTION_RAID + 5),
-            NextAction("aq40 twin emperors post swap hold", ACTION_RAID + 4),
-            NextAction("aq40 twin emperors choose target", ACTION_RAID + 3),
+            NextAction("aq40 twin emperors choose target", ACTION_RAID + 4),
+            NextAction("aq40 twin emperors avoid veklor", ACTION_RAID + 3),
             NextAction("avoid aoe", ACTION_RAID + 2),
         }));
 

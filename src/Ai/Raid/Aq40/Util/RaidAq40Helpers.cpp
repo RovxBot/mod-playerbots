@@ -16,6 +16,7 @@
 #include "Playerbots.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
+#include "RaidAq40TwinEmperors.h"
 #include "Timer.h"
 
 namespace Aq40Helpers
@@ -52,13 +53,6 @@ uint32 constexpr kTwinTankHealersPerSide = 2;
 TwinInstanceAssignments sTwinAssignments;
 std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
-std::unordered_map<uint32, bool> sCachedTwinSplitByX;
-std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
-// Caches whether Vek'lor is on the "low" axis side.  Only updated when bosses
-// are well-separated (>40y) to prevent flicker during teleport transitions.
-std::unordered_map<uint32, bool> sCachedTwinVeklorIsLowSide;
-std::unordered_map<uint32, uint32> sTwinLastVeklorSideByInstance;
-std::unordered_map<uint32, uint32> sTwinLastVeklorSideChangedMsByInstance;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
 struct TwinHealerFocusState
 {
@@ -508,38 +502,15 @@ bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
     return false;
 }
 
-bool HasTwinBossAggroInternal(Player* member, Unit* boss)
-{
-    if (!member || !boss)
-        return false;
-
-    ObjectGuid const memberGuid = member->GetGUID();
-    ObjectGuid petGuid = ObjectGuid::Empty;
-    if (Pet* pet = member->GetPet())
-        petGuid = pet->GetGUID();
-
-    return boss->GetVictim() == member ||
-           boss->GetTarget() == memberGuid ||
-           (petGuid && boss->GetTarget() == petGuid) ||
-           member->GetVictim() == boss;
-}
-
 bool IsTwinPickupMemberEstablished(Player* member, TwinAssignments const& assignment, Unit* boss)
 {
     if (!member || !member->IsAlive() || !boss || !boss->IsAlive())
         return false;
 
-    if (!member->IsWithinLOSInMap(boss) || !HasTwinBossAggroInternal(member, boss))
+    bool const isVeklor = (boss == assignment.veklor);
+    if (!Aq40TwinEmperors::HasBossPickupAggro(member, boss) ||
+        !Aq40TwinEmperors::IsPickupWindowSatisfied(member, boss, isVeklor))
         return false;
-
-    float const distance = member->GetDistance2d(boss);
-    float const minRange = boss == assignment.veklor ? 18.0f : 1.5f;
-    float const maxRange = boss == assignment.veklor ? 36.0f : 15.0f;
-    if (distance < minRange || distance > maxRange)
-        return false;
-
-    if (distance <= (boss == assignment.veklor ? 30.0f : 8.0f))
-        return true;
 
     return true;
 }
@@ -679,7 +650,6 @@ Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encou
     if (!bot || !botAI)
         return nullptr;
 
-    Unit* fallback = nullptr;
     Unit* closestMarked = nullptr;
     float closestMarkedDistance = 0.0f;
     for (ObjectGuid const guid : encounterUnits)
@@ -700,23 +670,41 @@ Unit* FindTwinMarkedBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encou
             }
             continue;
         }
-
-        bool const isFallbackName =
-            (auraSpellId == Aq40SpellIds::TwinExplodeBug &&
-             Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "explode bug" })) ||
-            (auraSpellId == Aq40SpellIds::TwinMutateBug &&
-             Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "mutate bug" }));
-        if (!fallback && isFallbackName)
-            fallback = unit;
     }
 
-    return closestMarked ? closestMarked : fallback;
+    return closestMarked;
 }
 
 Unit* FindTwinHostileBug(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits)
 {
     if (!bot || !botAI)
         return nullptr;
+
+    auto isThreateningRaid = [bot](Unit* unit) -> bool
+    {
+        if (!unit)
+            return false;
+
+        Group const* group = bot->GetGroup();
+        if (!group)
+            return unit->GetVictim() == bot || unit->GetTarget() == bot->GetGUID();
+
+        for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+                continue;
+
+            if (unit->GetVictim() == member || unit->GetTarget() == member->GetGUID())
+                return true;
+
+            Pet* pet = member->GetPet();
+            if (pet && (unit->GetVictim() == pet || unit->GetTarget() == pet->GetGUID()))
+                return true;
+        }
+
+        return false;
+    };
 
     Unit* closestBug = nullptr;
     float closestDistance = 0.0f;
@@ -727,9 +715,10 @@ Unit* FindTwinHostileBug(Player* bot, PlayerbotAI* botAI, GuidVector const& enco
             unit->IsFriendlyTo(bot))
             continue;
 
-        bool const isTwinBug = Aq40BossHelper::IsUnitNamedAny(botAI, unit,
-            { "qiraji scarab", "qiraji scorpion", "explode bug", "mutate bug" });
-        if (!isTwinBug)
+        if (!Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "qiraji scarab", "qiraji scorpion" }))
+            continue;
+        if (!Aq40SpellIds::HasAnyAura(botAI, unit, { Aq40SpellIds::TwinExplodeBug, Aq40SpellIds::TwinMutateBug }) &&
+            !isThreateningRaid(unit))
             continue;
 
         float const distance = bot->GetDistance2d(unit);
@@ -905,7 +894,7 @@ bool HasTwinVisibleEmperors(Player* bot, PlayerbotAI* botAI, GuidVector* outUnit
 
 bool HasTwinBossAggro(Player* member, Unit* boss)
 {
-    return HasTwinBossAggroInternal(member, boss);
+    return Aq40TwinEmperors::HasBossPickupAggro(member, boss);
 }
 
 bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignment)
@@ -1011,12 +1000,8 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
         if (!IsInTwinRoomBounds(bot) && !twinVisiblePrePull && !IsAnyGroupMemberInTwinRoomInternal(bot))
         {
             sTwinAssignments.erase(instanceId);
-            sCachedTwinSplitByX.erase(instanceId);
-            sCachedTwinVeklorIsLowSide.erase(instanceId);
-            sTwinSideZeroIsLowSide.erase(instanceId);
-            sTwinLastVeklorSideByInstance.erase(instanceId);
-            sTwinLastVeklorSideChangedMsByInstance.erase(instanceId);
             sTwinKnownTwinBosses.erase(instanceId);
+            Aq40TwinEmperors::ResetState(bot);
         }
     }
 
@@ -1148,65 +1133,10 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return result;
 
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
-    uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
-
-    float separation = result.veklor->GetDistance2d(result.veknilash);
-    bool splitByX;
-    auto axisIt = sCachedTwinSplitByX.find(instanceId);
-    if (axisIt != sCachedTwinSplitByX.end())
-    {
-        if (separation > 60.0f)
-        {
-            splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
-                       std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
-            sCachedTwinSplitByX[instanceId] = splitByX;
-        }
-        else
-        {
-            splitByX = axisIt->second;
-        }
-    }
-    else
-    {
-        splitByX = std::abs(result.veklor->GetPositionX() - result.veknilash->GetPositionX()) >=
-                   std::abs(result.veklor->GetPositionY() - result.veknilash->GetPositionY());
-        sCachedTwinSplitByX[instanceId] = splitByX;
-    }
-
-    float veklorAxis = splitByX ? result.veklor->GetPositionX() : result.veklor->GetPositionY();
-    float veknilashAxis = splitByX ? result.veknilash->GetPositionX() : result.veknilash->GetPositionY();
-
-    // Determine which boss is on the "low" side of the split axis.
-    // Cache the result and only update when bosses are well-separated (>40y)
-    // to prevent flicker during teleport transitions when they briefly overlap.
-    bool veklorIsLow;
-    auto lowSideIt = sCachedTwinVeklorIsLowSide.find(instanceId);
-    if (lowSideIt != sCachedTwinVeklorIsLowSide.end() && separation <= 40.0f)
-    {
-        veklorIsLow = lowSideIt->second;
-    }
-    else
-    {
-        veklorIsLow = (veklorAxis < veknilashAxis);
-        sCachedTwinVeklorIsLowSide[instanceId] = veklorIsLow;
-    }
-    Unit* lowSide = veklorIsLow ? result.veklor : result.veknilash;
-    Unit* highSide = veklorIsLow ? result.veknilash : result.veklor;
-
-    bool sideZeroIsLowSide = true;
-    auto sideMappingIt = sTwinSideZeroIsLowSide.find(instanceId);
-    if (sideMappingIt == sTwinSideZeroIsLowSide.end())
-    {
-        sideZeroIsLowSide = (lowSide == result.veknilash);
-        sTwinSideZeroIsLowSide[instanceId] = sideZeroIsLowSide;
-    }
-    else
-    {
-        sideZeroIsLowSide = sideMappingIt->second;
-    }
-
-    Unit* sideZeroBoss = sideZeroIsLowSide ? lowSide : highSide;
-    Unit* sideOneBoss = sideZeroIsLowSide ? highSide : lowSide;
+    Aq40TwinEmperors::SideState const sideState =
+        Aq40TwinEmperors::ResolveSideState(bot, result.veklor, result.veknilash);
+    Unit* sideZeroBoss = sideState.sideZeroBoss;
+    Unit* sideOneBoss = sideState.sideOneBoss;
     auto getBossSideIndex = [sideZeroBoss, sideOneBoss](Unit* boss) -> uint32
     {
         if (boss == sideOneBoss)
@@ -1214,21 +1144,8 @@ TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector c
         return 0u;
     };
 
-    result.veklorSideIndex = getBossSideIndex(result.veklor);
-    result.veknilashSideIndex = getBossSideIndex(result.veknilash);
-
-    uint32 const now = getMSTime();
-    auto lastSideItr = sTwinLastVeklorSideByInstance.find(instanceId);
-    if (lastSideItr == sTwinLastVeklorSideByInstance.end())
-    {
-        sTwinLastVeklorSideByInstance[instanceId] = result.veklorSideIndex;
-        sTwinLastVeklorSideChangedMsByInstance[instanceId] = now;
-    }
-    else if (lastSideItr->second != result.veklorSideIndex)
-    {
-        lastSideItr->second = result.veklorSideIndex;
-        sTwinLastVeklorSideChangedMsByInstance[instanceId] = now;
-    }
+    result.veklorSideIndex = sideState.veklorSideIndex;
+    result.veknilashSideIndex = sideState.veknilashSideIndex;
 
     if (cohort == TwinRoleCohort::Other)
     {
@@ -1429,22 +1346,10 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
 
 uint32 GetTwinPostSwapElapsedMs(Player* bot, TwinAssignments const& assignment)
 {
-    if (!bot || !bot->GetMap() || !assignment.veklor)
+    if (!assignment.veklor)
         return std::numeric_limits<uint32>::max();
 
-    uint32 const instanceId = bot->GetMap()->GetInstanceId();
-    auto lastSideItr = sTwinLastVeklorSideByInstance.find(instanceId);
-    if (lastSideItr == sTwinLastVeklorSideByInstance.end())
-        return std::numeric_limits<uint32>::max();
-
-    if (lastSideItr->second != assignment.veklorSideIndex)
-        return 0;
-
-    auto changedItr = sTwinLastVeklorSideChangedMsByInstance.find(instanceId);
-    if (changedItr == sTwinLastVeklorSideChangedMsByInstance.end())
-        return std::numeric_limits<uint32>::max();
-
-    return getMSTime() - changedItr->second;
+    return Aq40TwinEmperors::GetPostSwapElapsedMs(bot, assignment.veklorSideIndex);
 }
 
 bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
@@ -1715,10 +1620,8 @@ bool ResetEncounterState(Player* bot)
     erased = sTwinAssignments.erase(instanceId) > 0 || erased;
     erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
-    erased = sCachedTwinSplitByX.erase(instanceId) > 0 || erased;
-    erased = sCachedTwinVeklorIsLowSide.erase(instanceId) > 0 || erased;
-    erased = sTwinSideZeroIsLowSide.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
+    erased = Aq40TwinEmperors::ResetState(bot) || erased;
 
     if (erased)
         LogAq40Info(bot, "encounter_reset", "shared:" + std::to_string(instanceId),
@@ -1736,9 +1639,7 @@ bool HasPersistentEncounterState(Player* bot)
     return sTwinAssignments.find(instanceId) != sTwinAssignments.end() ||
            sTwinKnownTwinBosses.find(instanceId) != sTwinKnownTwinBosses.end() ||
            sCthunPhase2StartByInstance.find(instanceId) != sCthunPhase2StartByInstance.end() ||
-           sCachedTwinSplitByX.find(instanceId) != sCachedTwinSplitByX.end() ||
-           sCachedTwinVeklorIsLowSide.find(instanceId) != sCachedTwinVeklorIsLowSide.end() ||
-           sTwinSideZeroIsLowSide.find(instanceId) != sTwinSideZeroIsLowSide.end() ||
+           Aq40TwinEmperors::HasPersistentState(bot) ||
            sSkeramPostBlinkHoldUntilByInstance.find(instanceId) != sSkeramPostBlinkHoldUntilByInstance.end();
 }
 
