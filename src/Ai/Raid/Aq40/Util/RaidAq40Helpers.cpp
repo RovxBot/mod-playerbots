@@ -1563,13 +1563,11 @@ bool IsCthunVulnerableNow(PlayerbotAI* botAI, GuidVector const& attackers)
     return botAI->HasAura("weakened", cthunBody);
 }
 
-GuidVector GetObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+static GuidVector GetRawObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
 {
     GuidVector observedUnits;
     if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
         return observedUnits;
-
-    uint32 const instanceId = bot->GetMap() ? bot->GetMap()->GetInstanceId() : 0;
 
     GuidVector encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, attackers);
     for (ObjectGuid const guid : encounterUnits)
@@ -1585,9 +1583,73 @@ GuidVector GetObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, Guid
     return observedUnits;
 }
 
-bool HasObservedSkeramEncounter(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+static bool IsUnitActivelyFightingSkeram(Player* bot, PlayerbotAI* botAI, Unit* unit)
 {
-    return !GetObservedSkeramEncounterUnits(bot, botAI, attackers).empty();
+    if (!bot || !botAI || !unit || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId() || !unit->IsInCombat())
+        return false;
+
+    Unit* victim = unit->GetVictim();
+    return Aq40BossHelper::IsUnitNamedAny(botAI, victim, { "the prophet skeram" });
+}
+
+bool IsSkeramEncounterLive(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    GuidVector const observedUnits = GetRawObservedSkeramEncounterUnits(bot, botAI, attackers);
+    if (observedUnits.empty())
+        return false;
+
+    for (ObjectGuid const guid : observedUnits)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        bool const hasThreatVictim = unit->IsCreature() && unit->GetThreatMgr().GetCurrentVictim();
+        if (unit->IsInCombat() || unit->GetVictim() || unit->GetTarget() || hasThreatVictim)
+            return true;
+    }
+
+    if (IsUnitActivelyFightingSkeram(bot, botAI, bot))
+        return true;
+
+    if (Pet* pet = bot->GetPet())
+    {
+        if (IsUnitActivelyFightingSkeram(bot, botAI, pet))
+            return true;
+    }
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member == bot || !Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+
+        if (IsUnitActivelyFightingSkeram(bot, botAI, member))
+            return true;
+
+        if (Pet* pet = member->GetPet())
+        {
+            if (IsUnitActivelyFightingSkeram(bot, botAI, pet))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+GuidVector GetObservedSkeramEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
+{
+    if (!IsSkeramEncounterLive(bot, botAI, attackers))
+        return {};
+
+    return GetRawObservedSkeramEncounterUnits(bot, botAI, attackers);
 }
 
 bool IsSkeramPostBlinkHoldActive(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -1813,8 +1875,7 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
     if (!Aq40BossHelper::GetActiveCombatUnits(botAI, attackers).empty())
         return false;
 
-    GuidVector const skeramUnits = GetObservedSkeramEncounterUnits(bot, botAI, attackers);
-    if (!skeramUnits.empty())
+    if (IsSkeramEncounterLive(bot, botAI, attackers))
         return false;
 
     if (bot->GetMap())

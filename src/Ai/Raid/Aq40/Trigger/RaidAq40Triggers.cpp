@@ -49,7 +49,7 @@ bool Aq40BotIsNotInCombatTrigger::IsActive()
     if (!Aq40BossHelper::GetActiveCombatUnits(botAI, attackers).empty())
         return false;
 
-    if (Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, attackers))
+    if (Aq40Helpers::IsSkeramEncounterLive(bot, botAI, attackers))
         return false;
 
     return Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI);
@@ -66,11 +66,14 @@ bool Aq40SkeramActiveTrigger::IsActive()
     if (!Aq40EncounterEngaged(botAI, bot))
         return false;
 
-    return Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, AI_VALUE(GuidVector, "attackers"));
+    return Aq40Helpers::IsSkeramEncounterLive(bot, botAI, AI_VALUE(GuidVector, "attackers"));
 }
 
 bool Aq40SkeramBlinkTrigger::IsActive()
 {
+    if (!Aq40SkeramActiveTrigger(botAI).IsActive())
+        return false;
+
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget || !botAI->EqualLowercaseName(currentTarget->GetName(), "the prophet skeram"))
         return false;
@@ -308,7 +311,7 @@ bool Aq40TrashActiveTrigger::IsActive()
         return false;
 
     GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
-    if (Aq40Helpers::HasObservedSkeramEncounter(bot, botAI, attackers))
+    if (Aq40Helpers::IsSkeramEncounterLive(bot, botAI, attackers))
         return false;
 
     GuidVector encounterUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
