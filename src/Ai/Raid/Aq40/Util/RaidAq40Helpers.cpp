@@ -22,6 +22,7 @@
 namespace Aq40Helpers
 {
 uint32 GetGroupMemberOrder(Player* bot, Player* member);
+uint32 GetTwinRolePriority(Player* bot, Player* member, TwinRoleCohort cohort);
 uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot);
 
 namespace
@@ -430,64 +431,6 @@ void LogAq40(Player* bot, std::string const& eventKey, std::string const& stateK
         LOG_INFO("playerbots_aq40", "AQ40 {}", line.str());
 }
 
-uint32 GetGroupMemberOrder(Player* bot, Player* member)
-{
-    if (!bot || !member)
-        return std::numeric_limits<uint32>::max();
-
-    Group const* group = bot->GetGroup();
-    if (!group)
-        return std::numeric_limits<uint32>::max();
-
-    uint32 order = 0;
-    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next(), ++order)
-    {
-        if (ref->GetSource() == member)
-            return order;
-    }
-
-    return std::numeric_limits<uint32>::max();
-}
-
-uint32 GetTwinRolePriority(Player* bot, Player* member, TwinRoleCohort cohort)
-{
-    switch (cohort)
-    {
-        case TwinRoleCohort::WarlockTank:
-            return Aq40BossHelper::GetAliveWarlockOrdinal(member);
-        case TwinRoleCohort::MeleeTank:
-            if (PlayerbotAI::IsMainTank(member))
-                return 0;
-            if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
-                return 1;
-            if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
-                return 2;
-            return 10 + GetGroupMemberOrder(bot, member);
-        case TwinRoleCohort::Healer:
-        case TwinRoleCohort::Other:
-            return GetGroupMemberOrder(bot, member);
-    }
-
-    return std::numeric_limits<uint32>::max();
-}
-
-uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
-{
-    switch (cohort)
-    {
-        case TwinRoleCohort::WarlockTank:
-            return (slot % 2 == 0) ? 1u : 0u;
-        case TwinRoleCohort::MeleeTank:
-            return slot % 2;
-        case TwinRoleCohort::Healer:
-            return (slot % 2 == 0) ? 1u : 0u;
-        case TwinRoleCohort::Other:
-            return slot % 2;
-    }
-
-    return slot % 2;
-}
-
 bool GetCurrentTwinRoleLock(Player* bot, TwinRoleLock& outLock)
 {
     if (!bot || !bot->GetMap())
@@ -790,6 +733,64 @@ bool IsTwinWipeCleanupEligible(Player* bot, PlayerbotAI* botAI, GuidVector const
 }
 
 }  // namespace
+
+uint32 GetGroupMemberOrder(Player* bot, Player* member)
+{
+    if (!bot || !member)
+        return std::numeric_limits<uint32>::max();
+
+    Group const* group = bot->GetGroup();
+    if (!group)
+        return std::numeric_limits<uint32>::max();
+
+    uint32 order = 0;
+    for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next(), ++order)
+    {
+        if (ref->GetSource() == member)
+            return order;
+    }
+
+    return std::numeric_limits<uint32>::max();
+}
+
+uint32 GetTwinRolePriority(Player* bot, Player* member, TwinRoleCohort cohort)
+{
+    switch (cohort)
+    {
+        case TwinRoleCohort::WarlockTank:
+            return Aq40BossHelper::GetAliveWarlockOrdinal(member);
+        case TwinRoleCohort::MeleeTank:
+            if (PlayerbotAI::IsMainTank(member))
+                return 0;
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+                return 1;
+            if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
+                return 2;
+            return 10 + GetGroupMemberOrder(bot, member);
+        case TwinRoleCohort::Healer:
+        case TwinRoleCohort::Other:
+            return GetGroupMemberOrder(bot, member);
+    }
+
+    return std::numeric_limits<uint32>::max();
+}
+
+uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
+{
+    switch (cohort)
+    {
+        case TwinRoleCohort::WarlockTank:
+            return (slot % 2 == 0) ? 1u : 0u;
+        case TwinRoleCohort::MeleeTank:
+            return slot % 2;
+        case TwinRoleCohort::Healer:
+            return (slot % 2 == 0) ? 1u : 0u;
+        case TwinRoleCohort::Other:
+            return slot % 2;
+    }
+
+    return slot % 2;
+}
 
 std::string GetAq40LogToken(std::string value)
 {
