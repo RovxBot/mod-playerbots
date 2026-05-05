@@ -18,6 +18,7 @@
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40TwinEmperors.h"
 
 namespace
 {
@@ -385,9 +386,21 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, activeUnits);
     bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
     bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    bool const twinPickupControlWindow =
+        Aq40TwinEmperors::IsTwinTeleportWindowActive(bot) || Aq40TwinEmperors::HasLockedPickupAnchor(bot);
     bool const postSwapThreatHold =
         assignment.veklor && !isWarlockTank && !isMeleeTank && !botAI->IsHeal(bot) &&
         Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment);
+    if (twinPickupControlWindow)
+    {
+        if (dynamic_cast<MovementAction*>(action))
+            return 0.0f;
+
+        if (dynamic_cast<DpsAssistAction*>(action) ||
+            dynamic_cast<TankAssistAction*>(action) ||
+            dynamic_cast<AttackRtiTargetAction*>(action))
+            return 0.0f;
+    }
     if (postSwapThreatHold)
     {
         Unit* currentTarget = AI_VALUE(Unit*, "current target");

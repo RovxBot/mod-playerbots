@@ -1,5 +1,6 @@
 #include "RaidAq40Actions.h"
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <list>
@@ -81,7 +82,11 @@ Position GetTwinSideHealerAnchor(uint32 sideIndex)
     return GetTwinInitialRadialAnchor(sideIndex, kTwinSideHealerAnchorDistance);
 }
 
-bool GetTwinBossSideCastAnchor(Player* bot, Unit* boss, uint32 sideIndex, float desiredRange, Position& outPosition)
+bool GetFarSidePosition(Player* bot, Unit* boss, Unit* otherBoss, float desiredRange, Position& outPosition);
+bool GetTwinRecoveryStepTowardAnchor(Player* bot, Position const& anchor, float maxStepDistance, Position& outPosition);
+
+bool GetTwinBossSideCastAnchorWithOffset(Player* bot, Unit* boss, uint32 sideIndex, float desiredRange,
+                                         float angleOffset, Position& outPosition)
 {
     if (!bot || !boss || !bot->GetMap())
         return false;
@@ -93,8 +98,9 @@ bool GetTwinBossSideCastAnchor(Player* bot, Unit* boss, uint32 sideIndex, float 
     if (length < 0.1f)
         return false;
 
-    float targetX = boss->GetPositionX() + (dirX / length) * desiredRange;
-    float targetY = boss->GetPositionY() + (dirY / length) * desiredRange;
+    float const baseAngle = std::atan2(dirY, dirX) + angleOffset;
+    float targetX = boss->GetPositionX() + std::cos(baseAngle) * desiredRange;
+    float targetY = boss->GetPositionY() + std::sin(baseAngle) * desiredRange;
     float targetZ = boss->GetPositionZ();
     if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
             bot->GetPositionZ(), targetX, targetY, targetZ))
@@ -102,6 +108,107 @@ bool GetTwinBossSideCastAnchor(Player* bot, Unit* boss, uint32 sideIndex, float 
 
     outPosition.Relocate(targetX, targetY, targetZ);
     return true;
+}
+
+bool IsTwinPickupAnchorCandidateSafe(Unit* boss, Unit* otherBoss, uint32 sideIndex,
+                                     float desiredRange, Position const& candidate)
+{
+    if (!boss)
+        return false;
+
+    Position const sideAnchor = GetTwinSideAnchor(sideIndex);
+    float const baseX = sideAnchor.GetPositionX() - boss->GetPositionX();
+    float const baseY = sideAnchor.GetPositionY() - boss->GetPositionY();
+    float const candidateX = candidate.GetPositionX() - boss->GetPositionX();
+    float const candidateY = candidate.GetPositionY() - boss->GetPositionY();
+    float const baseLength = std::sqrt(baseX * baseX + baseY * baseY);
+    float const candidateLength = std::sqrt(candidateX * candidateX + candidateY * candidateY);
+    if (baseLength < 0.1f || candidateLength < 0.1f)
+        return false;
+
+    float const projection = (candidateX * baseX + candidateY * baseY) / baseLength;
+    if (projection <= 0.25f)
+        return false;
+
+    float const bossCenterDistance = boss->GetExactDist2d(kTwinRoomCenterX, kTwinRoomCenterY);
+    float const candidateCenterX = candidate.GetPositionX() - kTwinRoomCenterX;
+    float const candidateCenterY = candidate.GetPositionY() - kTwinRoomCenterY;
+    float const candidateCenterDistance =
+        std::sqrt(candidateCenterX * candidateCenterX + candidateCenterY * candidateCenterY);
+    if (candidateCenterDistance + 1.5f < bossCenterDistance - desiredRange)
+        return false;
+
+    if (!otherBoss)
+        return true;
+
+    float const targetDistance = boss->GetDistance2d(candidate.GetPositionX(), candidate.GetPositionY());
+    float const oppositeDistance = otherBoss->GetDistance2d(candidate.GetPositionX(), candidate.GetPositionY());
+    return oppositeDistance + 4.0f >= targetDistance;
+}
+
+bool ShouldLockTwinPickupAnchor(Player* bot)
+{
+    return bot &&
+           (Aq40TwinEmperors::IsTwinTeleportWindowActive(bot) || Aq40TwinEmperors::HasLockedPickupAnchor(bot));
+}
+
+bool ResolveTwinPickupAnchor(Player* bot, Unit* boss, Unit* otherBoss, uint32 sideIndex, float desiredRange,
+                             float recoveryStepDistance, Position& outPosition, std::string& outPath)
+{
+    if (!bot || !boss)
+        return false;
+
+    if (Aq40TwinEmperors::GetTwinLockedPickupAnchor(bot, boss, sideIndex, outPosition))
+    {
+        if (IsTwinPickupAnchorCandidateSafe(boss, otherBoss, sideIndex, desiredRange, outPosition))
+        {
+            outPath = "locked_anchor";
+            return true;
+        }
+
+        Aq40TwinEmperors::ClearTwinPickupState(bot);
+    }
+
+    static std::array<float, 5> const kSideAnchorOffsets = { 0.0f, 0.18f, -0.18f, 0.36f, -0.36f };
+    for (float const offset : kSideAnchorOffsets)
+    {
+        Position candidate;
+        if (!GetTwinBossSideCastAnchorWithOffset(bot, boss, sideIndex, desiredRange, offset, candidate))
+            continue;
+        if (!IsTwinPickupAnchorCandidateSafe(boss, otherBoss, sideIndex, desiredRange, candidate))
+            continue;
+
+        outPosition = candidate;
+        outPath = (offset == 0.0f) ? "side_cast_anchor" : "side_cast_nudge";
+        if (ShouldLockTwinPickupAnchor(bot))
+            Aq40TwinEmperors::RememberTwinPickupAnchor(bot, boss, sideIndex, outPosition);
+        return true;
+    }
+
+    Position farSidePosition;
+    if (GetFarSidePosition(bot, boss, otherBoss, desiredRange, farSidePosition) &&
+        IsTwinPickupAnchorCandidateSafe(boss, otherBoss, sideIndex, desiredRange, farSidePosition))
+    {
+        outPosition = farSidePosition;
+        outPath = "far_side_anchor";
+        if (ShouldLockTwinPickupAnchor(bot))
+            Aq40TwinEmperors::RememberTwinPickupAnchor(bot, boss, sideIndex, outPosition);
+        return true;
+    }
+
+    Position const sideAnchor = GetTwinSideAnchor(sideIndex);
+    Position recoveryStep;
+    if (GetTwinRecoveryStepTowardAnchor(bot, sideAnchor, recoveryStepDistance, recoveryStep) &&
+        IsTwinPickupAnchorCandidateSafe(boss, otherBoss, sideIndex, desiredRange, recoveryStep))
+    {
+        outPosition = recoveryStep;
+        outPath = "side_anchor_step";
+        if (ShouldLockTwinPickupAnchor(bot))
+            Aq40TwinEmperors::RememberTwinPickupAnchor(bot, boss, sideIndex, outPosition);
+        return true;
+    }
+
+    return false;
 }
 
 bool GetTwinCentralCastAnchor(Player* bot, Unit* boss, float desiredRange, Position& outPosition)
@@ -1010,34 +1117,25 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         PinTwinTarget(botAI, context, assignment.veknilash);
         Aq40TwinEmperors::SyncLocalRti(botAI, assignment.veknilash, assignment.veklor, assignment.veknilash, nullptr);
 
-        Position tankPos;
-        std::string recoveryPath;
-        bool hasRecoveryPos =
-            GetTwinBossSideCastAnchor(bot, assignment.veknilash, assignment.veknilashSideIndex, 3.0f, tankPos);
-        if (hasRecoveryPos)
+        bool const botHasPickup =
+            Aq40TwinEmperors::HasBossPickupAggro(bot, assignment.veknilash) &&
+            Aq40TwinEmperors::IsPickupWindowSatisfied(bot, assignment.veknilash, false);
+        if (botHasPickup)
         {
-            recoveryPath = "side_cast_anchor";
-        }
-        else if (assignment.veklor && GetFarSidePosition(bot, assignment.veknilash, assignment.veklor, 3.0f, tankPos))
-        {
-            hasRecoveryPos = true;
-            recoveryPath = "far_side_anchor";
-        }
-        else
-        {
-            Position const sideAnchor = Aq40Helpers::GetTwinRoomSideAnchor(assignment.veknilashSideIndex);
-            if (GetTwinRecoveryStepTowardAnchor(bot, sideAnchor, 16.0f, tankPos))
-            {
-                hasRecoveryPos = true;
-                recoveryPath = "side_anchor_step";
-            }
+            Aq40TwinEmperors::NoteTwinPickupEstablished(bot, false);
+            Aq40TwinEmperors::ClearTwinPickupState(bot);
         }
 
         float const range = bot->GetDistance2d(assignment.veknilash);
-        bool const pickupEstablished = Aq40Helpers::IsTwinMeleePickupEstablished(bot, botAI, assignment);
+        bool const pickupEstablished = botHasPickup || Aq40Helpers::IsTwinMeleePickupEstablished(bot, botAI, assignment);
         std::string recoveryReason;
         bool const recoveryActive = Aq40TwinEmperors::RefreshMeleeRecoveryState(
             bot, botAI, assignment.veknilash, assignment.veklorSideIndex, pickupEstablished, &recoveryReason);
+
+        Position tankPos;
+        std::string recoveryPath;
+        bool const hasRecoveryPos = ResolveTwinPickupAnchor(
+            bot, assignment.veknilash, assignment.veklor, assignment.veknilashSideIndex, 3.0f, 16.0f, tankPos, recoveryPath);
 
         if (hasRecoveryPos)
         {
@@ -1081,6 +1179,9 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
                 "boss=twins tank=melee target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash));
             Attack(assignment.veknilash);
         }
+
+        if (botHasPickup)
+            Aq40TwinEmperors::ClearTwinPickupState(bot);
 
         return false;
     }
@@ -1161,24 +1262,34 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
     float const minRange = 19.0f;
     float const maxRange = 30.0f;
 
+    bool const botHasPickup =
+        Aq40TwinEmperors::HasBossPickupAggro(bot, veklor) &&
+        Aq40TwinEmperors::IsPickupWindowSatisfied(bot, veklor, true);
+    if (botHasPickup)
+    {
+        Aq40TwinEmperors::NoteTwinPickupEstablished(bot, true);
+        Aq40TwinEmperors::ClearTwinPickupState(bot);
+    }
+
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
     auto moveWarlockSideCastAnchor = [&](std::string const& reason) -> bool
     {
         Position anchorPosition;
-        if (!GetTwinBossSideCastAnchor(bot, veklor, assignment.veklorSideIndex, desiredRange, anchorPosition))
-        {
-            if (!GetFarSidePosition(bot, veklor, assignment.oppositeEmperor, desiredRange, anchorPosition))
-                return false;
-        }
+        std::string recoveryPath;
+        if (!ResolveTwinPickupAnchor(bot, veklor, assignment.oppositeEmperor, assignment.veklorSideIndex,
+                                     desiredRange, 20.0f, anchorPosition, recoveryPath))
+            return false;
 
         float const distToAnchor = bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY());
         if (distToAnchor <= 3.0f)
             return false;
 
         Aq40Helpers::LogAq40Info(bot, "tank_position",
-            "twins:warlock_side_anchor:" + reason + ":" + Aq40Helpers::GetAq40LogUnit(veklor),
-            "boss=twins tank=warlock reason=" + reason + " target=" + Aq40Helpers::GetAq40LogUnit(veklor));
+            "twins:warlock_side_anchor:" + reason + ":" + recoveryPath + ":" + Aq40Helpers::GetAq40LogUnit(veklor),
+            "boss=twins tank=warlock reason=" + reason +
+            " path=" + recoveryPath +
+            " target=" + Aq40Helpers::GetAq40LogUnit(veklor));
         MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
                anchorPosition.GetPositionZ(), false, false, false, true,
                MovementPriority::MOVEMENT_COMBAT, true, false);

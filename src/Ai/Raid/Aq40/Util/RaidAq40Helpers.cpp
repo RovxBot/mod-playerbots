@@ -1444,6 +1444,9 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
     if (!bot || !botAI || !assignment.veklor)
         return false;
 
+    if (Aq40TwinEmperors::HasTwinPickupEstablished(bot, true))
+        return true;
+
     Group const* group = bot->GetGroup();
     if (!group)
         return false;
@@ -1459,7 +1462,10 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
             continue;
 
         if (IsTwinPickupMemberEstablished(member, assignment, assignment.veklor))
+        {
+            Aq40TwinEmperors::NoteTwinPickupEstablished(bot, true);
             return true;
+        }
     }
 
     return false;
@@ -1482,13 +1488,17 @@ bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignm
     if (elapsed < kTwinPostSwapThreatHoldMs)
         return true;
 
-    return !IsTwinWarlockPickupEstablished(bot, botAI, assignment);
+    return !Aq40TwinEmperors::HasTwinPickupEstablished(bot, true) &&
+           !IsTwinWarlockPickupEstablished(bot, botAI, assignment);
 }
 
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
 {
     if (!bot || !botAI || !assignment.veknilash)
         return false;
+
+    if (Aq40TwinEmperors::HasTwinPickupEstablished(bot, false))
+        return true;
 
     Group const* group = bot->GetGroup();
     if (!group)
@@ -1505,7 +1515,10 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
             continue;
 
         if (IsTwinPickupMemberEstablished(member, assignment, assignment.veknilash))
+        {
+            Aq40TwinEmperors::NoteTwinPickupEstablished(bot, false);
             return true;
+        }
     }
 
     return false;

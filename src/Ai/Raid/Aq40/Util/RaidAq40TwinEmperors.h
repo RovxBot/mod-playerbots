@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "Position.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 
@@ -28,6 +29,14 @@ struct SideState
 SplitBand GetSplitBand(float separation);
 SideState ResolveSideState(Player* bot, Unit* veklor, Unit* veknilash);
 uint32 GetPostSwapElapsedMs(Player* bot, uint32 veklorSideIndex);
+void NoteTwinTeleportCast(Unit* caster);
+bool IsTwinTeleportWindowActive(Player* bot, uint32* outElapsedMs = nullptr);
+void NoteTwinPickupEstablished(Player* bot, bool isVeklor);
+bool HasTwinPickupEstablished(Player* bot, bool isVeklor);
+void RememberTwinPickupAnchor(Player* bot, Unit* boss, uint32 sideIndex, Position const& anchor);
+bool GetTwinLockedPickupAnchor(Player* bot, Unit* boss, uint32 sideIndex, Position& outAnchor);
+bool HasLockedPickupAnchor(Player* bot);
+void ClearTwinPickupState(Player* bot);
 
 bool HasBossPickupAggro(Player* member, Unit* boss);
 bool IsPickupWindowSatisfied(Player* member, Unit* boss, bool isVeklor);

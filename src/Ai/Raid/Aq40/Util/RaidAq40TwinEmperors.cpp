@@ -22,10 +22,13 @@ namespace
 float constexpr kTwinSplitWarningDistance = 75.0f;
 float constexpr kTwinSplitUrgentDistance = 65.0f;
 float constexpr kTwinSplitTerminalDistance = 60.0f;
+uint32 constexpr kTwinTeleportWindowMs = 6000;
 uint32 constexpr kTwinTeleportRecoveryMs = 3500;
 uint32 constexpr kTwinUppercutRecoveryMs = 4500;
 uint32 constexpr kTwinUnbalancingRecoveryMs = 4500;
 uint32 constexpr kTwinPostSwapRecoveryMs = 1500;
+uint32 constexpr kTwinPickupEstablishedMemoryMs = 12000;
+uint32 constexpr kTwinPickupAnchorLockMs = 5000;
 
 struct TwinMeleeRecoveryState
 {
@@ -41,6 +44,28 @@ struct TwinMarkerState
     ObjectGuid skullGuid = ObjectGuid::Empty;
 };
 
+struct TwinTeleportState
+{
+    uint32 armedAtMs = 0;
+    uint32 armedUntilMs = 0;
+    ObjectGuid lastCasterGuid = ObjectGuid::Empty;
+};
+
+struct TwinPickupEstablishedState
+{
+    uint32 veklorEstablishedAtMs = 0;
+    uint32 veknilashEstablishedAtMs = 0;
+};
+
+struct TwinPickupAnchorState
+{
+    uint32 instanceId = 0;
+    uint32 sideIndex = 0;
+    uint32 untilMs = 0;
+    ObjectGuid bossGuid = ObjectGuid::Empty;
+    Position anchor;
+};
+
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, bool> sCachedTwinVeklorIsLowSide;
@@ -48,6 +73,9 @@ std::unordered_map<uint32, uint32> sTwinLastVeklorSideByInstance;
 std::unordered_map<uint32, uint32> sTwinLastVeklorSideChangedMsByInstance;
 std::unordered_map<uint64, TwinMeleeRecoveryState> sTwinMeleeRecoveryStateByBot;
 std::unordered_map<uint32, TwinMarkerState> sTwinMarkerStateByInstance;
+std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStateByInstance;
+std::unordered_map<uint32, TwinPickupEstablishedState> sTwinPickupEstablishedStateByInstance;
+std::unordered_map<uint64, TwinPickupAnchorState> sTwinPickupAnchorStateByBot;
 
 uint32 GetTwinInstanceId(Player* bot)
 {
@@ -55,6 +83,19 @@ uint32 GetTwinInstanceId(Player* bot)
         return 0;
 
     return bot->GetMap()->GetInstanceId();
+}
+
+uint32 GetTwinInstanceId(Unit* unit)
+{
+    if (!unit || !unit->GetMap())
+        return 0;
+
+    return unit->GetMap()->GetInstanceId();
+}
+
+bool IsTwinTeleportStateActive(TwinTeleportState const& state, uint32 now)
+{
+    return state.armedAtMs != 0 && state.armedUntilMs > now;
 }
 
 bool IsMarkerTargetValid(Player* bot, Unit* target)
@@ -201,24 +242,183 @@ SideState ResolveSideState(Player* bot, Unit* veklor, Unit* veknilash)
     return state;
 }
 
+void NoteTwinTeleportCast(Unit* caster)
+{
+    if (!caster || !caster->GetMap())
+        return;
+
+    uint32 const instanceId = GetTwinInstanceId(caster);
+    if (!instanceId)
+        return;
+
+    uint32 const now = getMSTime();
+    TwinTeleportState& teleportState = sTwinTeleportStateByInstance[instanceId];
+    teleportState.armedAtMs = now;
+    teleportState.armedUntilMs = now + kTwinTeleportWindowMs;
+    teleportState.lastCasterGuid = caster->GetGUID();
+
+    sTwinPickupEstablishedStateByInstance[instanceId] = {};
+
+    for (auto itr = sTwinPickupAnchorStateByBot.begin(); itr != sTwinPickupAnchorStateByBot.end();)
+    {
+        if (itr->second.instanceId != instanceId)
+        {
+            ++itr;
+            continue;
+        }
+
+        itr = sTwinPickupAnchorStateByBot.erase(itr);
+    }
+}
+
+bool IsTwinTeleportWindowActive(Player* bot, uint32* outElapsedMs)
+{
+    if (outElapsedMs)
+        *outElapsedMs = std::numeric_limits<uint32>::max();
+
+    if (!bot || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = GetTwinInstanceId(bot);
+    auto const itr = sTwinTeleportStateByInstance.find(instanceId);
+    if (itr == sTwinTeleportStateByInstance.end())
+        return false;
+
+    uint32 const now = getMSTime();
+    if (!IsTwinTeleportStateActive(itr->second, now))
+        return false;
+
+    if (outElapsedMs)
+        *outElapsedMs = now - itr->second.armedAtMs;
+
+    return true;
+}
+
+void NoteTwinPickupEstablished(Player* bot, bool isVeklor)
+{
+    if (!bot || !bot->GetMap())
+        return;
+
+    TwinPickupEstablishedState& state = sTwinPickupEstablishedStateByInstance[GetTwinInstanceId(bot)];
+    if (isVeklor)
+        state.veklorEstablishedAtMs = getMSTime();
+    else
+        state.veknilashEstablishedAtMs = getMSTime();
+}
+
+bool HasTwinPickupEstablished(Player* bot, bool isVeklor)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    auto const itr = sTwinPickupEstablishedStateByInstance.find(GetTwinInstanceId(bot));
+    if (itr == sTwinPickupEstablishedStateByInstance.end())
+        return false;
+
+    uint32 const establishedAtMs = isVeklor ? itr->second.veklorEstablishedAtMs : itr->second.veknilashEstablishedAtMs;
+    if (!establishedAtMs)
+        return false;
+
+    return getMSTimeDiff(establishedAtMs, getMSTime()) < kTwinPickupEstablishedMemoryMs;
+}
+
+void RememberTwinPickupAnchor(Player* bot, Unit* boss, uint32 sideIndex, Position const& anchor)
+{
+    if (!bot || !bot->GetMap())
+        return;
+
+    uint32 lockUntilMs = getMSTime() + kTwinPickupAnchorLockMs;
+    auto const teleportItr = sTwinTeleportStateByInstance.find(GetTwinInstanceId(bot));
+    if (teleportItr != sTwinTeleportStateByInstance.end() &&
+        IsTwinTeleportStateActive(teleportItr->second, getMSTime()))
+    {
+        lockUntilMs = std::min(lockUntilMs, teleportItr->second.armedUntilMs);
+    }
+
+    TwinPickupAnchorState& state = sTwinPickupAnchorStateByBot[bot->GetGUID().GetRawValue()];
+    state.instanceId = GetTwinInstanceId(bot);
+    state.sideIndex = sideIndex;
+    state.untilMs = lockUntilMs;
+    state.bossGuid = boss ? boss->GetGUID() : ObjectGuid::Empty;
+    state.anchor = anchor;
+}
+
+bool GetTwinLockedPickupAnchor(Player* bot, Unit* boss, uint32 sideIndex, Position& outAnchor)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    auto itr = sTwinPickupAnchorStateByBot.find(bot->GetGUID().GetRawValue());
+    if (itr == sTwinPickupAnchorStateByBot.end())
+        return false;
+
+    TwinPickupAnchorState const& state = itr->second;
+    if (state.instanceId != GetTwinInstanceId(bot) || state.sideIndex != sideIndex || state.untilMs <= getMSTime())
+    {
+        sTwinPickupAnchorStateByBot.erase(itr);
+        return false;
+    }
+
+    if (boss && state.bossGuid && state.bossGuid != boss->GetGUID())
+        return false;
+
+    outAnchor = state.anchor;
+    return true;
+}
+
+bool HasLockedPickupAnchor(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    auto itr = sTwinPickupAnchorStateByBot.find(bot->GetGUID().GetRawValue());
+    if (itr == sTwinPickupAnchorStateByBot.end())
+        return false;
+
+    if (itr->second.instanceId != GetTwinInstanceId(bot) || itr->second.untilMs <= getMSTime())
+    {
+        sTwinPickupAnchorStateByBot.erase(itr);
+        return false;
+    }
+
+    return true;
+}
+
+void ClearTwinPickupState(Player* bot)
+{
+    if (!bot)
+        return;
+
+    sTwinPickupAnchorStateByBot.erase(bot->GetGUID().GetRawValue());
+}
+
 uint32 GetPostSwapElapsedMs(Player* bot, uint32 veklorSideIndex)
 {
     if (!bot || !bot->GetMap())
         return std::numeric_limits<uint32>::max();
 
     uint32 const instanceId = GetTwinInstanceId(bot);
+    uint32 const now = getMSTime();
     auto lastSideItr = sTwinLastVeklorSideByInstance.find(instanceId);
+    auto changedItr = sTwinLastVeklorSideChangedMsByInstance.find(instanceId);
+    auto teleportItr = sTwinTeleportStateByInstance.find(instanceId);
+    if (teleportItr != sTwinTeleportStateByInstance.end() && IsTwinTeleportStateActive(teleportItr->second, now))
+    {
+        if (lastSideItr == sTwinLastVeklorSideByInstance.end() || changedItr == sTwinLastVeklorSideChangedMsByInstance.end() ||
+            changedItr->second < teleportItr->second.armedAtMs)
+            return now - teleportItr->second.armedAtMs;
+    }
+
     if (lastSideItr == sTwinLastVeklorSideByInstance.end())
         return std::numeric_limits<uint32>::max();
 
     if (lastSideItr->second != veklorSideIndex)
         return 0;
 
-    auto changedItr = sTwinLastVeklorSideChangedMsByInstance.find(instanceId);
     if (changedItr == sTwinLastVeklorSideChangedMsByInstance.end())
         return std::numeric_limits<uint32>::max();
 
-    return getMSTime() - changedItr->second;
+    return now - changedItr->second;
 }
 
 bool HasBossPickupAggro(Player* member, Unit* boss)
@@ -340,6 +540,8 @@ bool ResetState(Player* bot)
     erased = sCachedTwinVeklorIsLowSide.erase(instanceId) > 0 || erased;
     erased = sTwinLastVeklorSideByInstance.erase(instanceId) > 0 || erased;
     erased = sTwinLastVeklorSideChangedMsByInstance.erase(instanceId) > 0 || erased;
+    erased = sTwinTeleportStateByInstance.erase(instanceId) > 0 || erased;
+    erased = sTwinPickupEstablishedStateByInstance.erase(instanceId) > 0 || erased;
 
     auto markerItr = sTwinMarkerStateByInstance.find(instanceId);
     if (markerItr != sTwinMarkerStateByInstance.end())
@@ -367,6 +569,18 @@ bool ResetState(Player* bot)
         erased = true;
     }
 
+    for (auto itr = sTwinPickupAnchorStateByBot.begin(); itr != sTwinPickupAnchorStateByBot.end();)
+    {
+        if (itr->second.instanceId != instanceId)
+        {
+            ++itr;
+            continue;
+        }
+
+        itr = sTwinPickupAnchorStateByBot.erase(itr);
+        erased = true;
+    }
+
     return erased;
 }
 
@@ -381,12 +595,20 @@ bool HasPersistentState(Player* bot)
         sCachedTwinVeklorIsLowSide.find(instanceId) != sCachedTwinVeklorIsLowSide.end() ||
         sTwinLastVeklorSideByInstance.find(instanceId) != sTwinLastVeklorSideByInstance.end() ||
         sTwinLastVeklorSideChangedMsByInstance.find(instanceId) != sTwinLastVeklorSideChangedMsByInstance.end() ||
-        sTwinMarkerStateByInstance.find(instanceId) != sTwinMarkerStateByInstance.end())
+        sTwinMarkerStateByInstance.find(instanceId) != sTwinMarkerStateByInstance.end() ||
+        sTwinTeleportStateByInstance.find(instanceId) != sTwinTeleportStateByInstance.end() ||
+        sTwinPickupEstablishedStateByInstance.find(instanceId) != sTwinPickupEstablishedStateByInstance.end())
     {
         return true;
     }
 
     for (auto const& [_, state] : sTwinMeleeRecoveryStateByBot)
+    {
+        if (state.instanceId == instanceId)
+            return true;
+    }
+
+    for (auto const& [_, state] : sTwinPickupAnchorStateByBot)
     {
         if (state.instanceId == instanceId)
             return true;

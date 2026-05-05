@@ -525,6 +525,7 @@ public:
 
 void AddPlayerbotsSecureLoginScripts();
 
+void AddSC_Aq40BotScripts();
 void AddSC_TempestKeepBotScripts();
 
 void AddPlayerbotsScripts()
@@ -540,5 +541,6 @@ void AddPlayerbotsScripts()
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsCommandscripts();
     PlayerBotsGuildValidationScript();
+    AddSC_Aq40BotScripts();
     AddSC_TempestKeepBotScripts();
 }
