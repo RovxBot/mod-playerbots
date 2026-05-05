@@ -1162,7 +1162,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         {
             Aq40Helpers::LogAq40Warn(bot, "movement_failure",
                 "twins:melee:no_side_anchor:" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
-                "boss=twins tank=melee reason=no_side_anchor" +
+                std::string("boss=twins tank=melee reason=no_side_anchor") +
                 " staged_side=" + std::to_string(assignment.tankStageSide) +
                 " live_side=" + std::to_string(assignment.veknilashSideIndex) +
                 " path=move_near target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
