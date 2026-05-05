@@ -21,6 +21,9 @@
 
 namespace Aq40Helpers
 {
+uint32 GetGroupMemberOrder(Player* bot, Player* member);
+uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot);
+
 namespace
 {
 using TwinRoleAssignmentMap = std::unordered_map<uint64, uint32>;
@@ -47,10 +50,10 @@ float constexpr kTwinSideTankCornerDistance = 150.0f;
 float constexpr kTwinRoomStageRadius = 150.0f;
 float constexpr kTwinRoomStageZTolerance = 18.0f;
 float constexpr kTwinPrePullDetectionRange = 320.0f;
-uint32 constexpr kTwinPostSwapThreatHoldMs = 6000;
 uint32 constexpr kTwinTankHealersPerSide = 2;
 
 TwinInstanceAssignments sTwinAssignments;
+std::unordered_map<uint32, TwinRoleLock> sTwinRoleLocksByInstance;
 std::unordered_map<uint32, TwinKnownBossGuids> sTwinKnownTwinBosses;
 std::unordered_map<uint32, uint32> sCthunPhase2StartByInstance;
 std::unordered_map<uint32, uint32> sSkeramPostBlinkHoldUntilByInstance;
@@ -66,6 +69,7 @@ struct TwinTemporaryStrategyState
     bool hadAvoidAoeStrategy = false;
 };
 std::unordered_map<uint64, TwinTemporaryStrategyState> sTwinTemporaryStrategyStateByBot;
+std::unordered_map<uint64, Aq40TwinEmperors::ThreatHoldState> sTwinLastThreatHoldByBot;
 std::unordered_map<std::string, uint32> sAq40LogLastMsByKey;
 std::mutex sAq40LogMutex;
 
@@ -484,6 +488,171 @@ uint32 GetTwinRoleSideForSlot(TwinRoleCohort cohort, uint32 slot)
     return slot % 2;
 }
 
+bool GetCurrentTwinRoleLock(Player* bot, TwinRoleLock& outLock)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    auto const itr = sTwinRoleLocksByInstance.find(bot->GetMap()->GetInstanceId());
+    if (itr == sTwinRoleLocksByInstance.end())
+        return false;
+
+    outLock = itr->second;
+    return true;
+}
+
+std::string BuildTwinRoleLockMembers(Player* bot, GuidVector const& members)
+{
+    if (!bot || members.empty())
+        return "none";
+
+    std::ostringstream out;
+    bool first = true;
+    for (ObjectGuid const& guid : members)
+    {
+        Player* member = ObjectAccessor::FindConnectedPlayer(guid);
+        if (!member || !Aq40BossHelper::IsEncounterParticipant(bot, member))
+            continue;
+
+        if (!first)
+            out << ",";
+
+        out << GetAq40LogToken(member->GetName()) << ":" << member->GetGUID().GetCounter();
+        first = false;
+    }
+
+    return first ? "none" : out.str();
+}
+
+TwinRoleLock BuildTwinRoleLockSnapshot(Player* bot)
+{
+    TwinRoleLock roleLock;
+    if (!bot || !bot->GetGroup())
+        return roleLock;
+
+    std::vector<Player*> botWarlocks;
+    std::vector<Player*> botMeleeTanks;
+    std::vector<Player*> botHealers;
+    std::vector<Player*> remainingBots;
+    std::set<uint64> lockedSpecialRoleGuids;
+
+    auto const sortByGroupOrder = [bot](Player const* left, Player const* right)
+    {
+        uint32 const leftOrder = GetGroupMemberOrder(bot, const_cast<Player*>(left));
+        uint32 const rightOrder = GetGroupMemberOrder(bot, const_cast<Player*>(right));
+        if (leftOrder != rightOrder)
+            return leftOrder < rightOrder;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    };
+
+    for (GroupReference const* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->IsGameMaster())
+            continue;
+        if (!Aq40BossHelper::IsEncounterParticipant(bot, member))
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || memberAI->IsRealPlayer())
+            continue;
+
+        if (member->getClass() == CLASS_WARLOCK)
+            botWarlocks.push_back(member);
+        if (PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member))
+            botMeleeTanks.push_back(member);
+        if (PlayerbotAI::IsHeal(member))
+            botHealers.push_back(member);
+        remainingBots.push_back(member);
+    }
+
+    std::sort(botWarlocks.begin(), botWarlocks.end(), [](Player* left, Player* right)
+    {
+        int32 const leftShadowRes = left->GetResistance(SPELL_SCHOOL_SHADOW);
+        int32 const rightShadowRes = right->GetResistance(SPELL_SCHOOL_SHADOW);
+        if (leftShadowRes != rightShadowRes)
+            return leftShadowRes > rightShadowRes;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    std::sort(botMeleeTanks.begin(), botMeleeTanks.end(), [bot](Player* left, Player* right)
+    {
+        uint32 const leftPriority = GetTwinRolePriority(bot, left, TwinRoleCohort::MeleeTank);
+        uint32 const rightPriority = GetTwinRolePriority(bot, right, TwinRoleCohort::MeleeTank);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+
+    std::sort(botHealers.begin(), botHealers.end(), sortByGroupOrder);
+    std::sort(remainingBots.begin(), remainingBots.end(), sortByGroupOrder);
+
+    for (uint32 slot = 0; slot < botWarlocks.size() && slot < 2; ++slot)
+    {
+        Player* member = botWarlocks[slot];
+        ObjectGuid const guid = member->GetGUID();
+        roleLock.lockedWarlocks.push_back(guid);
+        roleLock.stagedSidesByGuid[guid.GetRawValue()] = (slot == 0u) ? 1u : 0u;
+        lockedSpecialRoleGuids.insert(guid.GetRawValue());
+    }
+
+    for (uint32 slot = 0; slot < botMeleeTanks.size() && slot < 2; ++slot)
+    {
+        Player* member = botMeleeTanks[slot];
+        ObjectGuid const guid = member->GetGUID();
+        roleLock.lockedMeleeTanks.push_back(guid);
+        roleLock.stagedSidesByGuid[guid.GetRawValue()] = slot % 2u;
+        lockedSpecialRoleGuids.insert(guid.GetRawValue());
+    }
+
+    uint32 healerCounts[2] = { 0, 0 };
+    uint32 healerSlot = 0;
+    for (Player* healer : botHealers)
+    {
+        uint64 const healerGuid = healer->GetGUID().GetRawValue();
+        if (lockedSpecialRoleGuids.find(healerGuid) != lockedSpecialRoleGuids.end())
+            continue;
+
+        uint32 assignedSide = GetTwinRoleSideForSlot(TwinRoleCohort::Healer, healerSlot++);
+        if (healerCounts[assignedSide] >= kTwinTankHealersPerSide)
+            assignedSide = 1u - assignedSide;
+        if (healerCounts[assignedSide] >= kTwinTankHealersPerSide)
+            continue;
+
+        ++healerCounts[assignedSide];
+        roleLock.healerSidesByGuid[healerGuid] = assignedSide;
+        roleLock.stagedSidesByGuid[healerGuid] = assignedSide;
+    }
+
+    uint32 otherSlot = 0;
+    for (Player* member : remainingBots)
+    {
+        uint64 const memberGuid = member->GetGUID().GetRawValue();
+        if (roleLock.stagedSidesByGuid.find(memberGuid) != roleLock.stagedSidesByGuid.end())
+            continue;
+
+        roleLock.stagedSidesByGuid[memberGuid] = GetTwinRoleSideForSlot(TwinRoleCohort::Other, otherSlot++);
+    }
+
+    bool const hasWarlocks = roleLock.lockedWarlocks.size() == 2;
+    bool const hasMeleeTanks = roleLock.lockedMeleeTanks.size() == 2;
+    roleLock.supported = hasWarlocks && hasMeleeTanks;
+    if (!roleLock.supported)
+    {
+        if (!hasWarlocks && !hasMeleeTanks)
+            roleLock.unsupportedReason = "missing_bot_warlocks_and_melee_tanks";
+        else if (!hasWarlocks)
+            roleLock.unsupportedReason = "missing_bot_warlocks";
+        else
+            roleLock.unsupportedReason = "missing_bot_melee_tanks";
+    }
+
+    return roleLock;
+}
+
 bool IsTwinRoleMatch(TwinRoleCohort cohort, Player* member)
 {
     if (!member || !member->IsAlive())
@@ -642,12 +811,19 @@ std::string GetAq40LogRole(Player* bot, PlayerbotAI* botAI)
     if (!bot)
         return "unknown";
 
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
-        return "warlock_tank";
-    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
-        return "melee_tank";
-    if (botAI && botAI->IsHeal(bot))
-        return "healer";
+    switch (GetTwinRoleCohort(bot, botAI))
+    {
+        case TwinRoleCohort::WarlockTank:
+            return "warlock_tank";
+        case TwinRoleCohort::MeleeTank:
+            return "melee_tank";
+        case TwinRoleCohort::Healer:
+            return "healer";
+        case TwinRoleCohort::Other:
+        default:
+            break;
+    }
+
     if (botAI && botAI->IsRanged(bot))
         return "ranged";
     return "melee";
@@ -697,8 +873,9 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(member);
-        bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(member) && !PlayerbotAI::IsRanged(member);
+        TwinRoleCohort const cohort = GetTwinRoleCohort(member, memberAI ? memberAI : botAI);
+        bool const isWarlockTank = cohort == TwinRoleCohort::WarlockTank;
+        bool const isMeleeTank = cohort == TwinRoleCohort::MeleeTank;
         if (isWarlockTank || isMeleeTank)
         {
             if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.sideIndex)
@@ -716,7 +893,7 @@ std::list<ObjectGuid> GetTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
             continue;
         }
 
-        if (!PlayerbotAI::IsHeal(member))
+        if (cohort != TwinRoleCohort::Healer)
             continue;
 
         uint32 healerSide = 0;
@@ -916,11 +1093,24 @@ bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI)
 
 bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment)
 {
-    if (!bot || !assignment.sideEmperor)
+    if (!bot)
         return false;
 
     float constexpr kSideLeashDistance = 55.0f;
-    float constexpr kWrongSideMargin = 10.0f;
+    float constexpr kWrongSideMargin = 8.0f;
+    Position const sideAnchor = GetTwinRoomSideHealerAnchor(assignment.sideIndex);
+    float const sideAnchorDistance = bot->GetExactDist2d(sideAnchor.GetPositionX(), sideAnchor.GetPositionY());
+    if (sideAnchorDistance > kSideLeashDistance)
+        return true;
+
+    Position const oppositeAnchor = GetTwinRoomSideHealerAnchor(1u - assignment.sideIndex);
+    float const oppositeAnchorDistance =
+        bot->GetExactDist2d(oppositeAnchor.GetPositionX(), oppositeAnchor.GetPositionY());
+    if (oppositeAnchorDistance + kWrongSideMargin < sideAnchorDistance)
+        return true;
+
+    if (!assignment.sideEmperor)
+        return false;
 
     float const sideDistance = bot->GetDistance2d(assignment.sideEmperor);
     if (sideDistance > kSideLeashDistance)
@@ -930,7 +1120,7 @@ bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment
         return false;
 
     float const oppositeDistance = bot->GetDistance2d(assignment.oppositeEmperor);
-    return oppositeDistance + kWrongSideMargin < sideDistance;
+    return oppositeDistance + (kWrongSideMargin + 2.0f) < sideDistance;
 }
 
 bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
@@ -1005,23 +1195,92 @@ bool IsTwinPrimaryTankOnActiveBoss(Player* bot, TwinAssignments const& assignmen
     if (!bot)
         return false;
 
+    TwinRoleCohort const cohort = GetTwinRoleCohort(bot, GET_PLAYERBOT_AI(bot));
+
     // Each side has one warlock tank + one melee tank permanently assigned.
     // Tanks never cross sides — the backup on the other side picks up after
     // teleport.  Primary = side-matched to the boss's current position.
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+    if (cohort == TwinRoleCohort::WarlockTank)
         return assignment.veklor && !assignment.isTankBackup;
 
-    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
+    if (cohort == TwinRoleCohort::MeleeTank)
         return assignment.veknilash && !assignment.isTankBackup;
 
     return false;
 }
 
-bool GetTwinDedicatedTankHealerSide(Player* bot, PlayerbotAI* /*botAI*/, uint32& sideIndex)
+bool GetTwinRoleLock(Player* bot, PlayerbotAI* botAI, TwinRoleLock& outLock)
+{
+    outLock = {};
+    if (!bot)
+        return false;
+
+    PlayerbotAI* roleAI = botAI ? botAI : GET_PLAYERBOT_AI(bot);
+    if (!roleAI || !bot->GetMap() || !bot->GetGroup())
+        return false;
+
+    if (GetCurrentTwinRoleLock(bot, outLock))
+        return true;
+
+    GuidVector attackers;
+    if (roleAI->GetAiObjectContext())
+        attackers = roleAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+
+    bool const shouldLock =
+        HasTwinVisibleEmperors(bot, roleAI) ||
+        IsTwinPlayerPullAuthorized(bot, roleAI, attackers) ||
+        IsTwinCombatInProgress(bot, roleAI, attackers) ||
+        Aq40TwinEmperors::HasPersistentState(bot);
+    if (!shouldLock)
+        return false;
+
+    TwinRoleLock roleLock = BuildTwinRoleLockSnapshot(bot);
+    uint32 const instanceId = bot->GetMap()->GetInstanceId();
+    sTwinRoleLocksByInstance[instanceId] = roleLock;
+    outLock = roleLock;
+
+    std::ostringstream lockFields;
+    lockFields << "boss=twins supported=" << (roleLock.supported ? 1 : 0)
+               << " warlocks=" << roleLock.lockedWarlocks.size()
+               << " melee_tanks=" << roleLock.lockedMeleeTanks.size()
+               << " healers=" << roleLock.healerSidesByGuid.size()
+               << " warlock_members=" << BuildTwinRoleLockMembers(bot, roleLock.lockedWarlocks)
+               << " melee_members=" << BuildTwinRoleLockMembers(bot, roleLock.lockedMeleeTanks);
+    LogAq40Info(bot, "twin_role_lock", "twins:role_lock:" + std::to_string(instanceId), lockFields.str(), 30000);
+
+    if (!roleLock.supported)
+    {
+        std::ostringstream unsupportedFields;
+        unsupportedFields << "boss=twins supported=0 reason=" << roleLock.unsupportedReason
+                          << " warlocks=" << roleLock.lockedWarlocks.size()
+                          << " melee_tanks=" << roleLock.lockedMeleeTanks.size();
+        LogAq40Warn(bot, "unsupported_setup",
+            "twins:unsupported:" + roleLock.unsupportedReason + ":" + std::to_string(instanceId),
+            unsupportedFields.str(), 30000);
+    }
+
+    return true;
+}
+
+bool GetTwinDedicatedTankHealerSide(Player* bot, PlayerbotAI* botAI, uint32& sideIndex)
 {
     sideIndex = 0;
     if (!bot || !PlayerbotAI::IsHeal(bot))
         return false;
+
+    if (PlayerbotAI* roleAI = botAI ? botAI : GET_PLAYERBOT_AI(bot))
+    {
+        TwinRoleLock roleLock;
+        if (GetTwinRoleLock(bot, roleAI, roleLock))
+        {
+            auto const healerItr = roleLock.healerSidesByGuid.find(bot->GetGUID().GetRawValue());
+            if (healerItr == roleLock.healerSidesByGuid.end())
+                return false;
+
+            sideIndex = healerItr->second;
+            return true;
+        }
+    }
 
     Group const* group = bot->GetGroup();
     if (!group)
@@ -1076,6 +1335,31 @@ bool GetTwinDedicatedTankHealerSide(Player* bot, PlayerbotAI* /*botAI*/, uint32&
 
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI)
 {
+    if (!bot)
+        return TwinRoleCohort::Other;
+
+    PlayerbotAI* roleAI = botAI ? botAI : GET_PLAYERBOT_AI(bot);
+    TwinRoleLock roleLock;
+    if (roleAI && GetTwinRoleLock(bot, roleAI, roleLock))
+    {
+        uint64 const botGuid = bot->GetGUID().GetRawValue();
+        auto const guidMatches = [botGuid](GuidVector const& members)
+        {
+            return std::find_if(members.begin(), members.end(), [botGuid](ObjectGuid const& guid)
+            {
+                return guid.GetRawValue() == botGuid;
+            }) != members.end();
+        };
+
+        if (guidMatches(roleLock.lockedWarlocks))
+            return TwinRoleCohort::WarlockTank;
+        if (guidMatches(roleLock.lockedMeleeTanks))
+            return TwinRoleCohort::MeleeTank;
+        if (PlayerbotAI::IsHeal(bot))
+            return TwinRoleCohort::Healer;
+        return TwinRoleCohort::Other;
+    }
+
     if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
         return TwinRoleCohort::WarlockTank;
     if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot))
@@ -1090,6 +1374,8 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     if (!bot)
         return 0;
 
+    PlayerbotAI* roleAI = botAI ? botAI : GET_PLAYERBOT_AI(bot);
+
     Group const* group = bot->GetGroup();
     if (!group)
         return static_cast<uint32>(bot->GetGUID().GetCounter() % 2);
@@ -1099,7 +1385,7 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
     bool const encounterActive = Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot);
     if (!encounterActive)
     {
-        PlayerbotAI* cleanupAI = (botAI && botAI->GetBot() == bot) ? botAI : GET_PLAYERBOT_AI(bot);
+        PlayerbotAI* cleanupAI = (roleAI && roleAI->GetBot() == bot) ? roleAI : GET_PLAYERBOT_AI(bot);
         GuidVector attackers;
         if (cleanupAI && cleanupAI->GetAiObjectContext())
             attackers = cleanupAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
@@ -1124,6 +1410,14 @@ uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI)
                 ResetEncounterState(bot);
             }
         }
+    }
+
+    TwinRoleLock roleLock;
+    if (roleAI && GetTwinRoleLock(bot, roleAI, roleLock))
+    {
+        auto const itr = roleLock.stagedSidesByGuid.find(bot->GetGUID().GetRawValue());
+        if (itr != roleLock.stagedSidesByGuid.end())
+            return itr->second;
     }
 
     TwinRoleCohort const cohort = GetTwinRoleCohort(bot, botAI);
@@ -1330,6 +1624,7 @@ GuidVector GetTwinEncounterUnits(Player* bot, PlayerbotAI* botAI, GuidVector con
         !IsTwinCombatInProgress(bot, botAI, attackers))
         return units;
 
+    Aq40TwinEmperors::NoteTwinEncounterActive(bot);
     return BuildTwinObservedUnits(bot, botAI, attackers);
 }
 
@@ -1454,10 +1749,13 @@ bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignm
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !Aq40BossHelper::IsDesignatedTwinWarlockTank(member))
+        if (!member || !member->IsAlive())
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (GetTwinRoleCohort(member, memberAI ? memberAI : botAI) != TwinRoleCohort::WarlockTank)
+            continue;
+
         if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.veklorSideIndex)
             continue;
 
@@ -1484,12 +1782,70 @@ bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignm
     if (!bot || !botAI || !assignment.veklor)
         return false;
 
-    uint32 const elapsed = GetTwinPostSwapElapsedMs(bot, assignment);
-    if (elapsed < kTwinPostSwapThreatHoldMs)
-        return true;
+    uint64 const botGuid = bot->GetGUID().GetRawValue();
+    Aq40TwinEmperors::ThreatHoldState holdState;
+    bool const holdActive = Aq40TwinEmperors::GetActiveThreatHold(bot, holdState);
 
-    return !Aq40TwinEmperors::HasTwinPickupEstablished(bot, true) &&
-           !IsTwinWarlockPickupEstablished(bot, botAI, assignment);
+    auto const lastHoldItr = sTwinLastThreatHoldByBot.find(botGuid);
+    if (holdActive)
+    {
+        bool const holdChanged = lastHoldItr == sTwinLastThreatHoldByBot.end() ||
+            lastHoldItr->second.type != holdState.type ||
+            lastHoldItr->second.openedAtMs != holdState.openedAtMs ||
+            lastHoldItr->second.untilMs != holdState.untilMs;
+        if (holdChanged)
+        {
+            std::string holdType = "initial_pull";
+            if (holdState.type == Aq40TwinEmperors::ThreatHoldType::Teleport)
+                holdType = "teleport";
+            else if (holdState.type == Aq40TwinEmperors::ThreatHoldType::PickupFailed)
+                holdType = "pickup_failed";
+
+            std::ostringstream fields;
+            fields << "boss=twins hold=" << holdType
+                   << " opened_ms=" << holdState.openedAtMs
+                   << " until_ms=" << holdState.untilMs;
+            LogAq40Info(bot, "pickup_window_open",
+                "twins:" + holdType + ":" + std::to_string(holdState.openedAtMs), fields.str(), 3000);
+        }
+
+        sTwinLastThreatHoldByBot[botGuid] = holdState;
+        return true;
+    }
+
+    if (lastHoldItr != sTwinLastThreatHoldByBot.end())
+    {
+        std::ostringstream fields;
+        fields << "boss=twins opened_ms=" << lastHoldItr->second.openedAtMs;
+        LogAq40Info(bot, "pickup_window_expired",
+            "twins:" + std::to_string(lastHoldItr->second.openedAtMs), fields.str(), 3000);
+        sTwinLastThreatHoldByBot.erase(lastHoldItr);
+    }
+
+    if (Aq40TwinEmperors::HasTwinPickupEstablished(bot, true) ||
+        IsTwinWarlockPickupEstablished(bot, botAI, assignment))
+    {
+        return false;
+    }
+
+    uint32 const sourceOpenedAtMs = Aq40TwinEmperors::GetLatestPickupWindowOpenedAtMs(bot);
+    if (Aq40TwinEmperors::ArmPickupFailedHold(bot, sourceOpenedAtMs))
+    {
+        std::ostringstream fields;
+        fields << "boss=twins source_opened_ms=" << sourceOpenedAtMs
+               << " target=" << GetAq40LogUnit(assignment.veklor);
+        LogAq40Warn(bot, "pickup_failed",
+            "twins:" + std::to_string(sourceOpenedAtMs) + ":" + GetAq40LogUnit(assignment.veklor),
+            fields.str(), 3000);
+    }
+
+    if (Aq40TwinEmperors::GetActiveThreatHold(bot, holdState))
+    {
+        sTwinLastThreatHoldByBot[botGuid] = holdState;
+        return true;
+    }
+
+    return false;
 }
 
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment)
@@ -1507,10 +1863,13 @@ bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignmen
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member) || PlayerbotAI::IsRanged(member))
+        if (!member || !member->IsAlive())
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (GetTwinRoleCohort(member, memberAI ? memberAI : botAI) != TwinRoleCohort::MeleeTank)
+            continue;
+
         if (GetStableTwinRoleIndex(member, memberAI ? memberAI : botAI) != assignment.veknilashSideIndex)
             continue;
 
@@ -1760,10 +2119,40 @@ bool ResetEncounterState(Player* bot)
     }
 
     erased = sTwinAssignments.erase(instanceId) > 0 || erased;
+    erased = sTwinRoleLocksByInstance.erase(instanceId) > 0 || erased;
     erased = sTwinKnownTwinBosses.erase(instanceId) > 0 || erased;
     erased = sCthunPhase2StartByInstance.erase(instanceId) > 0 || erased;
     erased = sSkeramPostBlinkHoldUntilByInstance.erase(instanceId) > 0 || erased;
     erased = Aq40TwinEmperors::ResetState(bot) || erased;
+
+    std::set<uint64> instanceMemberGuids;
+    if (Group const* group = bot->GetGroup())
+    {
+        for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !Aq40BossHelper::IsEncounterParticipant(bot, member))
+                continue;
+
+            instanceMemberGuids.insert(member->GetGUID().GetRawValue());
+        }
+    }
+    else
+    {
+        instanceMemberGuids.insert(bot->GetGUID().GetRawValue());
+    }
+
+    for (auto itr = sTwinLastThreatHoldByBot.begin(); itr != sTwinLastThreatHoldByBot.end();)
+    {
+        if (instanceMemberGuids.find(itr->first) == instanceMemberGuids.end())
+        {
+            ++itr;
+            continue;
+        }
+
+        itr = sTwinLastThreatHoldByBot.erase(itr);
+        erased = true;
+    }
 
     if (erased)
     {
@@ -1789,6 +2178,7 @@ bool HasPersistentEncounterState(Player* bot)
 
     uint32 const instanceId = bot->GetMap()->GetInstanceId();
     return sTwinAssignments.find(instanceId) != sTwinAssignments.end() ||
+           sTwinRoleLocksByInstance.find(instanceId) != sTwinRoleLocksByInstance.end() ||
            sTwinKnownTwinBosses.find(instanceId) != sTwinKnownTwinBosses.end() ||
            sCthunPhase2StartByInstance.find(instanceId) != sCthunPhase2StartByInstance.end() ||
            Aq40TwinEmperors::HasPersistentState(bot) ||

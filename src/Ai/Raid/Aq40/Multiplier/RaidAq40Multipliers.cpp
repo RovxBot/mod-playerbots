@@ -384,16 +384,21 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         return 1.0f;
 
     Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, activeUnits);
-    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
-    bool const twinPickupControlWindow =
-        Aq40TwinEmperors::IsTwinTeleportWindowActive(bot) || Aq40TwinEmperors::HasLockedPickupAnchor(bot);
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
+    bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
+    bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
+    bool const twinMovementOwnership = Aq40TwinEmperors::HasTwinMovementOwnershipState(bot);
     bool const postSwapThreatHold =
         assignment.veklor && !isWarlockTank && !isMeleeTank && !botAI->IsHeal(bot) &&
         Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment);
-    if (twinPickupControlWindow)
+    if (twinMovementOwnership)
     {
         if (dynamic_cast<MovementAction*>(action))
+            return 0.0f;
+
+        if (dynamic_cast<FollowAction*>(action) ||
+            dynamic_cast<FleeAction*>(action) ||
+            dynamic_cast<CombatFormationMoveAction*>(action))
             return 0.0f;
 
         if (dynamic_cast<DpsAssistAction*>(action) ||
@@ -461,7 +466,7 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     // Curse of Doom) via direct botAI->CastSpell() calls which bypass the
     // action engine.  Block enemy-targeted class AI actions so the Affliction/
     // Destruction rotation doesn't override the threat-generation priority.
-    if (Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+    if (cohort == Aq40Helpers::TwinRoleCohort::WarlockTank)
     {
         if (actionName == "life tap")
             return 0.0f;

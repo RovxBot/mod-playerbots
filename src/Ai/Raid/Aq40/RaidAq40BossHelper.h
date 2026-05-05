@@ -322,6 +322,10 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
     if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
         return std::numeric_limits<uint32>::max();
 
+    PlayerbotAI* playerAI = GET_PLAYERBOT_AI(player);
+    if (!playerAI || playerAI->IsRealPlayer())
+        return std::numeric_limits<uint32>::max();
+
     Group const* group = player->GetGroup();
     if (!group)
         return 0;
@@ -344,6 +348,10 @@ inline uint32 GetAliveWarlockOrdinal(Player* player)
         if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK)
             continue;
         if (!IsEncounterParticipant(player, member))
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || memberAI->IsRealPlayer())
             continue;
 
         warlocks.push_back(member);

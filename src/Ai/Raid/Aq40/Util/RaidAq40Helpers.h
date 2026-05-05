@@ -35,6 +35,17 @@ struct TwinAssignments
     bool isTankBackup = false;
 };
 
+struct TwinRoleLock
+{
+    bool supported = false;
+    std::string unsupportedReason;
+    GuidVector lockedWarlocks;
+    GuidVector lockedMeleeTanks;
+    std::unordered_map<uint64, uint32> healerSidesByGuid;
+    std::unordered_map<uint64, uint32> stagedSidesByGuid;
+};
+
+bool GetTwinRoleLock(Player* bot, PlayerbotAI* botAI, TwinRoleLock& outLock);
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI);
 uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI);
 TwinAssignments GetTwinAssignments(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);

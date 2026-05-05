@@ -9,6 +9,14 @@
 
 namespace Aq40TwinEmperors
 {
+enum class ThreatHoldType : uint8
+{
+    None = 0,
+    InitialPull = 1,
+    Teleport = 2,
+    PickupFailed = 3,
+};
+
 enum class SplitBand : uint8
 {
     Stable = 0,
@@ -26,11 +34,23 @@ struct SideState
     float separation = 0.0f;
 };
 
+struct ThreatHoldState
+{
+    ThreatHoldType type = ThreatHoldType::None;
+    uint32 openedAtMs = 0;
+    uint32 untilMs = 0;
+};
+
 SplitBand GetSplitBand(float separation);
 SideState ResolveSideState(Player* bot, Unit* veklor, Unit* veknilash);
 uint32 GetPostSwapElapsedMs(Player* bot, uint32 veklorSideIndex);
+void NoteTwinEncounterActive(Player* bot);
 void NoteTwinTeleportCast(Unit* caster);
 bool IsTwinTeleportWindowActive(Player* bot, uint32* outElapsedMs = nullptr);
+bool GetActiveThreatHold(Player* bot, ThreatHoldState& outState);
+uint32 GetLatestPickupWindowOpenedAtMs(Player* bot);
+bool ArmPickupFailedHold(Player* bot, uint32 sourceOpenedAtMs);
+bool HasTwinMovementOwnershipState(Player* bot);
 void NoteTwinPickupEstablished(Player* bot, bool isVeklor);
 bool HasTwinPickupEstablished(Player* bot, bool isVeklor);
 void RememberTwinPickupAnchor(Player* bot, Unit* boss, uint32 sideIndex, Position const& anchor);

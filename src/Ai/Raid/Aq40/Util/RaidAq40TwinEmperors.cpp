@@ -23,6 +23,9 @@ float constexpr kTwinSplitWarningDistance = 75.0f;
 float constexpr kTwinSplitUrgentDistance = 65.0f;
 float constexpr kTwinSplitTerminalDistance = 60.0f;
 uint32 constexpr kTwinTeleportWindowMs = 6000;
+uint32 constexpr kTwinInitialPullHoldMs = 3500;
+uint32 constexpr kTwinTeleportHoldMs = 4500;
+uint32 constexpr kTwinPickupFailedHoldMs = 3500;
 uint32 constexpr kTwinTeleportRecoveryMs = 3500;
 uint32 constexpr kTwinUppercutRecoveryMs = 4500;
 uint32 constexpr kTwinUnbalancingRecoveryMs = 4500;
@@ -66,6 +69,17 @@ struct TwinPickupAnchorState
     Position anchor;
 };
 
+struct TwinThreatHoldWindowState
+{
+    uint32 initialPullOpenedAtMs = 0;
+    uint32 initialPullUntilMs = 0;
+    uint32 teleportOpenedAtMs = 0;
+    uint32 teleportUntilMs = 0;
+    uint32 pickupFailedOpenedAtMs = 0;
+    uint32 pickupFailedUntilMs = 0;
+    uint32 lastPickupFailureSourceAtMs = 0;
+};
+
 std::unordered_map<uint32, bool> sCachedTwinSplitByX;
 std::unordered_map<uint32, bool> sTwinSideZeroIsLowSide;
 std::unordered_map<uint32, bool> sCachedTwinVeklorIsLowSide;
@@ -75,6 +89,7 @@ std::unordered_map<uint64, TwinMeleeRecoveryState> sTwinMeleeRecoveryStateByBot;
 std::unordered_map<uint32, TwinMarkerState> sTwinMarkerStateByInstance;
 std::unordered_map<uint32, TwinTeleportState> sTwinTeleportStateByInstance;
 std::unordered_map<uint32, TwinPickupEstablishedState> sTwinPickupEstablishedStateByInstance;
+std::unordered_map<uint32, TwinThreatHoldWindowState> sTwinThreatHoldStateByInstance;
 std::unordered_map<uint64, TwinPickupAnchorState> sTwinPickupAnchorStateByBot;
 
 uint32 GetTwinInstanceId(Player* bot)
@@ -96,6 +111,21 @@ uint32 GetTwinInstanceId(Unit* unit)
 bool IsTwinTeleportStateActive(TwinTeleportState const& state, uint32 now)
 {
     return state.armedAtMs != 0 && state.armedUntilMs > now;
+}
+
+bool HasActiveHoldWindow(uint32 untilMs, uint32 now)
+{
+    return untilMs != 0 && untilMs > now;
+}
+
+void ClearExpiredHoldWindows(TwinThreatHoldWindowState& state, uint32 now)
+{
+    if (!HasActiveHoldWindow(state.initialPullUntilMs, now))
+        state.initialPullUntilMs = 0;
+    if (!HasActiveHoldWindow(state.teleportUntilMs, now))
+        state.teleportUntilMs = 0;
+    if (!HasActiveHoldWindow(state.pickupFailedUntilMs, now))
+        state.pickupFailedUntilMs = 0;
 }
 
 bool IsMarkerTargetValid(Player* bot, Unit* target)
@@ -171,6 +201,25 @@ SplitBand GetSplitBand(float separation)
     if (separation < kTwinSplitWarningDistance)
         return SplitBand::Warning;
     return SplitBand::Stable;
+}
+
+void NoteTwinEncounterActive(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return;
+
+    uint32 const instanceId = GetTwinInstanceId(bot);
+    if (!instanceId)
+        return;
+
+    uint32 const now = getMSTime();
+    TwinThreatHoldWindowState& state = sTwinThreatHoldStateByInstance[instanceId];
+    ClearExpiredHoldWindows(state, now);
+    if (state.initialPullOpenedAtMs != 0)
+        return;
+
+    state.initialPullOpenedAtMs = now;
+    state.initialPullUntilMs = now + kTwinInitialPullHoldMs;
 }
 
 SideState ResolveSideState(Player* bot, Unit* veklor, Unit* veknilash)
@@ -259,6 +308,12 @@ void NoteTwinTeleportCast(Unit* caster)
 
     sTwinPickupEstablishedStateByInstance[instanceId] = {};
 
+    TwinThreatHoldWindowState& holdState = sTwinThreatHoldStateByInstance[instanceId];
+    holdState.teleportOpenedAtMs = now;
+    holdState.teleportUntilMs = now + kTwinTeleportHoldMs;
+    holdState.pickupFailedOpenedAtMs = 0;
+    holdState.pickupFailedUntilMs = 0;
+
     for (auto itr = sTwinPickupAnchorStateByBot.begin(); itr != sTwinPickupAnchorStateByBot.end();)
     {
         if (itr->second.instanceId != instanceId)
@@ -294,14 +349,102 @@ bool IsTwinTeleportWindowActive(Player* bot, uint32* outElapsedMs)
     return true;
 }
 
+bool GetActiveThreatHold(Player* bot, ThreatHoldState& outState)
+{
+    outState = {};
+    if (!bot || !bot->GetMap())
+        return false;
+
+    auto itr = sTwinThreatHoldStateByInstance.find(GetTwinInstanceId(bot));
+    if (itr == sTwinThreatHoldStateByInstance.end())
+        return false;
+
+    uint32 const now = getMSTime();
+    TwinThreatHoldWindowState& state = itr->second;
+    ClearExpiredHoldWindows(state, now);
+
+    if (HasActiveHoldWindow(state.teleportUntilMs, now))
+    {
+        outState.type = ThreatHoldType::Teleport;
+        outState.openedAtMs = state.teleportOpenedAtMs;
+        outState.untilMs = state.teleportUntilMs;
+        return true;
+    }
+
+    if (HasActiveHoldWindow(state.pickupFailedUntilMs, now))
+    {
+        outState.type = ThreatHoldType::PickupFailed;
+        outState.openedAtMs = state.pickupFailedOpenedAtMs;
+        outState.untilMs = state.pickupFailedUntilMs;
+        return true;
+    }
+
+    if (HasActiveHoldWindow(state.initialPullUntilMs, now))
+    {
+        outState.type = ThreatHoldType::InitialPull;
+        outState.openedAtMs = state.initialPullOpenedAtMs;
+        outState.untilMs = state.initialPullUntilMs;
+        return true;
+    }
+
+    return false;
+}
+
+uint32 GetLatestPickupWindowOpenedAtMs(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return 0;
+
+    auto const itr = sTwinThreatHoldStateByInstance.find(GetTwinInstanceId(bot));
+    if (itr == sTwinThreatHoldStateByInstance.end())
+        return 0;
+
+    return std::max(itr->second.initialPullOpenedAtMs, itr->second.teleportOpenedAtMs);
+}
+
+bool ArmPickupFailedHold(Player* bot, uint32 sourceOpenedAtMs)
+{
+    if (!bot || !bot->GetMap() || !sourceOpenedAtMs)
+        return false;
+
+    TwinThreatHoldWindowState& state = sTwinThreatHoldStateByInstance[GetTwinInstanceId(bot)];
+    if (state.lastPickupFailureSourceAtMs == sourceOpenedAtMs)
+        return false;
+
+    uint32 const now = getMSTime();
+    state.lastPickupFailureSourceAtMs = sourceOpenedAtMs;
+    state.pickupFailedOpenedAtMs = now;
+    state.pickupFailedUntilMs = now + kTwinPickupFailedHoldMs;
+    return true;
+}
+
+bool HasTwinMovementOwnershipState(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    if (HasLockedPickupAnchor(bot))
+        return true;
+
+    ThreatHoldState holdState;
+    return GetActiveThreatHold(bot, holdState);
+}
+
 void NoteTwinPickupEstablished(Player* bot, bool isVeklor)
 {
     if (!bot || !bot->GetMap())
         return;
 
-    TwinPickupEstablishedState& state = sTwinPickupEstablishedStateByInstance[GetTwinInstanceId(bot)];
+    uint32 const instanceId = GetTwinInstanceId(bot);
+    TwinPickupEstablishedState& state = sTwinPickupEstablishedStateByInstance[instanceId];
     if (isVeklor)
+    {
         state.veklorEstablishedAtMs = getMSTime();
+        TwinThreatHoldWindowState& holdState = sTwinThreatHoldStateByInstance[instanceId];
+        holdState.initialPullUntilMs = 0;
+        holdState.teleportUntilMs = 0;
+        holdState.pickupFailedUntilMs = 0;
+    }
     else
         state.veknilashEstablishedAtMs = getMSTime();
 }
@@ -542,6 +685,7 @@ bool ResetState(Player* bot)
     erased = sTwinLastVeklorSideChangedMsByInstance.erase(instanceId) > 0 || erased;
     erased = sTwinTeleportStateByInstance.erase(instanceId) > 0 || erased;
     erased = sTwinPickupEstablishedStateByInstance.erase(instanceId) > 0 || erased;
+    erased = sTwinThreatHoldStateByInstance.erase(instanceId) > 0 || erased;
 
     auto markerItr = sTwinMarkerStateByInstance.find(instanceId);
     if (markerItr != sTwinMarkerStateByInstance.end())
@@ -597,7 +741,8 @@ bool HasPersistentState(Player* bot)
         sTwinLastVeklorSideChangedMsByInstance.find(instanceId) != sTwinLastVeklorSideChangedMsByInstance.end() ||
         sTwinMarkerStateByInstance.find(instanceId) != sTwinMarkerStateByInstance.end() ||
         sTwinTeleportStateByInstance.find(instanceId) != sTwinTeleportStateByInstance.end() ||
-        sTwinPickupEstablishedStateByInstance.find(instanceId) != sTwinPickupEstablishedStateByInstance.end())
+        sTwinPickupEstablishedStateByInstance.find(instanceId) != sTwinPickupEstablishedStateByInstance.end() ||
+        sTwinThreatHoldStateByInstance.find(instanceId) != sTwinThreatHoldStateByInstance.end())
     {
         return true;
     }

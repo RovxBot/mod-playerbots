@@ -33,7 +33,7 @@ float constexpr kTwinInitialVeknilashX = -9023.67f;
 float constexpr kTwinInitialVeknilashY = 1176.24f;
 float constexpr kTwinInitialVeknilashZ = -104.226f;
 uint32 constexpr kTwinInitialVeklorSide = 1u;
-float constexpr kTwinWarlockInitialPullDistance = 32.0f;
+float constexpr kTwinWarlockInitialPullDistance = 26.0f;
 float constexpr kTwinSideHealerAnchorDistance = 120.0f;
 float constexpr kTwinSideTankCornerDistance = 150.0f;
 
@@ -260,8 +260,9 @@ void ClearTwinPinnedTarget(PlayerbotAI* botAI, AiObjectContext* context)
 
 bool IsTwinTankRole(Player* bot)
 {
-    return Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) ||
-           (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot));
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, GET_PLAYERBOT_AI(bot));
+    return cohort == Aq40Helpers::TwinRoleCohort::WarlockTank ||
+           cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
 }
 
 bool StopTwinPetAttackOnTarget(Player* bot, Unit* target)
@@ -493,8 +494,9 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 
     ClearTwinPrePullTargeting(bot, botAI, context);
 
-    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool const isMeleeTank = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
+    bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
+    bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
     bool const isHealer = botAI->IsHeal(bot);
     uint32 tankHealerSide = 0;
     bool const isTankHealer =
@@ -615,12 +617,16 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 10000);
 
     Position healerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(assignment.sideIndex);
-    bool const wrongSide =
-        !Aq40Helpers::IsLikelyOnSameTwinSide(bot, assignment.sideEmperor, assignment.oppositeEmperor);
+    Position oppositeHealerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(1u - assignment.sideIndex);
+    float const sideAnchorDistance =
+        bot->GetExactDist2d(healerAnchor.GetPositionX(), healerAnchor.GetPositionY());
+    float const oppositeAnchorDistance =
+        bot->GetExactDist2d(oppositeHealerAnchor.GetPositionX(), oppositeHealerAnchor.GetPositionY());
+    bool const wrongSide = oppositeAnchorDistance + 8.0f < sideAnchorDistance;
     bool const outsideSideLeash = Aq40Helpers::IsTwinHealerOutsideSideLeash(bot, assignment);
     float constexpr kTwinSideHealerAnchorLeash = 18.0f;
     bool const tooFarFromAnchor =
-        bot->GetExactDist2d(healerAnchor.GetPositionX(), healerAnchor.GetPositionY()) > kTwinSideHealerAnchorLeash;
+        sideAnchorDistance > kTwinSideHealerAnchorLeash;
     if (wrongSide || outsideSideLeash || tooFarFromAnchor)
     {
         std::string const recoveryReason = wrongSide ? "wrong_side" :
@@ -805,10 +811,10 @@ bool Aq40TwinEmperorsAvoidVeklorAction::Execute(Event /*event*/)
         return false;
 
     bool const isActiveWarlockTank =
-        Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
+        Aq40Helpers::GetTwinRoleCohort(bot, botAI) == Aq40Helpers::TwinRoleCohort::WarlockTank &&
         Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
     bool const isPickupWarlock =
-        Aq40BossHelper::IsDesignatedTwinWarlockTank(bot) &&
+        Aq40Helpers::GetTwinRoleCohort(bot, botAI) == Aq40Helpers::TwinRoleCohort::WarlockTank &&
         Aq40Helpers::GetStableTwinRoleIndex(bot, botAI) == assignment.veklorSideIndex &&
         !Aq40Helpers::IsTwinWarlockPickupEstablished(bot, botAI, assignment);
     if (isActiveWarlockTank || isPickupWarlock)
@@ -859,8 +865,9 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
 
-    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
+    bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
+    bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
 
     if (isWarlockTank || isMeleeTank)
         return false;
@@ -1104,8 +1111,9 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
             "twins:" + Aq40Helpers::GetAq40LogUnit(boss),
             "boss=twins terminal=1 reason=tank_swap_failure caster=" + Aq40Helpers::GetAq40LogUnit(boss), 10000);
     }
-    bool const isWarlockTank = Aq40BossHelper::IsDesignatedTwinWarlockTank(bot);
-    bool const isMeleeTank = !isWarlockTank && PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
+    bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
+    bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
 
     if (!isWarlockTank && !isMeleeTank)
         return false;
@@ -1220,7 +1228,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
 bool Aq40TwinEmperorsWarlockTankAction::isUseful()
 {
-    if (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+    if (Aq40Helpers::GetTwinRoleCohort(bot, botAI) != Aq40Helpers::TwinRoleCohort::WarlockTank)
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
@@ -1234,7 +1242,7 @@ bool Aq40TwinEmperorsWarlockTankAction::isUseful()
 
 bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
 {
-    if (!Aq40BossHelper::IsDesignatedTwinWarlockTank(bot))
+    if (Aq40Helpers::GetTwinRoleCohort(bot, botAI) != Aq40Helpers::TwinRoleCohort::WarlockTank)
         return false;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
