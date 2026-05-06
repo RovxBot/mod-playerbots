@@ -334,9 +334,11 @@ bool GetTwinSnapshot(Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
     return Aq40Helpers::GetTwinEncounterSnapshot(bot, botAI, attackers, outSnapshot);
 }
 
-bool HoldTwinRecoveryPosition(Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
-                              Aq40Helpers::TwinAssignments const& assignment, std::string const& reason)
+bool PrepareTwinRecoveryHold(Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
+                             Aq40Helpers::TwinAssignments const& assignment, std::string const& reason,
+                             Position& outAnchor, bool& outShouldMove)
 {
+    outShouldMove = false;
     if (!bot || !botAI || !context)
         return false;
 
@@ -346,19 +348,15 @@ bool HoldTwinRecoveryPosition(Player* bot, PlayerbotAI* botAI, AiObjectContext* 
         StopTwinDamageOn(bot, botAI, context, assignment.veknilash);
     Aq40TwinEmperors::ClearLocalRti(botAI);
 
-    Position anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+    outAnchor = Aq40Helpers::GetTwinRoomCenterPosition();
     if (assignment.veklor && (botAI->IsRanged(bot) || bot->getClass() == CLASS_HUNTER))
-        GetTwinCentralWaitAnchor(bot, assignment.veklor, anchor);
+        GetTwinCentralWaitAnchor(bot, assignment.veklor, outAnchor);
 
     Aq40Helpers::LogAq40Info(bot, "recovery_hold", "twins:" + reason,
         "boss=twins state=" + reason, 3000);
 
-    if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
-        return true;
-
-    botAI->RequestSpellInterrupt();
-    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
-                  false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+    outShouldMove = bot->GetExactDist2d(outAnchor.GetPositionX(), outAnchor.GetPositionY()) > 5.0f;
+    return true;
 }
 
 void ClearTwinPrePullTargeting(Player* bot, PlayerbotAI* botAI, AiObjectContext* context)
@@ -1004,18 +1002,42 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         Aq40TwinEmperors::ClearLocalRti(botAI);
         if (haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal)
         {
-            return HoldTwinRecoveryPosition(bot, botAI, context, assignment,
-                snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
-                    "pickup_recovery" : "degraded_recovery");
+            Position recoveryAnchor;
+            bool shouldMove = false;
+            if (!PrepareTwinRecoveryHold(bot, botAI, context, assignment,
+                    snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
+                        "pickup_recovery" : "degraded_recovery",
+                    recoveryAnchor, shouldMove))
+                return false;
+
+            if (!shouldMove)
+                return true;
+
+            botAI->RequestSpellInterrupt();
+            return MoveTo(bot->GetMapId(), recoveryAnchor.GetPositionX(), recoveryAnchor.GetPositionY(),
+                          recoveryAnchor.GetPositionZ(), false, false, false, true,
+                          MovementPriority::MOVEMENT_COMBAT, true, false);
         }
         return false;
     }
 
     if (haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal && !isBugTarget)
     {
-        return HoldTwinRecoveryPosition(bot, botAI, context, assignment,
-            snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
-                "pickup_recovery" : "degraded_recovery");
+        Position recoveryAnchor;
+        bool shouldMove = false;
+        if (!PrepareTwinRecoveryHold(bot, botAI, context, assignment,
+                snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
+                    "pickup_recovery" : "degraded_recovery",
+                recoveryAnchor, shouldMove))
+            return false;
+
+        if (!shouldMove)
+            return true;
+
+        botAI->RequestSpellInterrupt();
+        return MoveTo(bot->GetMapId(), recoveryAnchor.GetPositionX(), recoveryAnchor.GetPositionY(),
+                      recoveryAnchor.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
     }
 
     if (desiredTarget == assignment.veklor && isRangedDps && !isHunter &&
