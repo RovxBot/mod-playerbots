@@ -387,10 +387,18 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
     Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
     bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
     bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
+    Aq40Helpers::TwinEncounterSnapshot snapshot;
+    bool const haveSnapshot = Aq40Helpers::GetTwinEncounterSnapshot(bot, botAI, AI_VALUE(GuidVector, "attackers"),
+        snapshot);
     bool const twinMovementOwnership = Aq40TwinEmperors::HasTwinMovementOwnershipState(bot);
     bool const postSwapThreatHold =
         assignment.veklor && !isWarlockTank && !isMeleeTank && !botAI->IsHeal(bot) &&
         Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment);
+    bool const recoveryHold =
+        haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal &&
+        !isWarlockTank && !isMeleeTank && !botAI->IsHeal(bot);
+    bool const inactiveTank =
+        (isWarlockTank || isMeleeTank) && !Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
     if (twinMovementOwnership)
     {
         if (dynamic_cast<MovementAction*>(action))
@@ -417,6 +425,18 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
                 dynamic_cast<AttackAction*>(action) ||
                 dynamic_cast<PetAttackAction*>(action))
                 return 0.0f;
+        }
+    }
+    if (recoveryHold || inactiveTank)
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        if ((spellAction && spellAction->GetTargetName() == "current target") ||
+            dynamic_cast<AttackAction*>(action) ||
+            dynamic_cast<ReachTargetAction*>(action) ||
+            dynamic_cast<CastReachTargetSpellAction*>(action) ||
+            dynamic_cast<PetAttackAction*>(action))
+        {
+            return 0.0f;
         }
     }
 

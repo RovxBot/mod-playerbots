@@ -22,6 +22,37 @@ enum class TwinRoleCohort : uint8
     Other = 3,
 };
 
+enum class TwinStrategyMode : uint8
+{
+    Normal = 0,
+    PickupRecovery = 1,
+    Degraded = 2,
+};
+
+struct TwinBossRoleState
+{
+    ObjectGuid expectedOwnerGuid = ObjectGuid::Empty;
+    ObjectGuid reserveOwnerGuid = ObjectGuid::Empty;
+    ObjectGuid currentOwnerGuid = ObjectGuid::Empty;
+    ObjectGuid botExecutorGuid = ObjectGuid::Empty;
+    uint32 liveSideIndex = 0;
+};
+
+struct TwinEncounterSnapshot
+{
+    bool supported = false;
+    bool encounterLive = false;
+    std::string unsupportedReason;
+    TwinStrategyMode strategyMode = TwinStrategyMode::Degraded;
+    GuidVector lockedWarlocks;
+    GuidVector lockedMeleeTanks;
+    std::unordered_map<uint64, TwinRoleCohort> cohortByGuid;
+    std::unordered_map<uint64, uint32> healerSidesByGuid;
+    std::unordered_map<uint64, uint32> stagedSidesByGuid;
+    TwinBossRoleState veklor;
+    TwinBossRoleState veknilash;
+};
+
 struct TwinAssignments
 {
     Unit* sideEmperor = nullptr;
@@ -45,6 +76,8 @@ struct TwinRoleLock
     std::unordered_map<uint64, uint32> stagedSidesByGuid;
 };
 
+bool GetTwinEncounterSnapshot(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers,
+                              TwinEncounterSnapshot& outSnapshot);
 bool GetTwinRoleLock(Player* bot, PlayerbotAI* botAI, TwinRoleLock& outLock);
 TwinRoleCohort GetTwinRoleCohort(Player* bot, PlayerbotAI* botAI);
 uint32 GetStableTwinRoleIndex(Player* bot, PlayerbotAI* botAI);

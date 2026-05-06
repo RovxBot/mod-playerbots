@@ -324,6 +324,43 @@ bool GetTwinCentralWaitAnchor(Player* bot, Unit* veklor, Position& anchor)
     return true;
 }
 
+bool GetTwinSnapshot(Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
+                     Aq40Helpers::TwinEncounterSnapshot& outSnapshot)
+{
+    GuidVector attackers;
+    if (context)
+        attackers = context->GetValue<GuidVector>("attackers")->Get();
+
+    return Aq40Helpers::GetTwinEncounterSnapshot(bot, botAI, attackers, outSnapshot);
+}
+
+bool HoldTwinRecoveryPosition(Player* bot, PlayerbotAI* botAI, AiObjectContext* context,
+                              Aq40Helpers::TwinAssignments const& assignment, std::string const& reason)
+{
+    if (!bot || !botAI || !context)
+        return false;
+
+    if (assignment.veklor)
+        StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+    if (assignment.veknilash)
+        StopTwinDamageOn(bot, botAI, context, assignment.veknilash);
+    Aq40TwinEmperors::ClearLocalRti(botAI);
+
+    Position anchor = Aq40Helpers::GetTwinRoomCenterPosition();
+    if (assignment.veklor && (botAI->IsRanged(bot) || bot->getClass() == CLASS_HUNTER))
+        GetTwinCentralWaitAnchor(bot, assignment.veklor, anchor);
+
+    Aq40Helpers::LogAq40Info(bot, "recovery_hold", "twins:" + reason,
+        "boss=twins state=" + reason, 3000);
+
+    if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) <= 5.0f)
+        return true;
+
+    botAI->RequestSpellInterrupt();
+    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                  false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+}
+
 void ClearTwinPrePullTargeting(Player* bot, PlayerbotAI* botAI, AiObjectContext* context)
 {
     if (!bot || !botAI || botAI->IsRealPlayer())
@@ -564,27 +601,32 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         return false;
 
     Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
+    Aq40Helpers::TwinEncounterSnapshot snapshot;
+    bool const haveSnapshot = GetTwinSnapshot(bot, botAI, context, snapshot);
 
-    uint32 tankHealerSide = 0;
-    if (!Aq40Helpers::GetTwinDedicatedTankHealerSide(bot, botAI, tankHealerSide))
+    auto fallbackToRaidHealer = [&](std::string const& reason) -> bool
     {
         Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
-        Aq40Helpers::LogAq40Info(bot, "healer_mode", "twins:raid_healer",
-            "boss=twins mode=raid_healer", 10000);
+        Aq40Helpers::LogAq40Info(bot, "healer_mode", "twins:raid_healer:" + reason,
+            "boss=twins mode=raid_healer reason=" + reason, 10000);
 
         Position center = Aq40Helpers::GetTwinRoomCenterPosition();
         float constexpr kTwinRaidHealerCenterLeash = 25.0f;
         if (!bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
             bot->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) > kTwinRaidHealerCenterLeash)
         {
-            Aq40Helpers::LogAq40Info(bot, "healer_position", "twins:raid_healer:center",
-                "boss=twins mode=raid_healer reason=center", 10000);
+            Aq40Helpers::LogAq40Info(bot, "healer_position", "twins:raid_healer:center:" + reason,
+                "boss=twins mode=raid_healer reason=" + reason + " path=center", 10000);
             return MoveTo(bot->GetMapId(), center.GetPositionX(), center.GetPositionY(), center.GetPositionZ(),
                           false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
         }
 
         return false;
-    }
+    };
+
+    uint32 tankHealerSide = 0;
+    if (!Aq40Helpers::GetTwinDedicatedTankHealerSide(bot, botAI, tankHealerSide))
+        return fallbackToRaidHealer("no_dedicated_side");
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
         context->GetValue<GuidVector>("attackers")->Get());
@@ -593,8 +635,18 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
     {
         Aq40Helpers::LogAq40Warn(bot, "missing_state", "twins:healer_assignment",
             "boss=twins missing=healer_assignment");
-        Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
-        return false;
+        return fallbackToRaidHealer("missing_assignment");
+    }
+
+    if (haveSnapshot)
+    {
+        Aq40Helpers::TwinBossRoleState const& localBossState =
+            assignment.sideEmperor == assignment.veklor ? snapshot.veklor : snapshot.veknilash;
+        bool const sideOwnerResolved =
+            localBossState.currentOwnerGuid || localBossState.expectedOwnerGuid || localBossState.botExecutorGuid;
+        if (snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::Degraded || !sideOwnerResolved)
+            return fallbackToRaidHealer(snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::Degraded ?
+                "degraded_recovery" : "unresolved_side_owner");
     }
 
     std::list<ObjectGuid> const focusTargets = Aq40Helpers::GetTwinHealerFocusTargets(bot, botAI, assignment);
@@ -604,8 +656,7 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
             "twins:side:" + std::to_string(assignment.sideIndex),
             "boss=twins side=" + std::to_string(assignment.sideIndex) +
             " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor));
-        Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
-        return false;
+        return fallbackToRaidHealer("no_local_focus");
     }
 
     Aq40Helpers::ApplyTwinHealerFocusTargets(bot, botAI, focusTargets);
@@ -810,12 +861,15 @@ bool Aq40TwinEmperorsAvoidVeklorAction::Execute(Event /*event*/)
     if (!assignment.veklor || !assignment.veklor->IsAlive())
         return false;
 
+    Aq40Helpers::TwinEncounterSnapshot snapshot;
+    bool const haveSnapshot = GetTwinSnapshot(bot, botAI, context, snapshot);
     bool const isActiveWarlockTank =
         Aq40Helpers::GetTwinRoleCohort(bot, botAI) == Aq40Helpers::TwinRoleCohort::WarlockTank &&
         Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
     bool const isPickupWarlock =
         Aq40Helpers::GetTwinRoleCohort(bot, botAI) == Aq40Helpers::TwinRoleCohort::WarlockTank &&
-        Aq40Helpers::GetStableTwinRoleIndex(bot, botAI) == assignment.veklorSideIndex &&
+        ((haveSnapshot && snapshot.veklor.botExecutorGuid == bot->GetGUID()) ||
+         Aq40Helpers::GetStableTwinRoleIndex(bot, botAI) == assignment.veklorSideIndex) &&
         !Aq40Helpers::IsTwinWarlockPickupEstablished(bot, botAI, assignment);
     if (isActiveWarlockTank || isPickupWarlock)
         return false;
@@ -864,6 +918,8 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     }
 
     Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
+    Aq40Helpers::TwinEncounterSnapshot snapshot;
+    bool const haveSnapshot = GetTwinSnapshot(bot, botAI, context, snapshot);
 
     Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
     bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
@@ -946,7 +1002,20 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     if (!desiredTarget || !desiredTarget->IsAlive())
     {
         Aq40TwinEmperors::ClearLocalRti(botAI);
+        if (haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal)
+        {
+            return HoldTwinRecoveryPosition(bot, botAI, context, assignment,
+                snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
+                    "pickup_recovery" : "degraded_recovery");
+        }
         return false;
+    }
+
+    if (haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal && !isBugTarget)
+    {
+        return HoldTwinRecoveryPosition(bot, botAI, context, assignment,
+            snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery ?
+                "pickup_recovery" : "degraded_recovery");
     }
 
     if (desiredTarget == assignment.veklor && isRangedDps && !isHunter &&
