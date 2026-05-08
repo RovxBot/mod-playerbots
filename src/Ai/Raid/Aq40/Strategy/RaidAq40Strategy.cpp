@@ -87,6 +87,8 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // - tanks that can't tank the current boss on their side hold position
     triggers.push_back(new TriggerNode("aq40 twin emperors room entry",
         { NextAction("aq40 twin emperors pre pull stage", ACTION_RAID + 8) }));
+    triggers.push_back(new TriggerNode("aq40 twin emperors emergency split",
+        { NextAction("aq40 twin emperors emergency split recovery", ACTION_RAID + 11) }));
     triggers.push_back(new TriggerNode("aq40 twin emperors active",
         {
             NextAction("aq40 twin emperors dodge blizzard", ACTION_RAID + 10),

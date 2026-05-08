@@ -491,6 +491,52 @@ void DisableTwinPetTauntAutocast(Pet* pet)
     }
 }
 
+// Full encounter-local pet policy for Twin Emperors (issue #5).
+// Enforces passive/follow during dangerous phases, stops pets that would
+// drag into Vek'lor danger range, and disables taunt autocast.
+// Returns true if the pet was put into hold state.
+bool EnforceTwinPetPolicy(Player* bot, PlayerbotAI* botAI,
+                          Aq40TwinEmperors::TwinEncounterPhase phase,
+                          Unit* veklor, Unit* desiredTarget)
+{
+    if (!bot)
+        return false;
+
+    Pet* pet = bot->GetPet();
+    if (!pet || !pet->IsAlive())
+        return false;
+
+    bool const holdPhase =
+        phase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow ||
+        phase == Aq40TwinEmperors::TwinEncounterPhase::PickupRecovery ||
+        phase == Aq40TwinEmperors::TwinEncounterPhase::EmergencySplitRecovery;
+
+    float constexpr kPetVeklorSafeDistance = 21.0f;
+    bool const petInVeklorDanger = veklor && veklor->IsAlive() &&
+        pet->GetDistance2d(veklor) < kPetVeklorSafeDistance;
+    bool const targetIsVeklor = desiredTarget && desiredTarget == veklor;
+    bool const targetNearVeklor = veklor && veklor->IsAlive() && desiredTarget &&
+        desiredTarget != veklor && desiredTarget->GetDistance2d(veklor) < kPetVeklorSafeDistance;
+
+    bool const shouldStop = holdPhase || petInVeklorDanger || targetIsVeklor || targetNearVeklor;
+    if (!shouldStop)
+        return false;
+
+    pet->AttackStop();
+    pet->SetTarget(ObjectGuid::Empty);
+    if (CharmInfo* charmInfo = pet->GetCharmInfo())
+    {
+        charmInfo->SetIsCommandAttack(false);
+        charmInfo->SetIsFollowing(true);
+        charmInfo->SetIsCommandFollow(true);
+        charmInfo->SetIsAtStay(false);
+        charmInfo->SetIsReturning(true);
+    }
+
+    DisableTwinPetTauntAutocast(pet);
+    return true;
+}
+
 Unit* GetTwinPriorityBugTarget(Player* bot, PlayerbotAI* botAI, GuidVector const& encounterUnits)
 {
     if (Unit* explodeBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinExplodeBug))
@@ -515,6 +561,90 @@ char const* GetTwinSplitBandName(Aq40TwinEmperors::SplitBand band)
             return "stable";
     }
 }
+
+// Pre-pull center-spread layout (issue #8): deterministic spread anchors for
+// non-tank, non-dedicated-healer bots.  Melee DPS bias toward Vek'nilash's
+// initial side for quick opener engage, ranged DPS bias toward Vek'lor's
+// initial side for opener cast positions, non-dedicated healers stay near
+// center perpendicular to the boss axis.
+Position GetTwinPrePullCenterSpreadAnchor(Player* bot, bool isMeleeDps, bool isRangedDps)
+{
+    float const vnAngle = std::atan2(
+        kTwinInitialVeknilashY - kTwinRoomCenterY,
+        kTwinInitialVeknilashX - kTwinRoomCenterX);
+    float const vlAngle = std::atan2(
+        kTwinInitialVeklorY - kTwinRoomCenterY,
+        kTwinInitialVeklorX - kTwinRoomCenterX);
+
+    float baseAngle;
+    float spreadRadius;
+    if (isMeleeDps)
+    {
+        // Melee DPS stage toward Vek'nilash initial side for quick engage on pull
+        baseAngle = vnAngle;
+        spreadRadius = 14.0f;
+    }
+    else if (isRangedDps)
+    {
+        // Ranged DPS near center, biased toward Vek'lor for opener cast positions
+        baseAngle = vlAngle;
+        spreadRadius = 10.0f;
+    }
+    else
+    {
+        // Non-dedicated healers stay close to center, perpendicular to boss axis
+        float const axisAngle = std::atan2(
+            kTwinInitialVeklorY - kTwinInitialVeknilashY,
+            kTwinInitialVeklorX - kTwinInitialVeknilashX);
+        baseAngle = axisAngle + static_cast<float>(M_PI) * 0.5f;
+        spreadRadius = 6.0f;
+    }
+
+    // Deterministic per-bot arc offset to prevent overstacking.
+    // Uses a multiplicative hash of the GUID counter for stable slot distribution.
+    uint32 const guidCounter = bot->GetGUID().GetCounter();
+    uint32 const slotHash = static_cast<uint32>((guidCounter * 2654435769UL) >> 16) % 7;
+    float const slotOffset = (static_cast<float>(slotHash) - 3.0f) * 0.2f;
+
+    Position anchor;
+    anchor.Relocate(
+        kTwinRoomCenterX + std::cos(baseAngle + slotOffset) * spreadRadius,
+        kTwinRoomCenterY + std::sin(baseAngle + slotOffset) * spreadRadius,
+        kTwinRoomCenterZ);
+    return anchor;
+}
+
+// Pre-teleport melee DPS staging anchor (issue #8): positions melee DPS on
+// the receiving side where Vek'nilash will be (or already is) after teleport,
+// at a safe distance that respects tank pickup geometry.  Tank pickup zone is
+// within ~5y of the boss; melee DPS at 12y avoids stealing nearest-player
+// pickup while staying close enough to engage quickly once pickup is established.
+bool GetMeleeDpsPreTeleportAnchor(Player* bot, Unit* veknilash,
+                                 uint32 veknilashSideIndex, Position& outAnchor)
+{
+    if (!bot || !veknilash)
+        return false;
+
+    float constexpr kMeleeDpsPreTeleportRange = 12.0f;
+    float const dirX = kTwinRoomCenterX - veknilash->GetPositionX();
+    float const dirY = kTwinRoomCenterY - veknilash->GetPositionY();
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 0.1f)
+        return false;
+
+    float const baseAngle = std::atan2(dirY, dirX);
+
+    // Per-bot arc offset to prevent stacking at the same point
+    uint32 const guidCounter = bot->GetGUID().GetCounter();
+    uint32 const slotHash = static_cast<uint32>((guidCounter * 2654435769UL) >> 16) % 5;
+    float const arcOffset = (static_cast<float>(slotHash) - 2.0f) * 0.12f;
+
+    outAnchor.Relocate(
+        veknilash->GetPositionX() + std::cos(baseAngle + arcOffset) * kMeleeDpsPreTeleportRange,
+        veknilash->GetPositionY() + std::sin(baseAngle + arcOffset) * kMeleeDpsPreTeleportRange,
+        veknilash->GetPositionZ());
+    return true;
+}
 }
 
 bool Aq40TwinEmperorsPrePullStageAction::isUseful()
@@ -526,6 +656,19 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
 {
     if (!Aq40Helpers::IsTwinPrePullReady(bot, botAI))
         return false;
+
+    // Explicit supported-comp contract (issue #9): the current Twin strategy
+    // requires exactly 2 designated warlock tanks and 2 melee tanks.  If the
+    // comp does not satisfy this, block normal supported opener flow and log
+    // the unsupported reason early — do not present fake pre-pull confidence.
+    // NOTE: warrior Battle Shout Vek'lor tanking is not supported by this
+    // strategy path.
+    if (!Aq40Helpers::IsTwinSupportedCompAvailable(bot, botAI))
+    {
+        Aq40Helpers::LogAq40Warn(bot, "twin_pull_safety", "twins:unsupported_comp_prepull",
+                                 "boss=twins gate=unsupported_comp phase=prepull", 30000);
+        return false;
+    }
 
     ClearTwinPrePullTargeting(bot, botAI, context);
 
@@ -574,10 +717,21 @@ bool Aq40TwinEmperorsPrePullStageAction::Execute(Event /*event*/)
     }
     else
     {
-        anchor.Relocate(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
-        std::string const role = isHealer ? "raid_healer" : "raid";
-        stageKey = "twins:" + role + ":center";
-        stageFields = "boss=twins phase=prepull side=center staged_side=center role=" + role;
+        // Center-spread opener layout (issue #8): remaining healers and ranged
+        // DPS spread from center rather than overstacking on one exact point.
+        // Melee DPS bias toward Vek'nilash for quick engage on pull.
+        bool const isMeleeDps = !botAI->IsRanged(bot) && !isHealer;
+        bool const isRangedDps = botAI->IsRanged(bot) && !isHealer;
+        anchor = GetTwinPrePullCenterSpreadAnchor(bot, isMeleeDps, isRangedDps);
+
+        std::string const role = isMeleeDps ? "melee_dps" : (isRangedDps ? "ranged_dps" : "raid_healer");
+        stageKey = "twins:" + role + ":spread";
+        std::ostringstream spreadFields;
+        spreadFields << "boss=twins phase=prepull side=center staged_side=center"
+                     << " role=" << role
+                     << " anchor_x=" << anchor.GetPositionX()
+                     << " anchor_y=" << anchor.GetPositionY();
+        stageFields = spreadFields.str();
     }
 
     Aq40Helpers::LogAq40Info(bot, "prepull_stage", stageKey, stageFields, 30000);
@@ -636,35 +790,53 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
         return fallbackToRaidHealer("missing_assignment");
     }
 
-    if (haveSnapshot)
-    {
-        Aq40Helpers::TwinBossRoleState const& localBossState =
-            assignment.sideEmperor == assignment.veklor ? snapshot.veklor : snapshot.veknilash;
-        bool const sideOwnerResolved =
-            localBossState.currentOwnerGuid || localBossState.expectedOwnerGuid || localBossState.botExecutorGuid;
-        if (snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::Degraded || !sideOwnerResolved)
-            return fallbackToRaidHealer(snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::Degraded ?
-                "degraded_recovery" : "unresolved_side_owner");
-    }
+    // Strict fallback: only enter raid-healer mode for explicit Degraded state.
+    // Temporary ownership ambiguity during a pickup window must NOT trigger
+    // fallback — the healer stays on its assigned side and keeps retrying.
+    if (haveSnapshot && Aq40Helpers::ShouldTwinHealerFallbackToRaidMode(snapshot, assignment))
+        return fallbackToRaidHealer("degraded_recovery");
 
     std::list<ObjectGuid> const focusTargets = Aq40Helpers::GetTwinHealerFocusTargets(bot, botAI, assignment);
     if (focusTargets.empty())
     {
-        Aq40Helpers::LogAq40Warn(bot, "no_healer_focus",
-            "twins:side:" + std::to_string(assignment.sideIndex),
-            "boss=twins side=" + std::to_string(assignment.sideIndex) +
-            " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor));
-        return fallbackToRaidHealer("no_local_focus");
+        // During pickup recovery, keep the healer on its side even without
+        // resolved focus targets — do not fall back to raid-healer mode.
+        if (haveSnapshot && snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery)
+        {
+            Aq40Helpers::LogAq40Info(bot, "healer_focus_wait",
+                "twins:side:" + std::to_string(assignment.sideIndex),
+                "boss=twins side=" + std::to_string(assignment.sideIndex) +
+                " mode=tank_healer reason=pickup_focus_wait" +
+                " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 5000);
+        }
+        else
+        {
+            Aq40Helpers::LogAq40Warn(bot, "no_healer_focus",
+                "twins:side:" + std::to_string(assignment.sideIndex),
+                "boss=twins side=" + std::to_string(assignment.sideIndex) +
+                " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor));
+            return fallbackToRaidHealer("no_local_focus");
+        }
     }
 
-    Aq40Helpers::ApplyTwinHealerFocusTargets(bot, botAI, focusTargets);
-    Aq40Helpers::LogAq40Info(bot, "healer_focus",
-        "twins:side:" + std::to_string(assignment.sideIndex) + ":count:" + std::to_string(focusTargets.size()),
-        "boss=twins side=" + std::to_string(assignment.sideIndex) +
-        " mode=tank_healer" +
-        " count=" + std::to_string(focusTargets.size()) +
-        " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 10000);
+    if (!focusTargets.empty())
+    {
+        Aq40Helpers::ApplyTwinHealerFocusTargets(bot, botAI, focusTargets);
+        Aq40Helpers::LogAq40Info(bot, "healer_focus",
+            "twins:side:" + std::to_string(assignment.sideIndex) + ":count:" + std::to_string(focusTargets.size()),
+            "boss=twins side=" + std::to_string(assignment.sideIndex) +
+            " mode=tank_healer" +
+            " count=" + std::to_string(focusTargets.size()) +
+            " side_boss=" + Aq40Helpers::GetAq40LogUnit(assignment.sideEmperor), 10000);
+    }
 
+    // --- Recovery ladder ---
+    // The healer must remain on its assigned side.  When displaced, the ladder
+    // tries four progressively softer anchors before giving up:
+    //   1. Direct move to side healer anchor
+    //   2. Staged step toward side healer anchor
+    //   3. Center-to-side re-entry anchor (midway point)
+    //   4. Local safe support anchor near the assigned side tank
     Position healerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(assignment.sideIndex);
     Position oppositeHealerAnchor = Aq40Helpers::GetTwinRoomSideHealerAnchor(1u - assignment.sideIndex);
     float const sideAnchorDistance =
@@ -685,9 +857,14 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
 
         Position moveTarget = healerAnchor;
         std::string recoveryPath = "healer_anchor";
-        bool moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
-                            moveTarget.GetPositionZ(), false, false, false, true,
-                            MovementPriority::MOVEMENT_COMBAT, true, false);
+        bool moved = false;
+
+        // Step 1: Direct move to side healer anchor
+        moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                        moveTarget.GetPositionZ(), false, false, false, true,
+                        MovementPriority::MOVEMENT_COMBAT, true, false);
+
+        // Step 2: Staged step toward side healer anchor
         if (!moved)
         {
             Position recoveryStep;
@@ -701,6 +878,68 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
             }
         }
 
+        // Step 3: Center-to-side re-entry anchor (midway between center and side anchor)
+        if (!moved)
+        {
+            Position reentryAnchor = Aq40Helpers::GetTwinHealerCenterToSideReentryAnchor(assignment.sideIndex);
+            float const reentryDistance =
+                bot->GetExactDist2d(reentryAnchor.GetPositionX(), reentryAnchor.GetPositionY());
+            if (reentryDistance > 3.0f)
+            {
+                recoveryPath = "center_reentry";
+                moveTarget = reentryAnchor;
+                moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                               moveTarget.GetPositionZ(), false, false, false, true,
+                               MovementPriority::MOVEMENT_COMBAT, true, false);
+            }
+
+            // Also try stepping toward the re-entry anchor if direct move fails
+            if (!moved)
+            {
+                Position reentryStep;
+                if (GetTwinRecoveryStepTowardAnchor(bot, reentryAnchor, 12.0f, reentryStep))
+                {
+                    recoveryPath = "center_reentry_step";
+                    moveTarget = reentryStep;
+                    moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                                   moveTarget.GetPositionZ(), false, false, false, true,
+                                   MovementPriority::MOVEMENT_COMBAT, true, false);
+                }
+            }
+        }
+
+        // Step 4: Local safe support anchor near the assigned side tank
+        if (!moved)
+        {
+            Position tankSupportAnchor;
+            if (Aq40Helpers::GetTwinHealerLocalTankSupportAnchor(bot, botAI, assignment, tankSupportAnchor))
+            {
+                float const supportDistance =
+                    bot->GetExactDist2d(tankSupportAnchor.GetPositionX(), tankSupportAnchor.GetPositionY());
+                if (supportDistance > 3.0f)
+                {
+                    recoveryPath = "local_tank_support";
+                    moveTarget = tankSupportAnchor;
+                    moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                                   moveTarget.GetPositionZ(), false, false, false, true,
+                                   MovementPriority::MOVEMENT_COMBAT, true, false);
+                }
+
+                if (!moved)
+                {
+                    Position supportStep;
+                    if (GetTwinRecoveryStepTowardAnchor(bot, tankSupportAnchor, 12.0f, supportStep))
+                    {
+                        recoveryPath = "local_tank_support_step";
+                        moveTarget = supportStep;
+                        moved = MoveTo(bot->GetMapId(), moveTarget.GetPositionX(), moveTarget.GetPositionY(),
+                                       moveTarget.GetPositionZ(), false, false, false, true,
+                                       MovementPriority::MOVEMENT_COMBAT, true, false);
+                    }
+                }
+            }
+        }
+
         Aq40Helpers::LogAq40Info(bot, "healer_position",
             "twins:tank_healer:" + std::to_string(assignment.sideIndex) + ":" + recoveryPath,
             "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex) +
@@ -711,10 +950,10 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
 
         if (!moved)
         {
-            Aq40Helpers::LogAq40Warn(bot, "movement_failure",
-                "twins:tank_healer:" + std::to_string(assignment.sideIndex) + ":anchor",
+            Aq40Helpers::LogAq40Warn(bot, "healer_recovery_exhausted",
+                "twins:tank_healer:" + std::to_string(assignment.sideIndex) + ":ladder",
                 "boss=twins mode=tank_healer side=" + std::to_string(assignment.sideIndex) +
-                " reason=" + recoveryReason + " path=none", 5000);
+                " reason=" + recoveryReason + " path=ladder_exhausted", 5000);
         }
 
         return moved;
@@ -725,8 +964,11 @@ bool Aq40TwinEmperorsHealerSupportAction::Execute(Event /*event*/)
 
 bool Aq40TwinEmperorsPostSwapHoldAction::Execute(Event /*event*/)
 {
-    if (botAI->IsHeal(bot) || IsTwinTankRole(bot) || !botAI->IsRanged(bot) || bot->getClass() == CLASS_HUNTER)
+    // Issue #5: hunters now participate for pet control during post-swap hold.
+    if (botAI->IsHeal(bot) || IsTwinTankRole(bot) || !botAI->IsRanged(bot))
         return false;
+
+    bool const isHunter = bot->getClass() == CLASS_HUNTER;
 
     GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
         context->GetValue<GuidVector>("attackers")->Get());
@@ -740,6 +982,23 @@ bool Aq40TwinEmperorsPostSwapHoldAction::Execute(Event /*event*/)
     if (!Aq40Helpers::IsTwinPostSwapThreatHoldActive(bot, botAI, assignment))
         return false;
 
+    // Enforce pet policy during post-swap hold (issue #5)
+    Aq40TwinEmperors::TwinEncounterPhase const phase = Aq40TwinEmperors::GetEncounterPhase(bot);
+    EnforceTwinPetPolicy(bot, botAI, phase, assignment.veklor,
+        isHunter ? assignment.veknilash : nullptr);
+
+    // Hunters: pet controlled above, but hunter can continue attacking Vek'nilash.
+    // Don't need Vek'lor threat hold since they attack Vek'nilash. (issue #5)
+    if (isHunter)
+    {
+        StopTwinPetAttackOnTarget(bot, assignment.veklor);
+        Aq40Helpers::LogAq40Info(bot, "post_swap_hold",
+            "twins:hunter_pet_hold:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor),
+            "boss=twins reason=hunter_pet_hold target=" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), 3000);
+        return true;
+    }
+
+    // Caster ranged: stop Vek'lor damage, move to central anchor
     StopTwinDamageOn(bot, botAI, context, assignment.veklor);
     Aq40TwinEmperors::ClearLocalRti(botAI);
 
@@ -792,7 +1051,18 @@ bool Aq40TwinEmperorsDodgeBlizzardAction::Execute(Event /*event*/)
     }
 
     if (!blizzardAura)
-        return false;
+    {
+        // Fall back to scripted event state (issue #6): the spell hook may
+        // have fired before the aura is visible to this bot.  Only act if
+        // the bot is within Blizzard danger range of Vek'lor.
+        uint32 blizzardElapsed = 0;
+        bool const scriptedBlizzard = Aq40TwinEmperors::IsScriptedBlizzardActive(bot, &blizzardElapsed);
+        if (!scriptedBlizzard || !assignment.veklor || bot->GetDistance2d(assignment.veklor) > 30.0f)
+            return false;
+
+        // Use the scripted event — treat as blizzard-in-progress
+        blizzardAura = true;
+    }
 
     botAI->RequestSpellInterrupt();
 
@@ -873,10 +1143,23 @@ bool Aq40TwinEmperorsAvoidVeklorAction::Execute(Event /*event*/)
         return false;
 
     float constexpr kArcaneBurstSafeDistance = 21.0f;
-    if (bot->GetDistance2d(assignment.veklor) >= kArcaneBurstSafeDistance)
+    // Scripted Arcane Burst event (issue #6): if the spell hook just fired,
+    // widen the trigger check so bots that are near the boundary react before
+    // the aura damage lands.
+    uint32 arcaneBurstElapsed = 0;
+    bool const scriptedArcaneBurst = Aq40TwinEmperors::IsScriptedArcaneBurstActive(bot, &arcaneBurstElapsed);
+    float const effectiveDistance = scriptedArcaneBurst && arcaneBurstElapsed < 2000
+        ? kArcaneBurstSafeDistance + 4.0f   // React earlier during scripted window
+        : kArcaneBurstSafeDistance;
+    if (bot->GetDistance2d(assignment.veklor) >= effectiveDistance)
         return false;
 
     StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+    // Enforce full pet policy — passive/follow, not just attack stop (issue #5)
+    {
+        Aq40TwinEmperors::TwinEncounterPhase const petPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
+        EnforceTwinPetPolicy(bot, botAI, petPhase, assignment.veklor, nullptr);
+    }
     Aq40TwinEmperors::ClearLocalRti(botAI);
     Aq40Helpers::LogAq40Info(bot, "avoid_veklor",
         "twins:arcane_burst:" + Aq40Helpers::GetAq40LogUnit(assignment.veklor),
@@ -936,12 +1219,23 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     bool isBugTarget = false;
     std::string reason;
 
+    // Bug priority targeting (issue #5): role-specific DPS contract.
+    // Caster ranged: all bugs (explode > mutate > hostile).
+    // Hunters: explode/mutate marked bugs only, not generic hostile.
+    // Melee DPS: no bug targeting — primary damage is on Vek'nilash.
+    float constexpr kBugVeklorSafeDistance = 21.0f;
+
     Unit* explodeBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinExplodeBug);
     if (explodeBug && explodeBug->IsAlive() && (isRangedDps || isHunter))
     {
-        desiredTarget = explodeBug;
-        isBugTarget = true;
-        reason = "explode_bug";
+        // Safety: don't chase bugs into Vek'lor unsafe radius (issue #5)
+        if (!assignment.veklor || !assignment.veklor->IsAlive() ||
+            explodeBug->GetDistance2d(assignment.veklor) >= kBugVeklorSafeDistance)
+        {
+            desiredTarget = explodeBug;
+            isBugTarget = true;
+            reason = "explode_bug";
+        }
     }
 
     if (!desiredTarget)
@@ -949,20 +1243,29 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         Unit* mutateBug = Aq40Helpers::FindTwinMarkedBug(bot, botAI, encounterUnits, Aq40SpellIds::TwinMutateBug);
         if (mutateBug && mutateBug->IsAlive() && (isRangedDps || isHunter))
         {
-            desiredTarget = mutateBug;
-            isBugTarget = true;
-            reason = "mutate_bug";
+            if (!assignment.veklor || !assignment.veklor->IsAlive() ||
+                mutateBug->GetDistance2d(assignment.veklor) >= kBugVeklorSafeDistance)
+            {
+                desiredTarget = mutateBug;
+                isBugTarget = true;
+                reason = "mutate_bug";
+            }
         }
     }
 
     if (!desiredTarget)
     {
+        // Only caster ranged handle generic hostile bugs, not hunters or melee (issue #5)
         Unit* hostileBug = Aq40Helpers::FindTwinHostileBug(bot, botAI, encounterUnits);
-        if (hostileBug && hostileBug->IsAlive() && (isRangedDps || isHunter))
+        if (hostileBug && hostileBug->IsAlive() && isRangedDps && !isHunter)
         {
-            desiredTarget = hostileBug;
-            isBugTarget = true;
-            reason = "hostile_bug";
+            if (!assignment.veklor || !assignment.veklor->IsAlive() ||
+                hostileBug->GetDistance2d(assignment.veklor) >= kBugVeklorSafeDistance)
+            {
+                desiredTarget = hostileBug;
+                isBugTarget = true;
+                reason = "hostile_bug";
+            }
         }
     }
 
@@ -1023,6 +1326,52 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
 
     if (haveSnapshot && snapshot.strategyMode != Aq40Helpers::TwinStrategyMode::Normal && !isBugTarget)
     {
+        // Pre-teleport melee DPS staging (issue #8): during teleport window or
+        // pickup recovery, melee DPS moves toward the receiving side where
+        // Vek'nilash will be, rather than collapsing to room center.  This
+        // keeps melee ready to engage as soon as tank pickup is established.
+        bool const isMeleeDps = !isRangedDps && !isHunter;
+        if (isMeleeDps && assignment.veknilash && assignment.veknilash->IsAlive())
+        {
+            bool const teleportActive = Aq40TwinEmperors::IsTwinTeleportWindowActive(bot);
+            bool const pickupRecovery =
+                snapshot.strategyMode == Aq40Helpers::TwinStrategyMode::PickupRecovery;
+            if (teleportActive || pickupRecovery)
+            {
+                if (assignment.veklor)
+                    StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+                if (assignment.veknilash)
+                    StopTwinDamageOn(bot, botAI, context, assignment.veknilash);
+                Aq40TwinEmperors::ClearLocalRti(botAI);
+
+                Position preTeleportAnchor;
+                if (GetMeleeDpsPreTeleportAnchor(bot, assignment.veknilash,
+                        assignment.veknilashSideIndex, preTeleportAnchor))
+                {
+                    float const distToAnchor = bot->GetExactDist2d(
+                        preTeleportAnchor.GetPositionX(), preTeleportAnchor.GetPositionY());
+
+                    Aq40Helpers::LogAq40Info(bot, "melee_pre_teleport",
+                        "twins:melee_dps:receiving:" + std::to_string(assignment.veknilashSideIndex),
+                        "boss=twins reason=pre_teleport_stage"
+                        " side=" + std::to_string(assignment.veknilashSideIndex) +
+                        " target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
+
+                    if (distToAnchor > 5.0f)
+                    {
+                        botAI->RequestSpellInterrupt();
+                        return MoveTo(bot->GetMapId(), preTeleportAnchor.GetPositionX(),
+                                      preTeleportAnchor.GetPositionY(),
+                                      preTeleportAnchor.GetPositionZ(),
+                                      false, false, false, true,
+                                      MovementPriority::MOVEMENT_COMBAT, true, false);
+                    }
+                    return true;  // At anchor, hold position until pickup
+                }
+            }
+        }
+
+        // Generic recovery hold: non-melee or non-teleport recovery
         Position recoveryAnchor;
         bool shouldMove = false;
         if (!PrepareTwinRecoveryHold(bot, botAI, context, assignment,
@@ -1067,22 +1416,29 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
     PinTwinTarget(botAI, context, desiredTarget);
     Aq40TwinEmperors::SyncLocalRti(botAI, desiredTarget, assignment.veklor, assignment.veknilash, priorityBugTarget);
 
+    // Pet policy enforcement for hunters (issue #5).
+    // During hold phases or when the pet would enter Vek'lor danger range,
+    // recall the pet to passive/follow instead of assigning a target.
     if (isHunter)
     {
-        DisableTwinPetTauntAutocast(bot->GetPet());
-        if (Guardian* pet = bot->GetGuardianPet())
+        Aq40TwinEmperors::TwinEncounterPhase const petPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
+        if (!EnforceTwinPetPolicy(bot, botAI, petPhase, assignment.veklor, desiredTarget))
         {
-            if (pet->IsAlive() && pet->GetVictim() != desiredTarget)
+            DisableTwinPetTauntAutocast(bot->GetPet());
+            if (Guardian* pet = bot->GetGuardianPet())
             {
-                pet->ClearUnitState(UNIT_STATE_FOLLOW);
-                pet->AttackStop();
-                pet->SetTarget(desiredTarget->GetGUID());
-                pet->GetCharmInfo()->SetIsCommandAttack(true);
-                pet->GetCharmInfo()->SetIsAtStay(false);
-                pet->GetCharmInfo()->SetIsFollowing(false);
-                pet->GetCharmInfo()->SetIsCommandFollow(false);
-                pet->GetCharmInfo()->SetIsReturning(false);
-                pet->ToCreature()->AI()->AttackStart(desiredTarget);
+                if (pet->IsAlive() && pet->GetVictim() != desiredTarget)
+                {
+                    pet->ClearUnitState(UNIT_STATE_FOLLOW);
+                    pet->AttackStop();
+                    pet->SetTarget(desiredTarget->GetGUID());
+                    pet->GetCharmInfo()->SetIsCommandAttack(true);
+                    pet->GetCharmInfo()->SetIsAtStay(false);
+                    pet->GetCharmInfo()->SetIsFollowing(false);
+                    pet->GetCharmInfo()->SetIsCommandFollow(false);
+                    pet->GetCharmInfo()->SetIsReturning(false);
+                    pet->ToCreature()->AI()->AttackStart(desiredTarget);
+                }
             }
         }
     }
@@ -1138,13 +1494,16 @@ bool Aq40TwinEmperorsChooseTargetAction::Execute(Event /*event*/)
         return moved;
     }
 
+    // Proactive central anchor maintenance for caster ranged on Vek'lor (issue #5).
+    // Return to deterministic safe position immediately — do not wait for
+    // Blizzard or Arcane Burst damage to prove the position was wrong.
     if (desiredTarget == assignment.veklor && isRangedDps && !isHunter)
     {
         Position attackPos;
         if (GetTwinCentralWaitAnchor(bot, desiredTarget, attackPos) &&
-            bot->GetExactDist2d(attackPos.GetPositionX(), attackPos.GetPositionY()) > 7.0f &&
-            !bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            bot->GetExactDist2d(attackPos.GetPositionX(), attackPos.GetPositionY()) > 5.0f)
         {
+            botAI->RequestSpellInterrupt();
             return MoveTo(bot->GetMapId(), attackPos.GetPositionX(), attackPos.GetPositionY(), attackPos.GetPositionZ(),
                           false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
         }
@@ -1169,9 +1528,15 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     }
 
     Aq40Helpers::ApplyTwinTemporaryCombatStrategies(bot, botAI);
+
+    // --- Phase-driven split monitoring (issue #3) ---
+    Aq40TwinEmperors::TwinEncounterPhase const encounterPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
+    float separation = 0.0f;
+    bool healBrotherActive = false;
+
     if (assignment.veklor && assignment.veknilash)
     {
-        float const separation = assignment.veklor->GetDistance2d(assignment.veknilash);
+        separation = assignment.veklor->GetDistance2d(assignment.veknilash);
         Aq40TwinEmperors::SplitBand const splitBand = Aq40TwinEmperors::GetSplitBand(separation);
         if (splitBand != Aq40TwinEmperors::SplitBand::Stable)
         {
@@ -1179,29 +1544,71 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
             fields << "boss=twins split_band=" << GetTwinSplitBandName(splitBand)
                    << " terminal=" << (splitBand == Aq40TwinEmperors::SplitBand::Terminal ? 1 : 0)
                    << " reason=tank_swap_failure separation=" << static_cast<uint32>(separation)
+                   << " phase=" << Aq40TwinEmperors::GetPhaseToken(encounterPhase)
                    << " veklor=" << Aq40Helpers::GetAq40LogUnit(assignment.veklor)
                    << " veknilash=" << Aq40Helpers::GetAq40LogUnit(assignment.veknilash);
             Aq40Helpers::LogAq40Warn(bot, "split_risk",
                 "twins:bosses_close:" + std::string(GetTwinSplitBandName(splitBand)), fields.str(), 3000);
         }
+
+        // Detect Heal Brother and arm emergency split recovery
+        // Primary detection: poll boss spell slots (existing behavior).
+        // Secondary detection: use scripted event state from spell hook (issue #6).
+        // The scripted path fires immediately on cast, before the next engine tick.
+        for (Unit* boss : { assignment.veklor, assignment.veknilash })
+        {
+            if (!boss)
+                continue;
+
+            Spell* healSpell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            if (!healSpell)
+                healSpell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+            if (!healSpell ||
+                !Aq40SpellIds::MatchesAnySpellId(healSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }))
+                continue;
+
+            healBrotherActive = true;
+            Aq40Helpers::LogAq40Warn(bot, "heal_brother_terminal",
+                "twins:" + Aq40Helpers::GetAq40LogUnit(boss),
+                "boss=twins terminal=1 reason=tank_swap_failure caster=" + Aq40Helpers::GetAq40LogUnit(boss), 10000);
+
+            // Arm emergency split recovery on Heal Brother
+            Aq40TwinEmperors::ArmEmergencySplitRecovery(bot, separation, "heal_brother");
+        }
+
+        // Scripted Heal Brother fallback (issue #6): if the spell hook fired
+        // but the boss spell-slot poll above missed it (finished casting between
+        // ticks), still treat as active.
+        if (!healBrotherActive && Aq40TwinEmperors::IsScriptedHealBrotherActive(bot))
+        {
+            healBrotherActive = true;
+            Aq40Helpers::LogAq40Warn(bot, "heal_brother_scripted",
+                "twins:heal_brother_script",
+                "boss=twins terminal=1 reason=heal_brother_script", 10000);
+            // Emergency recovery is already armed by NoteTwinHealBrotherCast
+        }
+
+        // Arm emergency split recovery on terminal/urgent band
+        if (splitBand == Aq40TwinEmperors::SplitBand::Terminal ||
+            splitBand == Aq40TwinEmperors::SplitBand::Urgent)
+        {
+            Aq40TwinEmperors::ArmEmergencySplitRecovery(bot, separation,
+                splitBand == Aq40TwinEmperors::SplitBand::Terminal ? "terminal_band" : "urgent_band");
+        }
+
+        // Clear emergency recovery when separation is stable again
+        if (splitBand == Aq40TwinEmperors::SplitBand::Stable &&
+            Aq40TwinEmperors::IsEmergencySplitRecoveryActive(bot) &&
+            !healBrotherActive &&
+            Aq40TwinEmperors::AreBothOwnersStable(bot))
+        {
+            Aq40TwinEmperors::ClearEmergencySplitRecovery(bot);
+            Aq40Helpers::LogAq40Info(bot, "emergency_recovery_cleared",
+                "twins:recovery_complete",
+                "boss=twins separation=" + std::to_string(static_cast<uint32>(separation)), 5000);
+        }
     }
 
-    for (Unit* boss : { assignment.veklor, assignment.veknilash })
-    {
-        if (!boss)
-            continue;
-
-        Spell* healSpell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-        if (!healSpell)
-            healSpell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (!healSpell ||
-            !Aq40SpellIds::MatchesAnySpellId(healSpell->GetSpellInfo(), { Aq40SpellIds::TwinHealBrother }))
-            continue;
-
-        Aq40Helpers::LogAq40Warn(bot, "heal_brother_terminal",
-            "twins:" + Aq40Helpers::GetAq40LogUnit(boss),
-            "boss=twins terminal=1 reason=tank_swap_failure caster=" + Aq40Helpers::GetAq40LogUnit(boss), 10000);
-    }
     Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
     bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
     bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
@@ -1211,6 +1618,7 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
 
     bool const isPrimaryTank = Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
 
+    // --- Primary melee tank: phase-driven Vek'nilash management (issue #3) ---
     if (isPrimaryTank && isMeleeTank && assignment.veknilash)
     {
         PinTwinTarget(botAI, context, assignment.veknilash);
@@ -1231,24 +1639,61 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         bool const recoveryActive = Aq40TwinEmperors::RefreshMeleeRecoveryState(
             bot, botAI, assignment.veknilash, assignment.veklorSideIndex, pickupEstablished, &recoveryReason);
 
+        // Phase-driven positioning:
+        // During TeleportWindow/PickupRecovery → forced pickup anchor first
+        // During Stable with established pickup → wall-facing orientation
+        bool const inPickupPhase =
+            encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow ||
+            encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::PickupRecovery;
+
         Position tankPos;
         std::string recoveryPath;
-        bool const hasRecoveryPos = ResolveTwinPickupAnchor(
-            bot, assignment.veknilash, assignment.veklor, assignment.veknilashSideIndex, 3.0f, 16.0f, tankPos, recoveryPath);
+        bool hasRecoveryPos = false;
+
+        if (inPickupPhase || recoveryActive || !pickupEstablished)
+        {
+            // Pickup phase: move to forced pickup anchor before engaging
+            hasRecoveryPos = ResolveTwinPickupAnchor(
+                bot, assignment.veknilash, assignment.veklor, assignment.veknilashSideIndex,
+                3.0f, 16.0f, tankPos, recoveryPath);
+        }
+        else if (pickupEstablished)
+        {
+            // Stable phase with pickup: use wall-facing orientation (issue #3)
+            // Tank stands between boss and wall so Uppercut knockback is center-safe
+            hasRecoveryPos = Aq40TwinEmperors::GetVeknilashWallFacingAnchor(
+                bot, assignment.veknilash, assignment.veknilashSideIndex, tankPos);
+            if (hasRecoveryPos)
+                recoveryPath = "wall_facing";
+        }
 
         if (hasRecoveryPos)
         {
             float const distToPos = bot->GetExactDist2d(tankPos.GetPositionX(), tankPos.GetPositionY());
             if (recoveryActive || distToPos > 5.0f || range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
             {
-                std::string const reason = recoveryActive ? recoveryReason : "side_recovery";
+                std::string const reason = recoveryActive ? recoveryReason :
+                    (inPickupPhase ? "pickup_anchor" : "orientation");
                 Aq40Helpers::LogAq40Info(bot, "tank_position",
                     "twins:melee:" + recoveryPath + ":" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
                     "boss=twins tank=melee reason=" + reason +
+                    " phase=" + Aq40TwinEmperors::GetPhaseToken(encounterPhase) +
                     " staged_side=" + std::to_string(assignment.tankStageSide) +
                     " live_side=" + std::to_string(assignment.veknilashSideIndex) +
                     " path=" + recoveryPath +
                     " target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
+
+                // During pickup phase, position first before threat generation
+                if (inPickupPhase && distToPos > 3.0f)
+                {
+                    bool moved = MoveTo(bot->GetMapId(), tankPos.GetPositionX(), tankPos.GetPositionY(),
+                                        tankPos.GetPositionZ(), false, false, false, true,
+                                        MovementPriority::MOVEMENT_COMBAT, true, false);
+                    if (!moved && range > 5.0f)
+                        return true;
+                    return moved;
+                }
+
                 bool moved = MoveTo(bot->GetMapId(), tankPos.GetPositionX(), tankPos.GetPositionY(),
                                     tankPos.GetPositionZ(), false, false, false, true,
                                     MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -1259,9 +1704,11 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
         }
         else if (range > 5.0f || !bot->IsWithinLOSInMap(assignment.veknilash))
         {
-            Aq40Helpers::LogAq40Warn(bot, "movement_failure",
-                "twins:melee:no_side_anchor:" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
-                std::string("boss=twins tank=melee reason=no_side_anchor") +
+            // MoveNear as last-resort fallback with explicit logging (issue #3)
+            Aq40Helpers::LogAq40Warn(bot, "movement_fallback",
+                "twins:melee:move_near_fallback:" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash),
+                std::string("boss=twins tank=melee reason=move_near_last_resort") +
+                " phase=" + Aq40TwinEmperors::GetPhaseToken(encounterPhase) +
                 " staged_side=" + std::to_string(assignment.tankStageSide) +
                 " live_side=" + std::to_string(assignment.veknilashSideIndex) +
                 " path=move_near target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
@@ -1269,6 +1716,15 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
             if (!moved && range > 5.0f)
                 return true;
             return moved;
+        }
+
+        // In pickup phase, only attack once positioned
+        if (inPickupPhase && !pickupEstablished)
+        {
+            float const distToPickupAnchor = hasRecoveryPos ?
+                bot->GetExactDist2d(tankPos.GetPositionX(), tankPos.GetPositionY()) : 999.0f;
+            if (distToPickupAnchor > 3.0f)
+                return true;  // Still positioning, don't start threat yet
         }
 
         if (bot->GetVictim() != assignment.veknilash)
@@ -1288,18 +1744,76 @@ bool Aq40TwinEmperorsHoldSplitAction::Execute(Event /*event*/)
     if (isPrimaryTank)
         return false;
 
+    // --- Reserve tank behavior (issue #3) ---
+    // Reserve tanks stay parked and do not improvise.
+    // Reserves are promoted only by encounter state (ProcessReserveTakeover),
+    // not by incidental aggro.
     Aq40TwinEmperors::ClearLocalRti(botAI);
     if (bot->GetVictim())
         bot->AttackStop();
 
     uint32 const sideIndex = Aq40Helpers::GetStableTwinRoleIndex(bot, botAI);
+
+    // During teleport window: move receiving-side reserve tanks inward (issue #3)
+    bool const teleportWindowActive =
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow;
+
+    if (teleportWindowActive && isMeleeTank && assignment.veklor && assignment.veknilash)
+    {
+        // Backup melee tank on the receiving side: move inward so they are
+        // closest valid unit when Vek'nilash arrives
+        Position receivingAnchor;
+        if (Aq40TwinEmperors::GetMeleeReceivingAnchor(bot, assignment.veklor, assignment.veknilash,
+                sideIndex, receivingAnchor))
+        {
+            float const distToReceiving =
+                bot->GetExactDist2d(receivingAnchor.GetPositionX(), receivingAnchor.GetPositionY());
+            if (distToReceiving > 4.0f)
+            {
+                Aq40Helpers::LogAq40Info(bot, "tank_position",
+                    "twins:melee_receiving:" + std::to_string(sideIndex),
+                    "boss=twins role=melee_receiving side=" + std::to_string(sideIndex) +
+                    " phase=teleport_window");
+                return MoveTo(bot->GetMapId(), receivingAnchor.GetPositionX(),
+                              receivingAnchor.GetPositionY(), receivingAnchor.GetPositionZ(),
+                              false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+            }
+        }
+    }
+
+    // During teleport window: warlock receiving side geometry (issue #3)
+    // Designated warlock tank on receiving side moves inward toward melee tank
+    // so they are second-closest valid unit for immediate Searing Pain
+    if (teleportWindowActive && isWarlockTank && assignment.veklor && assignment.veknilash)
+    {
+        Position receivingAnchor;
+        if (Aq40TwinEmperors::GetWarlockReceivingAnchor(bot, assignment.veklor, assignment.veknilash,
+                sideIndex, receivingAnchor))
+        {
+            float const distToReceiving =
+                bot->GetExactDist2d(receivingAnchor.GetPositionX(), receivingAnchor.GetPositionY());
+            if (distToReceiving > 4.0f)
+            {
+                Aq40Helpers::LogAq40Info(bot, "tank_position",
+                    "twins:warlock_receiving:" + std::to_string(sideIndex),
+                    "boss=twins role=warlock_receiving side=" + std::to_string(sideIndex) +
+                    " phase=teleport_window");
+                return MoveTo(bot->GetMapId(), receivingAnchor.GetPositionX(),
+                              receivingAnchor.GetPositionY(), receivingAnchor.GetPositionZ(),
+                              false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
+            }
+        }
+    }
+
+    // Default: park at side anchor
     Position anchor = GetTwinSideAnchor(sideIndex);
 
     if (bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) > 8.0f)
     {
         Aq40Helpers::LogAq40Info(bot, "tank_position",
             "twins:backup:" + std::to_string(sideIndex),
-            "boss=twins role=backup side=" + std::to_string(sideIndex));
+            "boss=twins role=backup side=" + std::to_string(sideIndex) +
+            " phase=" + Aq40TwinEmperors::GetPhaseToken(encounterPhase));
         return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
                       anchor.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -1352,14 +1866,19 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return false;
 
     Unit* veklor = assignment.veklor;
+    Aq40TwinEmperors::TwinEncounterPhase const encounterPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
 
     if (AI_VALUE(Unit*, "current target") != veklor)
         PinTwinTarget(botAI, context, veklor);
     Aq40TwinEmperors::SyncLocalRti(botAI, veklor, assignment.veklor, assignment.veknilash, nullptr);
 
-    float const desiredRange = 24.0f;
-    float const minRange = 19.0f;
-    float const maxRange = 30.0f;
+    // Named constants for warlock tank positioning (issue #3)
+    // desiredRange: optimal Searing Pain cast position
+    // minRange: Arcane Burst safety boundary
+    // maxRange: outer limit for threat generation
+    float constexpr kWarlockDesiredRange = 24.0f;
+    float constexpr kWarlockMinRange = 19.0f;
+    float constexpr kWarlockMaxRange = 30.0f;
 
     bool const botHasPickup =
         Aq40TwinEmperors::HasBossPickupAggro(bot, veklor) &&
@@ -1370,6 +1889,10 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         Aq40TwinEmperors::ClearTwinPickupState(bot);
     }
 
+    bool const inPickupPhase =
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow ||
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::PickupRecovery;
+
     float const rangeToVeklor = bot->GetDistance2d(veklor);
     bool const hasLOS = bot->IsWithinLOSInMap(veklor);
     auto moveWarlockSideCastAnchor = [&](std::string const& reason) -> bool
@@ -1377,7 +1900,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         Position anchorPosition;
         std::string recoveryPath;
         if (!ResolveTwinPickupAnchor(bot, veklor, assignment.oppositeEmperor, assignment.veklorSideIndex,
-                                     desiredRange, 20.0f, anchorPosition, recoveryPath))
+                                     kWarlockDesiredRange, 20.0f, anchorPosition, recoveryPath))
             return false;
 
         float const distToAnchor = bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY());
@@ -1387,6 +1910,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         Aq40Helpers::LogAq40Info(bot, "tank_position",
             "twins:warlock_side_anchor:" + reason + ":" + recoveryPath + ":" + Aq40Helpers::GetAq40LogUnit(veklor),
             "boss=twins tank=warlock reason=" + reason +
+            " phase=" + Aq40TwinEmperors::GetPhaseToken(encounterPhase) +
             " path=" + recoveryPath +
             " target=" + Aq40Helpers::GetAq40LogUnit(veklor));
         MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
@@ -1395,9 +1919,37 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return true;
     };
 
-    if (rangeToVeklor < minRange && moveWarlockSideCastAnchor("arcane_burst_range"))
+    // During pickup phase: move to forced anchor position first,
+    // start threat gen only after anchor step is satisfied (issue #3)
+    if (inPickupPhase && !botHasPickup)
+    {
+        Position anchorPosition;
+        std::string recoveryPath;
+        if (ResolveTwinPickupAnchor(bot, veklor, assignment.oppositeEmperor, assignment.veklorSideIndex,
+                                    kWarlockDesiredRange, 20.0f, anchorPosition, recoveryPath))
+        {
+            float const distToAnchor =
+                bot->GetExactDist2d(anchorPosition.GetPositionX(), anchorPosition.GetPositionY());
+            if (distToAnchor > 3.0f)
+            {
+                Aq40Helpers::LogAq40Info(bot, "tank_position",
+                    "twins:warlock_pickup_anchor:" + recoveryPath + ":" + Aq40Helpers::GetAq40LogUnit(veklor),
+                    "boss=twins tank=warlock reason=pickup_anchor" +
+                    std::string(" phase=") + Aq40TwinEmperors::GetPhaseToken(encounterPhase) +
+                    " path=" + recoveryPath +
+                    " target=" + Aq40Helpers::GetAq40LogUnit(veklor));
+                MoveTo(bot->GetMapId(), anchorPosition.GetPositionX(), anchorPosition.GetPositionY(),
+                       anchorPosition.GetPositionZ(), false, false, false, true,
+                       MovementPriority::MOVEMENT_COMBAT, true, false);
+                return true;
+            }
+        }
+        // Anchor satisfied or not found — proceed to threat generation below
+    }
+
+    if (rangeToVeklor < kWarlockMinRange && moveWarlockSideCastAnchor("arcane_burst_range"))
         return true;
-    if (rangeToVeklor <= maxRange && hasLOS)
+    if (rangeToVeklor <= kWarlockMaxRange && hasLOS)
     {
         if (botAI->CanCastSpell("searing pain", veklor))
         {
@@ -1426,7 +1978,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
             Attack(veklor);
         }
 
-        if (rangeToVeklor < minRange)
+        if (rangeToVeklor < kWarlockMinRange)
             moveWarlockSideCastAnchor("arcane_burst_range");
         else
             moveWarlockSideCastAnchor("side_anchor");
@@ -1434,7 +1986,7 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
         return true;
     }
 
-    if (rangeToVeklor > maxRange || !hasLOS)
+    if (rangeToVeklor > kWarlockMaxRange || !hasLOS)
     {
         if (!botAI->HasAura("shadow ward", bot) && botAI->CanCastSpell("shadow ward", bot))
         {
@@ -1450,11 +2002,130 @@ bool Aq40TwinEmperorsWarlockTankAction::Execute(Event /*event*/)
             "twins:warlock_approach:" + Aq40Helpers::GetAq40LogUnit(veklor),
             "boss=twins tank=warlock reason=approach target=" + Aq40Helpers::GetAq40LogUnit(veklor));
         if (!moveWarlockSideCastAnchor("approach"))
-            MoveNear(veklor, desiredRange, MovementPriority::MOVEMENT_COMBAT);
+        {
+            // MoveNear as last-resort fallback with logging (issue #3)
+            Aq40Helpers::LogAq40Warn(bot, "movement_fallback",
+                "twins:warlock:move_near_fallback:" + Aq40Helpers::GetAq40LogUnit(veklor),
+                "boss=twins tank=warlock reason=move_near_last_resort target=" +
+                Aq40Helpers::GetAq40LogUnit(veklor));
+            MoveNear(veklor, kWarlockDesiredRange, MovementPriority::MOVEMENT_COMBAT);
+        }
         return true;
     }
 
     moveWarlockSideCastAnchor("side_anchor");
+
+    return true;
+}
+
+// --- Emergency Split Recovery Action (issue #3) ---
+// Fires when separation enters urgent/terminal bands or Heal Brother fires.
+// Stops raid DPS on both bosses, stops pets, clears unsafe targets, and
+// forces both tanks through re-separation routing until the split is stable.
+bool Aq40TwinEmperorsEmergencySplitRecoveryAction::Execute(Event /*event*/)
+{
+    if (!Aq40TwinEmperors::IsEmergencySplitRecoveryActive(bot))
+        return false;
+
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI,
+        context->GetValue<GuidVector>("attackers")->Get());
+    Aq40Helpers::TwinAssignments assignment = Aq40Helpers::GetTwinAssignments(bot, botAI, encounterUnits);
+    if (!assignment.veklor && !assignment.veknilash)
+        return false;
+
+    Aq40Helpers::TwinRoleCohort const cohort = Aq40Helpers::GetTwinRoleCohort(bot, botAI);
+    bool const isWarlockTank = cohort == Aq40Helpers::TwinRoleCohort::WarlockTank;
+    bool const isMeleeTank = cohort == Aq40Helpers::TwinRoleCohort::MeleeTank;
+    bool const isPrimaryTank = Aq40Helpers::IsTwinPrimaryTankOnActiveBoss(bot, assignment);
+
+    // For primary tanks: force re-separation routing
+    if (isPrimaryTank)
+    {
+        if (isMeleeTank && assignment.veknilash)
+        {
+            // Pull Vek'nilash outward toward the wall/side
+            Position recoveryAnchor;
+            if (Aq40TwinEmperors::GetEmergencySplitRecoveryAnchor(bot, assignment.veknilash, true, recoveryAnchor))
+            {
+                float const distToAnchor =
+                    bot->GetExactDist2d(recoveryAnchor.GetPositionX(), recoveryAnchor.GetPositionY());
+                if (distToAnchor > 3.0f)
+                {
+                    Aq40Helpers::LogAq40Warn(bot, "emergency_split_recovery",
+                        "twins:melee_tank_re_separate",
+                        "boss=twins tank=melee reason=emergency_split_recovery"
+                        " target=" + Aq40Helpers::GetAq40LogUnit(assignment.veknilash), 3000);
+                    return MoveTo(bot->GetMapId(), recoveryAnchor.GetPositionX(),
+                                  recoveryAnchor.GetPositionY(), recoveryAnchor.GetPositionZ(),
+                                  false, false, false, true,
+                                  MovementPriority::MOVEMENT_COMBAT, true, false);
+                }
+            }
+            // Already at anchor — keep attacking to hold threat
+            if (bot->GetVictim() != assignment.veknilash)
+                Attack(assignment.veknilash);
+            return true;
+        }
+
+        if (isWarlockTank && assignment.veklor)
+        {
+            // Pull Vek'lor outward
+            Position recoveryAnchor;
+            if (Aq40TwinEmperors::GetEmergencySplitRecoveryAnchor(bot, assignment.veklor, false, recoveryAnchor))
+            {
+                float const distToAnchor =
+                    bot->GetExactDist2d(recoveryAnchor.GetPositionX(), recoveryAnchor.GetPositionY());
+                if (distToAnchor > 3.0f)
+                {
+                    Aq40Helpers::LogAq40Warn(bot, "emergency_split_recovery",
+                        "twins:warlock_tank_re_separate",
+                        "boss=twins tank=warlock reason=emergency_split_recovery"
+                        " target=" + Aq40Helpers::GetAq40LogUnit(assignment.veklor), 3000);
+                    return MoveTo(bot->GetMapId(), recoveryAnchor.GetPositionX(),
+                                  recoveryAnchor.GetPositionY(), recoveryAnchor.GetPositionZ(),
+                                  false, false, false, true,
+                                  MovementPriority::MOVEMENT_COMBAT, true, false);
+                }
+            }
+            // Already at anchor — hold position with threat
+            if (botAI->CanCastSpell("searing pain", assignment.veklor))
+                return botAI->CastSpell("searing pain", assignment.veklor);
+            return true;
+        }
+    }
+
+    // For all non-tank roles (and non-primary tanks):
+    // Enforce pet policy, stop raid DPS on both bosses, clear unsafe targets (issue #5)
+    {
+        Aq40TwinEmperors::TwinEncounterPhase const petPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
+        EnforceTwinPetPolicy(bot, botAI, petPhase, assignment.veklor, nullptr);
+    }
+    if (assignment.veklor)
+        StopTwinDamageOn(bot, botAI, context, assignment.veklor);
+    if (assignment.veknilash)
+        StopTwinDamageOn(bot, botAI, context, assignment.veknilash);
+
+    Aq40TwinEmperors::ClearLocalRti(botAI);
+
+    // Move to room center wait position
+    Position waitAnchor;
+    if (assignment.veklor)
+        GetTwinCentralWaitAnchor(bot, assignment.veklor, waitAnchor);
+    else
+        waitAnchor = Aq40Helpers::GetTwinRoomCenterPosition();
+
+    float const distToWait = bot->GetExactDist2d(waitAnchor.GetPositionX(), waitAnchor.GetPositionY());
+    if (distToWait > 5.0f)
+    {
+        Aq40Helpers::LogAq40Info(bot, "emergency_split_recovery",
+            "twins:dps_hold:" + Aq40Helpers::GetAq40LogRole(bot, botAI),
+            "boss=twins reason=emergency_split_dps_hold role=" +
+            Aq40Helpers::GetAq40LogRole(bot, botAI), 3000);
+        botAI->RequestSpellInterrupt();
+        return MoveTo(bot->GetMapId(), waitAnchor.GetPositionX(), waitAnchor.GetPositionY(),
+                      waitAnchor.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true, false);
+    }
 
     return true;
 }

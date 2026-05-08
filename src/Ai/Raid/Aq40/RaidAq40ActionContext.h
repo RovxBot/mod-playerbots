@@ -36,6 +36,7 @@ public:
         creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
         creators["aq40 twin emperors pre pull stage"] = &RaidAq40ActionContext::twin_emperors_pre_pull_stage;
         creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
+        creators["aq40 twin emperors emergency split recovery"] = &RaidAq40ActionContext::twin_emperors_emergency_split_recovery;
         creators["aq40 ouro choose target"] = &RaidAq40ActionContext::ouro_choose_target;
         creators["aq40 ouro hold melee contact"] = &RaidAq40ActionContext::ouro_hold_melee_contact;
         creators["aq40 ouro avoid sweep"] = &RaidAq40ActionContext::ouro_avoid_sweep;
@@ -128,6 +129,10 @@ private:
     static Action* twin_emperors_warlock_tank(PlayerbotAI* botAI)
     {
         return new Aq40TwinEmperorsWarlockTankAction(botAI);
+    }
+    static Action* twin_emperors_emergency_split_recovery(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsEmergencySplitRecoveryAction(botAI);
     }
     static Action* ouro_choose_target(PlayerbotAI* botAI) { return new Aq40OuroChooseTargetAction(botAI); }
     static Action* ouro_hold_melee_contact(PlayerbotAI* botAI)

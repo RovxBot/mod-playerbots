@@ -329,6 +329,24 @@ float Aq40OuroMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
+// ===========================================================================
+// Twin Emperors multiplier.
+//
+// VALIDATION: see TWIN_EMPERORS_VALIDATION.md for the full checklist.
+//
+// This multiplier enforces:
+//   - Pre-pull staging: only the staging action runs; all else suppressed.
+//   - DPS holds: offensive actions blocked until both owners stable + safe split.
+//   - Hazard suppression: movement/cast blocked during scripted events.
+//   - Tank recovery: melee approach blocked during Uppercut/Unbalancing Strike.
+//   - Taunt immunity: all taunt actions return 0.0f.
+//   - Pet safety: PetAttackAction always suppressed.
+//   - Warlock tank isolation: class AI offensive casts blocked.
+//
+// Failure target: zero executor thrash after teleport.
+// If bots flip-flop between actions post-teleport, the hold or ownership
+// logic in this multiplier needs tightening, not more trigger spam.
+// ===========================================================================
 float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
 {
     if (!action || !Aq40BossHelper::IsInAq40(bot))
@@ -379,7 +397,8 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         actionName == "aq40 twin emperors avoid veklor" ||
         actionName == "aq40 twin emperors pre pull stage" ||
         actionName == "aq40 twin emperors hold split" ||
-        actionName == "aq40 twin emperors warlock tank";
+        actionName == "aq40 twin emperors warlock tank" ||
+        actionName == "aq40 twin emperors emergency split recovery";
     if (isTwinControlAction)
         return 1.0f;
 
@@ -438,6 +457,66 @@ float Aq40TwinEmperorsMultiplier::GetValue(Action* action)
         {
             return 0.0f;
         }
+    }
+
+    // --- Scripted event suppression (issue #6) ---
+    // During active scripted hazard windows, suppress generic AI that would
+    // override encounter-owned movement or combat behavior.
+    Aq40TwinEmperors::TwinEncounterPhase const encounterPhase = Aq40TwinEmperors::GetEncounterPhase(bot);
+    bool const scriptedRecoveryPhase =
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::EmergencySplitRecovery ||
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::PickupRecovery ||
+        encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow;
+
+    bool const scriptedHazardActive =
+        Aq40TwinEmperors::IsScriptedArcaneBurstActive(bot) ||
+        Aq40TwinEmperors::IsScriptedBlizzardActive(bot) ||
+        Aq40TwinEmperors::IsScriptedHealBrotherActive(bot);
+
+    bool const scriptedTankRecovery = Aq40TwinEmperors::IsScriptedTankRecoveryActive(bot);
+
+    if (scriptedRecoveryPhase || scriptedHazardActive)
+    {
+        // During recovery phases or active hazards, suppress generic movement
+        // so encounter actions maintain movement ownership.
+        if (!isWarlockTank && !isMeleeTank)
+        {
+            if (dynamic_cast<MovementAction*>(action) && !isTwinControlAction)
+                return 0.0f;
+
+            if (dynamic_cast<FollowAction*>(action) ||
+                dynamic_cast<FleeAction*>(action) ||
+                dynamic_cast<CombatFormationMoveAction*>(action))
+                return 0.0f;
+
+            if (dynamic_cast<DpsAssistAction*>(action) ||
+                dynamic_cast<TankAssistAction*>(action) ||
+                dynamic_cast<AttackRtiTargetAction*>(action))
+                return 0.0f;
+
+            if (dynamic_cast<PetAttackAction*>(action))
+                return 0.0f;
+
+            // Suppress current-target casts during hazards so bots don't
+            // continue casting on a boss they should be fleeing from.
+            if (scriptedHazardActive)
+            {
+                CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+                if (spellAction && spellAction->GetTargetName() == "current target")
+                    return 0.0f;
+            }
+        }
+    }
+
+    // During scripted tank recovery (Uppercut / Unbalancing Strike),
+    // suppress melee movement toward the boss for non-tank melee so they
+    // don't stack on Vek'nilash and eat cleave damage.
+    if (scriptedTankRecovery && !isMeleeTank && !isWarlockTank && !botAI->IsHeal(bot) &&
+        !PlayerbotAI::IsRanged(bot))
+    {
+        if (dynamic_cast<ReachTargetAction*>(action) ||
+            dynamic_cast<CastReachTargetSpellAction*>(action))
+            return 0.0f;
     }
 
     // Twin Emperors are immune to taunt.

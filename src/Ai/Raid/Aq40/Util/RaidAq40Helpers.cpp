@@ -798,11 +798,47 @@ TwinEncounterSnapshot BuildTwinEncounterSnapshot(Player* bot, PlayerbotAI* botAI
 
             bossState.currentOwnerGuid = ResolveTwinCurrentBossOwnerGuid(
                 bot, roleMembers, bossState.expectedOwnerGuid, bossState.reserveOwnerGuid, boss, isVeklor);
+
+            // Feed ownership into the encounter state machine
+            Aq40TwinEmperors::UpdateBossOwnership(bot, isVeklor, bossState.expectedOwnerGuid,
+                                                  bossState.reserveOwnerGuid, bossState.currentOwnerGuid, boss);
         };
 
         assignBossRoleState(snapshot.veklor, snapshot.lockedWarlocks, veklor, sideState.veklorSideIndex, true);
         assignBossRoleState(snapshot.veknilash, snapshot.lockedMeleeTanks, veknilash, sideState.veknilashSideIndex,
                             false);
+
+        // Detect Heal Brother active state
+        bool healBrotherActive = false;
+        {
+            Spell* veklorSpell = veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            Spell* veknilashSpell = veknilash->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            healBrotherActive =
+                (veklorSpell && veklorSpell->GetSpellInfo() &&
+                 veklorSpell->GetSpellInfo()->Id == Aq40SpellIds::TwinHealBrother) ||
+                (veknilashSpell && veknilashSpell->GetSpellInfo() &&
+                 veknilashSpell->GetSpellInfo()->Id == Aq40SpellIds::TwinHealBrother);
+        }
+
+        // Update the encounter state machine phase
+        Aq40TwinEmperors::UpdateEncounterPhase(bot, veklor, veknilash, sideState.separation,
+                                               snapshot.encounterLive, healBrotherActive);
+
+        // Populate snapshot from state machine
+        Aq40TwinEmperors::TwinEncounterStateMachine const* stateMachine =
+            Aq40TwinEmperors::GetEncounterStateMachine(bot);
+        if (stateMachine)
+        {
+            snapshot.encounterPhase = stateMachine->phase;
+            snapshot.veklor.candidateOwnerGuid = stateMachine->veklor.candidateOwnerGuid;
+            snapshot.veklor.stableOwnerGuid = stateMachine->veklor.stableOwnerGuid;
+            snapshot.veklor.stableSinceMs = stateMachine->veklor.stableSinceMs;
+            snapshot.veklor.lastValidAtMs = stateMachine->veklor.lastValidAtMs;
+            snapshot.veknilash.candidateOwnerGuid = stateMachine->veknilash.candidateOwnerGuid;
+            snapshot.veknilash.stableOwnerGuid = stateMachine->veknilash.stableOwnerGuid;
+            snapshot.veknilash.stableSinceMs = stateMachine->veknilash.stableSinceMs;
+            snapshot.veknilash.lastValidAtMs = stateMachine->veknilash.lastValidAtMs;
+        }
 
         Aq40TwinEmperors::ThreatHoldState holdState;
         bool const holdActive = snapshot.encounterLive && Aq40TwinEmperors::GetActiveThreatHold(bot, holdState);
@@ -814,18 +850,33 @@ TwinEncounterSnapshot BuildTwinEncounterSnapshot(Player* bot, PlayerbotAI* botAI
             snapshot.veknilash.reserveOwnerGuid, snapshot.encounterLive,
             holdActive || !snapshot.veknilash.currentOwnerGuid);
 
-        if (!snapshot.supported || !snapshot.veklor.expectedOwnerGuid || !snapshot.veknilash.expectedOwnerGuid)
+        // Derive strategy mode from encounter phase
+        if (snapshot.encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::Degraded ||
+            !snapshot.supported || !snapshot.veklor.expectedOwnerGuid || !snapshot.veknilash.expectedOwnerGuid)
         {
             snapshot.strategyMode = TwinStrategyMode::Degraded;
         }
-        else if (snapshot.encounterLive &&
-                 (holdActive || !snapshot.veklor.currentOwnerGuid || !snapshot.veknilash.currentOwnerGuid))
+        else if (snapshot.encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::PickupRecovery ||
+                 snapshot.encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::TeleportWindow ||
+                 snapshot.encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::EmergencySplitRecovery)
         {
             snapshot.strategyMode = TwinStrategyMode::PickupRecovery;
         }
         else
         {
             snapshot.strategyMode = TwinStrategyMode::Normal;
+        }
+
+        // If previous-room Defenders are still active during a live encounter,
+        // force degraded mode — the clean Twin opener contract is broken.
+        if (snapshot.encounterLive && ArePreviousRoomDefendersActive(bot, botAI))
+        {
+            snapshot.strategyMode = TwinStrategyMode::Degraded;
+            if (snapshot.unsupportedReason.empty())
+                snapshot.unsupportedReason = "defenders_active_during_encounter";
+            LogAq40Warn(bot, "twin_pull_safety",
+                        "twins:defender_during_encounter:" + std::to_string(bot->GetMap()->GetInstanceId()),
+                        "boss=twins gate=defenders_active phase=live_encounter", 30000);
         }
     }
     else
@@ -1382,6 +1433,58 @@ bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment
     return oppositeDistance + (kWrongSideMargin + 2.0f) < sideDistance;
 }
 
+Position GetTwinHealerCenterToSideReentryAnchor(uint32 sideIndex)
+{
+    // Midway between center and the side healer anchor, used when a healer is
+    // fully displaced to the wrong side or center and needs a staged re-entry.
+    Position const sideHealer = GetTwinRoomSideHealerAnchor(sideIndex);
+    Position anchor;
+    anchor.Relocate(
+        (kTwinRoomCenterX + sideHealer.GetPositionX()) * 0.5f,
+        (kTwinRoomCenterY + sideHealer.GetPositionY()) * 0.5f,
+        (kTwinRoomCenterZ + sideHealer.GetPositionZ()) * 0.5f);
+    return anchor;
+}
+
+bool GetTwinHealerLocalTankSupportAnchor(Player* bot, PlayerbotAI* botAI,
+                                         TwinAssignments const& assignment, Position& outAnchor)
+{
+    if (!bot || !assignment.sideEmperor)
+        return false;
+
+    // Position near the side tank, offset toward center so the healer stays in
+    // healing range without crowding melee.
+    float const bossX = assignment.sideEmperor->GetPositionX();
+    float const bossY = assignment.sideEmperor->GetPositionY();
+    float const dirX = kTwinRoomCenterX - bossX;
+    float const dirY = kTwinRoomCenterY - bossY;
+    float const length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 0.1f)
+        return false;
+
+    float constexpr kSupportOffset = 20.0f;
+    outAnchor.Relocate(
+        bossX + (dirX / length) * kSupportOffset,
+        bossY + (dirY / length) * kSupportOffset,
+        assignment.sideEmperor->GetPositionZ());
+    return true;
+}
+
+bool ShouldTwinHealerFallbackToRaidMode(TwinEncounterSnapshot const& snapshot,
+                                         TwinAssignments const& assignment)
+{
+    // Fallback to raid-healer mode is only allowed when the encounter has
+    // explicitly entered Degraded mode (e.g. tank death).  Temporary ownership
+    // ambiguity during a normal pickup window must not trigger fallback.
+    if (snapshot.strategyMode == TwinStrategyMode::Degraded)
+        return true;
+
+    if (snapshot.encounterPhase == Aq40TwinEmperors::TwinEncounterPhase::Degraded)
+        return true;
+
+    return false;
+}
+
 bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI)
 {
     if (!bot || !botAI)
@@ -1477,6 +1580,7 @@ bool GetTwinEncounterSnapshot(Player* bot, PlayerbotAI* botAI, GuidVector const&
     std::ostringstream lockFields;
     lockFields << "boss=twins supported=" << (snapshot.supported ? 1 : 0)
                << " mode=" << GetTwinStrategyModeToken(snapshot.strategyMode)
+               << " phase=" << Aq40TwinEmperors::GetPhaseToken(snapshot.encounterPhase)
                << " warlocks=" << snapshot.lockedWarlocks.size()
                << " melee_tanks=" << snapshot.lockedMeleeTanks.size()
                << " healers=" << snapshot.healerSidesByGuid.size()
@@ -1484,10 +1588,13 @@ bool GetTwinEncounterSnapshot(Player* bot, PlayerbotAI* botAI, GuidVector const&
                << " melee_members=" << BuildTwinRoleLockMembers(bot, snapshot.lockedMeleeTanks)
                << " veklor_expected=" << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veklor.expectedOwnerGuid))
                << " veklor_current=" << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veklor.currentOwnerGuid))
+               << " veklor_stable=" << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veklor.stableOwnerGuid))
                << " veknilash_expected="
                << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veknilash.expectedOwnerGuid))
                << " veknilash_current="
-               << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veknilash.currentOwnerGuid));
+               << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veknilash.currentOwnerGuid))
+               << " veknilash_stable="
+               << GetAq40LogUnit(ObjectAccessor::FindConnectedPlayer(snapshot.veknilash.stableOwnerGuid));
     LogAq40Info(bot, "twin_role_lock", "twins:role_lock:" + std::to_string(instanceId), lockFields.str(), 30000);
 
     if (!snapshot.supported)
@@ -1948,6 +2055,18 @@ bool IsTwinPlayerPullAuthorized(Player* bot, PlayerbotAI* botAI, GuidVector cons
     if (!group)
         return false;
 
+    // Block pull authorization while previous-room Anubisath Defenders are
+    // still relevant.  If a player pulls the bosses anyway,
+    // IsTwinCombatInProgress will still return true and the active trigger
+    // will fire in degraded mode.
+    if (ArePreviousRoomDefendersActive(bot, botAI))
+    {
+        uint32 const instanceId = bot->GetMap()->GetInstanceId();
+        LogAq40Warn(bot, "twin_pull_safety", "twins:defender_gate_auth:" + std::to_string(instanceId),
+                    "boss=twins gate=defenders_active phase=pull_auth", 30000);
+        return false;
+    }
+
     GuidVector observedUnits = BuildTwinObservedUnits(bot, botAI, attackers);
     uint32 const instanceId = bot->GetMap()->GetInstanceId();
     for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -2010,6 +2129,80 @@ bool IsTwinCombatInProgress(Player* bot, PlayerbotAI* botAI, GuidVector const& a
     return false;
 }
 
+bool ArePreviousRoomDefendersActive(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    // Check attackers first — any defender the bot is already aware of via
+    // the normal combat list means there is an active trash fight.
+    GuidVector const attackers =
+        botAI->GetAiObjectContext()
+            ? botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get()
+            : GuidVector{};
+    if (Aq40BossHelper::HasAnyNamedUnit(botAI, attackers, { "anubisath defender" }))
+        return true;
+
+    // Scan the wider no-LOS visible list for live defenders that may not yet
+    // be on the attackers list (e.g. evading or about to reaggro).
+    GuidVector const& possibleTargetsNoLos =
+        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (ObjectGuid const guid : possibleTargetsNoLos)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsInWorld() || !unit->IsAlive() || unit->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (!Aq40BossHelper::IsUnitNamedAny(botAI, unit, { "anubisath defender" }))
+            continue;
+
+        // Defender is alive — relevant if it is in combat, targeting someone,
+        // or within 200y of the Twin room center (close enough to join).
+        if (unit->IsInCombat() || unit->GetVictim() || unit->GetTarget())
+            return true;
+
+        float const distToRoom = unit->GetDistance(kTwinRoomCenterX, kTwinRoomCenterY, kTwinRoomCenterZ);
+        if (distToRoom <= 200.0f)
+            return true;
+    }
+
+    // Also check if any group member is still fighting a defender.
+    Group const* group = bot->GetGroup();
+    if (group)
+    {
+        uint32 const instanceId = bot->GetMap()->GetInstanceId();
+        for (GroupReference const* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+                continue;
+            if (member->GetMap() && member->GetMap()->GetInstanceId() != instanceId)
+                continue;
+
+            if (!member->IsInCombat())
+                continue;
+
+            Unit* victim = member->GetVictim();
+            if (victim && Aq40BossHelper::IsUnitNamedAny(botAI, victim, { "anubisath defender" }))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsTwinSupportedCompAvailable(Player* bot, PlayerbotAI* botAI)
+{
+    if (!bot || !botAI || !bot->GetGroup())
+        return false;
+
+    TwinRoleLock roleLock;
+    if (!GetTwinRoleLock(bot, botAI, roleLock))
+        return false;
+
+    return roleLock.supported;
+}
+
 bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
 {
     if (!bot || !botAI || !bot->IsAlive())
@@ -2021,7 +2214,21 @@ bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI)
     if (bot->IsInCombat() || Aq40BossHelper::IsEncounterCombatActive(bot) || IsTwinRaidCombatActiveInternal(bot))
         return false;
 
-    return HasTwinVisibleEmperors(bot, botAI);
+    if (!HasTwinVisibleEmperors(bot, botAI))
+        return false;
+
+    // Previous-room Anubisath Defenders must be cleared before Twin pre-pull
+    // staging can activate.  If defenders are alive, in combat, or close enough
+    // to join the fight, block the Twin opener entirely.
+    if (ArePreviousRoomDefendersActive(bot, botAI))
+    {
+        uint32 const instanceId = bot->GetMap()->GetInstanceId();
+        LogAq40Warn(bot, "twin_pull_safety", "twins:defender_gate:" + std::to_string(instanceId),
+                    "boss=twins gate=defenders_active phase=prepull", 30000);
+        return false;
+    }
+
+    return true;
 }
 
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor)
@@ -2088,6 +2295,39 @@ bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignm
     auto const lastHoldItr = sTwinLastThreatHoldByBot.find(botGuid);
     if (holdActive)
     {
+        // Check whether the hold should be released early based on stable ownership
+        bool healBrotherActive = false;
+        float separation = 0.0f;
+        if (assignment.veklor && assignment.veknilash)
+        {
+            separation = assignment.veklor->GetDistance2d(assignment.veknilash);
+
+            Spell* veklorSpell = assignment.veklor->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            Spell* veknilashSpell = assignment.veknilash->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            healBrotherActive =
+                (veklorSpell && veklorSpell->GetSpellInfo() &&
+                 veklorSpell->GetSpellInfo()->Id == Aq40SpellIds::TwinHealBrother) ||
+                (veknilashSpell && veknilashSpell->GetSpellInfo() &&
+                 veknilashSpell->GetSpellInfo()->Id == Aq40SpellIds::TwinHealBrother);
+        }
+
+        // Do not release hold unless all criteria are met:
+        // both emperors stable, split above urgent, no Heal Brother
+        if (Aq40TwinEmperors::ShouldReleaseThreatHold(bot, separation, healBrotherActive))
+        {
+            // Hold can be released — log and clear
+            if (lastHoldItr != sTwinLastThreatHoldByBot.end())
+            {
+                std::ostringstream fields;
+                fields << "boss=twins opened_ms=" << lastHoldItr->second.openedAtMs
+                       << " release=stable_ownership";
+                LogAq40Info(bot, "pickup_window_released",
+                    "twins:released:" + std::to_string(lastHoldItr->second.openedAtMs), fields.str(), 3000);
+                sTwinLastThreatHoldByBot.erase(lastHoldItr);
+            }
+            return false;
+        }
+
         bool const holdChanged = lastHoldItr == sTwinLastThreatHoldByBot.end() ||
             lastHoldItr->second.type != holdState.type ||
             lastHoldItr->second.openedAtMs != holdState.openedAtMs ||
@@ -2103,7 +2343,8 @@ bool IsTwinPostSwapThreatHoldActive(Player* bot, PlayerbotAI* botAI, TwinAssignm
             std::ostringstream fields;
             fields << "boss=twins hold=" << holdType
                    << " opened_ms=" << holdState.openedAtMs
-                   << " until_ms=" << holdState.untilMs;
+                   << " until_ms=" << holdState.untilMs
+                   << " phase=" << Aq40TwinEmperors::GetPhaseToken(Aq40TwinEmperors::GetEncounterPhase(bot));
             LogAq40Info(bot, "pickup_window_open",
                 "twins:" + holdType + ":" + std::to_string(holdState.openedAtMs), fields.str(), 3000);
         }

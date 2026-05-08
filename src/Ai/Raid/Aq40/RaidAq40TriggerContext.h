@@ -32,6 +32,7 @@ public:
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
         creators["aq40 twin emperors room entry"] = &RaidAq40TriggerContext::twin_emperors_room_entry;
         creators["aq40 twin emperors active"] = &RaidAq40TriggerContext::twin_emperors_active;
+        creators["aq40 twin emperors emergency split"] = &RaidAq40TriggerContext::twin_emperors_emergency_split;
         creators["aq40 ouro active"] = &RaidAq40TriggerContext::ouro_active;
         creators["aq40 ouro scarabs present"] = &RaidAq40TriggerContext::ouro_scarabs_present;
         creators["aq40 ouro sweep risk"] = &RaidAq40TriggerContext::ouro_sweep_risk;
@@ -81,6 +82,10 @@ private:
         return new Aq40TwinEmperorsRoomEntryTrigger(botAI);
     }
     static Trigger* twin_emperors_active(PlayerbotAI* botAI) { return new Aq40TwinEmperorsActiveTrigger(botAI); }
+    static Trigger* twin_emperors_emergency_split(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinEmperorsEmergencySplitTrigger(botAI);
+    }
     static Trigger* ouro_active(PlayerbotAI* botAI) { return new Aq40OuroActiveTrigger(botAI); }
     static Trigger* ouro_scarabs_present(PlayerbotAI* botAI) { return new Aq40OuroScarabsTrigger(botAI); }
     static Trigger* ouro_sweep_risk(PlayerbotAI* botAI) { return new Aq40OuroSweepTrigger(botAI); }

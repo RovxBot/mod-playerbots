@@ -8,6 +8,7 @@
 #include "../Action/RaidAq40Actions.h"
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40TwinEmperors.h"
 
 namespace
 {
@@ -405,6 +406,16 @@ bool Aq40TwinEmperorsActiveTrigger::IsActive()
 bool Aq40TwinEmperorsRoomEntryTrigger::IsActive()
 {
     return Aq40Helpers::IsTwinPrePullReady(bot, botAI);
+}
+
+bool Aq40TwinEmperorsEmergencySplitTrigger::IsActive()
+{
+    if (!Aq40TwinEmperors::IsEmergencySplitRecoveryActive(bot))
+        return false;
+
+    GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+    GuidVector encounterUnits = Aq40Helpers::GetTwinEncounterUnits(bot, botAI, attackers);
+    return Aq40BossHelper::HasAnyNamedUnit(botAI, encounterUnits, { "emperor vek'nilash", "emperor vek'lor" });
 }
 
 bool Aq40OuroActiveTrigger::IsActive()

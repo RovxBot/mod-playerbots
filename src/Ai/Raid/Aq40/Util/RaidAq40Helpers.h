@@ -9,6 +9,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Position.h"
+#include "RaidAq40TwinEmperors.h"
 
 class GameObject;
 
@@ -34,8 +35,12 @@ struct TwinBossRoleState
     ObjectGuid expectedOwnerGuid = ObjectGuid::Empty;
     ObjectGuid reserveOwnerGuid = ObjectGuid::Empty;
     ObjectGuid currentOwnerGuid = ObjectGuid::Empty;
+    ObjectGuid candidateOwnerGuid = ObjectGuid::Empty;
+    ObjectGuid stableOwnerGuid = ObjectGuid::Empty;
     ObjectGuid botExecutorGuid = ObjectGuid::Empty;
     uint32 liveSideIndex = 0;
+    uint32 stableSinceMs = 0;
+    uint32 lastValidAtMs = 0;
 };
 
 struct TwinEncounterSnapshot
@@ -44,6 +49,7 @@ struct TwinEncounterSnapshot
     bool encounterLive = false;
     std::string unsupportedReason;
     TwinStrategyMode strategyMode = TwinStrategyMode::Degraded;
+    Aq40TwinEmperors::TwinEncounterPhase encounterPhase = Aq40TwinEmperors::TwinEncounterPhase::PrePull;
     GuidVector lockedWarlocks;
     GuidVector lockedMeleeTanks;
     std::unordered_map<uint64, TwinRoleCohort> cohortByGuid;
@@ -88,6 +94,8 @@ bool IsTwinRaidCombatActive(Player* bot);
 bool IsTwinPlayerPullAuthorized(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinCombatInProgress(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool IsTwinPrePullReady(Player* bot, PlayerbotAI* botAI);
+bool ArePreviousRoomDefendersActive(Player* bot, PlayerbotAI* botAI);
+bool IsTwinSupportedCompAvailable(Player* bot, PlayerbotAI* botAI);
 bool IsLikelyOnSameTwinSide(Unit* unit, Unit* sideEmperor, Unit* oppositeEmperor);
 bool IsTwinWarlockPickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
 bool IsTwinMeleePickupEstablished(Player* bot, PlayerbotAI* botAI, TwinAssignments const& assignment);
@@ -105,6 +113,11 @@ Position GetTwinRoomSideHealerAnchor(uint32 sideIndex);
 bool ApplyTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI, std::list<ObjectGuid> const& focusTargets);
 bool ClearTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI);
 bool IsTwinHealerOutsideSideLeash(Player* bot, TwinAssignments const& assignment);
+Position GetTwinHealerCenterToSideReentryAnchor(uint32 sideIndex);
+bool GetTwinHealerLocalTankSupportAnchor(Player* bot, PlayerbotAI* botAI,
+                                        TwinAssignments const& assignment, Position& outAnchor);
+bool ShouldTwinHealerFallbackToRaidMode(TwinEncounterSnapshot const& snapshot,
+                                        TwinAssignments const& assignment);
 bool ApplyTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI);
 bool ClearTwinTemporaryCombatStrategies(Player* bot, PlayerbotAI* botAI);
 bool HasTwinBossesResolved(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);

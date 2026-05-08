@@ -261,6 +261,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinEmperorsEmergencySplitRecoveryAction : public MovementAction
+{
+public:
+    Aq40TwinEmperorsEmergencySplitRecoveryAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "aq40 twin emperors emergency split recovery")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 
 class Aq40OuroChooseTargetAction : public AttackAction
 {
