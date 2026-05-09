@@ -2063,7 +2063,7 @@ bool Aq40TwinEmperorsEmergencySplitRecoveryAction::Execute(Event /*event*/)
             }
             // Already at anchor — keep attacking to hold threat
             if (bot->GetVictim() != assignment.veknilash)
-                Attack(assignment.veknilash);
+                bot->Attack(assignment.veknilash, true);
             return true;
         }
 
