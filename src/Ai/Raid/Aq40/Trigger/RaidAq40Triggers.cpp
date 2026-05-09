@@ -1,6 +1,7 @@
 #include "RaidAq40Triggers.h"
 
 #include <initializer_list>
+#include <limits>
 
 #include "ObjectGuid.h"
 #include "SharedDefines.h"
@@ -10,6 +11,7 @@
 #include "../Util/RaidAq40Helpers_Cthun.h"
 #include "../Util/RaidAq40Helpers_Shared.h"
 #include "../Util/RaidAq40Helpers_Skeram.h"
+#include "../Util/RaidAq40TwinEncounter.h"
 
 namespace
 {
@@ -40,6 +42,60 @@ Unit* FindSelectableCthunBody(PlayerbotAI* botAI, GuidVector const& attackers)
 }
 
 // IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
+
+Aq40TwinEncounter::TwinEncounterState const* GetTwinEncounterState(Player* bot)
+{
+    return bot ? Aq40TwinEncounter::GetEncounterState(bot) : nullptr;
+}
+
+Unit* FindTwinUnitByEntry(PlayerbotAI* botAI, GuidVector const& units, uint32 entry)
+{
+    if (!botAI)
+        return nullptr;
+
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return nullptr;
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || !unit->IsInWorld() || unit->IsFriendlyTo(bot) ||
+            unit->GetMapId() != bot->GetMapId())
+        {
+            continue;
+        }
+
+        if (unit->GetEntry() == entry)
+            return unit;
+    }
+
+    return nullptr;
+}
+
+Unit* FindClosestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& units, float maxDistance)
+{
+    if (!bot || !botAI)
+        return nullptr;
+
+    Unit* nearestBug = nullptr;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || !Aq40SpellIds::IsTwinBugEntry(unit->GetEntry()))
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        if (distance > maxDistance || distance >= nearestDistance)
+            continue;
+
+        nearestBug = unit;
+        nearestDistance = distance;
+    }
+
+    return nearestBug;
+}
 }    // namespace
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
@@ -391,6 +447,104 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
     }
 
     return false;
+}
+
+bool Aq40TwinPrePullReadyTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && !bot->IsInCombat() && state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+           state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
+}
+
+bool Aq40TwinDualPullTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow;
+}
+
+bool Aq40TwinActiveTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && Aq40TwinEncounter::IsActivePhase(state->phase) &&
+           !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+}
+
+bool Aq40TwinBlizzardTrigger::IsActive()
+{
+    if (!Aq40TwinActiveTrigger(botAI).IsActive())
+        return false;
+
+    if (Aq40SpellIds::HasAnyAura(botAI, bot, { Aq40SpellIds::TwinBlizzard }) || botAI->HasAura("blizzard", bot))
+        return true;
+
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && Aq40TwinEncounter::IsScriptedEventActive(
+        *state, Aq40TwinEncounter::TwinScriptedEvent::Blizzard, 5000);
+}
+
+bool Aq40TwinExplodeBugTrigger::IsActive()
+{
+    if (!Aq40TwinActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* explodeBug = FindClosestTwinBug(bot, botAI, encounterUnits, 17.0f);
+    if (!explodeBug)
+        return false;
+
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    if (state && Aq40TwinEncounter::IsScriptedEventActive(
+            *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, 2500))
+    {
+        return true;
+    }
+
+    Spell* spell = explodeBug->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinExplodeBug });
+}
+
+bool Aq40TwinArcaneBurstRiskTrigger::IsActive()
+{
+    if (!Aq40TwinActiveTrigger(botAI).IsActive())
+        return false;
+
+    if (bot->getClass() == CLASS_WARLOCK && Aq40BossHelper::IsEncounterTank(bot, bot))
+        return false;
+
+    GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
+    Unit* veklor = FindTwinUnitByEntry(botAI, encounterUnits, Aq40SpellIds::TwinVeklorNpcEntry);
+    if (!veklor)
+        return false;
+
+    float const distance = bot->GetDistance2d(veklor);
+    if (distance <= 18.0f)
+        return true;
+
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && distance <= 24.0f && Aq40TwinEncounter::IsScriptedEventActive(
+        *state, Aq40TwinEncounter::TwinScriptedEvent::ArcaneBurst, 2500);
+}
+
+bool Aq40TwinSplitRiskTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase))
+        return false;
+
+    return state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Warning ||
+           state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Urgent;
+}
+
+bool Aq40TwinPostSwapHoldTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase))
+        return false;
+
+    bool const postSwapPhase = state->phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
+                               state->phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery;
+    return (postSwapPhase || Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state)) &&
+           (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) || Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
 }
 
 bool Aq40OuroActiveTrigger::IsActive()

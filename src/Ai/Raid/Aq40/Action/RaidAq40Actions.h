@@ -289,4 +289,74 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinPrePullStageAction : public MovementAction
+{
+public:
+    Aq40TwinPrePullStageAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin prepull stage") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinDualPullEngageAction : public AttackAction
+{
+public:
+    Aq40TwinDualPullEngageAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 twin dual pull engage") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinHealerSupportAction : public MovementAction
+{
+public:
+    Aq40TwinHealerSupportAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin healer support") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinChooseTargetAction : public AttackAction
+{
+public:
+    Aq40TwinChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 twin choose target") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinHoldSplitAction : public MovementAction
+{
+public:
+    Aq40TwinHoldSplitAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin hold split") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinWarlockTankAction : public AttackAction
+{
+public:
+    Aq40TwinWarlockTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 twin warlock tank") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinDodgeBlizzardAction : public MovementAction
+{
+public:
+    Aq40TwinDodgeBlizzardAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin dodge blizzard") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinDodgeExplodeBugAction : public MovementAction
+{
+public:
+    Aq40TwinDodgeExplodeBugAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin dodge explode bug") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinAvoidVeklorAction : public MovementAction
+{
+public:
+    Aq40TwinAvoidVeklorAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin avoid veklor") {}
+    bool Execute(Event event) override;
+};
+
+class Aq40TwinPostSwapHoldAction : public MovementAction
+{
+public:
+    Aq40TwinPostSwapHoldAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin post swap hold") {}
+    bool Execute(Event event) override;
+};
+
 #endif

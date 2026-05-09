@@ -20,6 +20,7 @@
 #include "../Util/RaidAq40Helpers_Cthun.h"
 #include "../Util/RaidAq40Helpers_Shared.h"
 #include "../Util/RaidAq40Helpers_Skeram.h"
+#include "../Util/RaidAq40TwinEncounter.h"
 
 namespace
 {
@@ -49,6 +50,22 @@ bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& 
 }
 
 // IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
+
+bool IsTwinRegistrationWindow(Player* bot)
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
+    if (!state)
+        return false;
+
+    bool const prepullReady = state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
+    bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
+                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+    bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
+                               Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
+    return prepullReady || activeTwin || postSwapHold;
+}
 }    // namespace
 
 float Aq40GenericMultiplier::GetValue(Action* action)
@@ -277,6 +294,84 @@ float Aq40HuhuranMultiplier::GetValue(Action* action)
         (dynamic_cast<MovementAction*>(action) &&
          !dynamic_cast<Aq40HuhuranPoisonSpreadAction*>(action)))
         return 0.0f;
+
+    return 1.0f;
+}
+
+float Aq40TwinMultiplier::GetValue(Action* action)
+{
+    if (!action || !Aq40BossHelper::IsInAq40(bot) || !IsTwinRegistrationWindow(bot))
+        return 1.0f;
+
+    Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
+    if (!state)
+        return 1.0f;
+
+    bool const prepullReady = state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
+    bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
+                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+    bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
+                               Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
+
+    std::string const actionName = action->getName();
+    bool const isTwinAction = actionName.compare(0, 10, "aq40 twin ") == 0;
+    if (isTwinAction)
+    {
+        if (actionName == "aq40 twin prepull stage")
+            return prepullReady ? 3.0f : 1.0f;
+        if (actionName == "aq40 twin dual pull engage")
+            return state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow ? 3.5f : 1.0f;
+        if (actionName == "aq40 twin post swap hold")
+            return postSwapHold ? 4.0f : 1.0f;
+        if (actionName == "aq40 twin hold split")
+            return (postSwapHold || state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Warning ||
+                       state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Urgent)
+                       ? 3.0f
+                       : 1.0f;
+        if (actionName == "aq40 twin dodge explode bug")
+            return Aq40TwinEncounter::IsScriptedEventActive(
+                       *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, 2500)
+                       ? 4.0f
+                       : 1.0f;
+        if (actionName == "aq40 twin dodge blizzard")
+            return Aq40TwinEncounter::IsScriptedEventActive(
+                       *state, Aq40TwinEncounter::TwinScriptedEvent::Blizzard, 5000)
+                       ? 3.5f
+                       : 1.0f;
+        if (actionName == "aq40 twin avoid veklor")
+            return activeTwin ? 3.0f : 1.0f;
+        if (actionName == "aq40 twin warlock tank")
+            return activeTwin && bot->getClass() == CLASS_WARLOCK ? 2.5f : 1.0f;
+        if (actionName == "aq40 twin choose target")
+            return activeTwin ? 2.0f : 1.0f;
+        return 1.0f;
+    }
+
+    if (actionName == "aq40 choose target")
+        return 0.0f;
+
+    if (actionName.compare(0, 5, "aq40 ") == 0 && actionName.compare(0, 10, "aq40 twin ") != 0 &&
+        actionName != "aq40 manage resistance strategies" && actionName != "aq40 erase timers and trackers")
+    {
+        return 0.0f;
+    }
+
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+        return 0.0f;
+
+    if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
+        dynamic_cast<FleeAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    if (postSwapHold && !Aq40BossHelper::IsEncounterTank(bot, bot))
+    {
+        if (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action))
+            return 0.0f;
+    }
 
     return 1.0f;
 }

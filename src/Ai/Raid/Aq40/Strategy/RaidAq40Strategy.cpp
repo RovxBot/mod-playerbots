@@ -80,6 +80,40 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("aq40 huhuran poison phase",
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
 
+    // Twin Emperors registration surface:
+    // - route target selection through encounter-specific target bias
+    // - use request-first movement wrappers for script-armed hazards
+    // - keep post-teleport hold logic under the Twin multiplier instead of generic follow/assist churn
+    triggers.push_back(new TriggerNode("aq40 twin prepull ready",
+        {
+            NextAction("aq40 twin prepull stage", ACTION_RAID + 2),
+        }));
+    triggers.push_back(new TriggerNode("aq40 twin dual pull",
+        {
+            NextAction("aq40 twin dual pull engage", ACTION_RAID + 5),
+            NextAction("aq40 twin choose target", ACTION_RAID + 4),
+        }));
+    triggers.push_back(new TriggerNode("aq40 twin active",
+        {
+            NextAction("aq40 twin choose target", ACTION_RAID + 2),
+            NextAction("aq40 twin healer support", ACTION_RAID + 2),
+            NextAction("aq40 twin warlock tank", ACTION_RAID + 3),
+            NextAction("aq40 twin avoid veklor", ACTION_RAID + 4),
+        }));
+    triggers.push_back(new TriggerNode("aq40 twin blizzard",
+        { NextAction("aq40 twin dodge blizzard", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 twin explode bug",
+        { NextAction("aq40 twin dodge explode bug", ACTION_RAID + 6) }));
+    triggers.push_back(new TriggerNode("aq40 twin arcane burst risk",
+        { NextAction("aq40 twin avoid veklor", ACTION_RAID + 5) }));
+    triggers.push_back(new TriggerNode("aq40 twin split risk",
+        { NextAction("aq40 twin hold split", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("aq40 twin post swap hold",
+        {
+            NextAction("aq40 twin post swap hold", ACTION_RAID + 5),
+            NextAction("aq40 twin hold split", ACTION_RAID + 4),
+        }));
+
     // Ouro baseline strategy:
     // - keep melee contact to reduce avoidable submerge windows
     // - non-tanks avoid sweep range and dirt mound submerge hazards
@@ -146,6 +180,7 @@ void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new Aq40SarturaMultiplier(botAI));
     multipliers.push_back(new Aq40FankrissMultiplier(botAI));
     multipliers.push_back(new Aq40HuhuranMultiplier(botAI));
+    multipliers.push_back(new Aq40TwinMultiplier(botAI));
     multipliers.push_back(new Aq40OuroMultiplier(botAI));
     multipliers.push_back(new Aq40ViscidusMultiplier(botAI));
     multipliers.push_back(new Aq40CthunMultiplier(botAI));

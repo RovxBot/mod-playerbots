@@ -9,6 +9,7 @@
 #include "../RaidAq40BossHelper.h"
 #include "RaidAq40Helpers_Cthun.h"
 #include "RaidAq40Helpers_Skeram.h"
+#include "RaidAq40TwinEncounter.h"
 #include "Timer.h"
 
 namespace Aq40Helpers
@@ -194,7 +195,8 @@ bool ResetEncounterState(Player* bot)
 {
     bool const hadCthunState = ResetCthunEncounterState(bot);
     bool const hadSkeramState = ResetSkeramEncounterState(bot);
-    bool const erased = hadCthunState || hadSkeramState;
+    bool const hadTwinState = Aq40TwinEncounter::ResetState(bot);
+    bool const erased = hadCthunState || hadSkeramState || hadTwinState;
 
     if (erased && bot && bot->GetMap())
     {
@@ -208,7 +210,7 @@ bool ResetEncounterState(Player* bot)
 
 bool HasPersistentEncounterState(Player* bot)
 {
-    return HasCthunEncounterState(bot) || HasSkeramEncounterState(bot);
+    return HasCthunEncounterState(bot) || HasSkeramEncounterState(bot) || Aq40TwinEncounter::HasPersistentState(bot);
 }
 
 bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)

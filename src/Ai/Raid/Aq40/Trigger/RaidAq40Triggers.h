@@ -148,6 +148,62 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinPrePullReadyTrigger : public Trigger
+{
+public:
+    Aq40TwinPrePullReadyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin prepull ready") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinDualPullTrigger : public Trigger
+{
+public:
+    Aq40TwinDualPullTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin dual pull") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinActiveTrigger : public Trigger
+{
+public:
+    Aq40TwinActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin active") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinBlizzardTrigger : public Trigger
+{
+public:
+    Aq40TwinBlizzardTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin blizzard") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinExplodeBugTrigger : public Trigger
+{
+public:
+    Aq40TwinExplodeBugTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin explode bug") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinArcaneBurstRiskTrigger : public Trigger
+{
+public:
+    Aq40TwinArcaneBurstRiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin arcane burst risk") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinSplitRiskTrigger : public Trigger
+{
+public:
+    Aq40TwinSplitRiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin split risk") {}
+    bool IsActive() override;
+};
+
+class Aq40TwinPostSwapHoldTrigger : public Trigger
+{
+public:
+    Aq40TwinPostSwapHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin post swap hold") {}
+    bool IsActive() override;
+};
+
 class Aq40OuroActiveTrigger : public Trigger
 {
 public:
