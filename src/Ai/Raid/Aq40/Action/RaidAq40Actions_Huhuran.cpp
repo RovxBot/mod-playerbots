@@ -5,7 +5,7 @@
 #include <string>
 
 #include "../RaidAq40BossHelper.h"
-#include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40Helpers_Shared.h"
 #include "../../RaidBossHelpers.h"
 
 namespace

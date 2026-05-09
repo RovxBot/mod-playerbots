@@ -4,7 +4,7 @@
 
 #include "SharedDefines.h"
 #include "../RaidAq40BossHelper.h"
-#include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40Helpers_Shared.h"
 
 namespace
 {

@@ -1,7 +1,7 @@
 #include "RaidAq40Actions.h"
 
 #include "../RaidAq40SpellIds.h"
-#include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40Helpers_Shared.h"
 
 namespace Aq40BossActions
 {

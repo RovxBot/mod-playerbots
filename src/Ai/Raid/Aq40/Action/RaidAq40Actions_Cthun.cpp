@@ -10,7 +10,8 @@
 #include "ObjectGuid.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
-#include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40Helpers_Cthun.h"
+#include "../Util/RaidAq40Helpers_Shared.h"
 #include "Timer.h"
 
 namespace Aq40BossActions

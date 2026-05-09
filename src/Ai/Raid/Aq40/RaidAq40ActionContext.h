@@ -27,16 +27,6 @@ public:
         creators["aq40 trash avoid dangerous aoe"] = &RaidAq40ActionContext::trash_avoid_dangerous_aoe;
         creators["aq40 huhuran choose target"] = &RaidAq40ActionContext::huhuran_choose_target;
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
-        creators["aq40 twin emperors choose target"] = &RaidAq40ActionContext::twin_emperors_choose_target;
-        creators["aq40 twin emperors healer support"] = &RaidAq40ActionContext::twin_emperors_healer_support;
-        creators["aq40 twin emperors post swap hold"] = &RaidAq40ActionContext::twin_emperors_post_swap_hold;
-        creators["aq40 twin emperors dodge blizzard"] = &RaidAq40ActionContext::twin_emperors_dodge_blizzard;
-        creators["aq40 twin emperors dodge explode bug"] = &RaidAq40ActionContext::twin_emperors_dodge_explode_bug;
-        creators["aq40 twin emperors avoid veklor"] = &RaidAq40ActionContext::twin_emperors_avoid_veklor;
-        creators["aq40 twin emperors hold split"] = &RaidAq40ActionContext::twin_emperors_hold_split;
-        creators["aq40 twin emperors pre pull stage"] = &RaidAq40ActionContext::twin_emperors_pre_pull_stage;
-        creators["aq40 twin emperors warlock tank"] = &RaidAq40ActionContext::twin_emperors_warlock_tank;
-        creators["aq40 twin emperors emergency split recovery"] = &RaidAq40ActionContext::twin_emperors_emergency_split_recovery;
         creators["aq40 ouro choose target"] = &RaidAq40ActionContext::ouro_choose_target;
         creators["aq40 ouro hold melee contact"] = &RaidAq40ActionContext::ouro_hold_melee_contact;
         creators["aq40 ouro avoid sweep"] = &RaidAq40ActionContext::ouro_avoid_sweep;
@@ -97,43 +87,6 @@ private:
     }
     static Action* huhuran_choose_target(PlayerbotAI* botAI) { return new Aq40HuhuranChooseTargetAction(botAI); }
     static Action* huhuran_poison_spread(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonSpreadAction(botAI); }
-    static Action* twin_emperors_choose_target(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsChooseTargetAction(botAI);
-    }
-    static Action* twin_emperors_healer_support(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsHealerSupportAction(botAI);
-    }
-    static Action* twin_emperors_post_swap_hold(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsPostSwapHoldAction(botAI);
-    }
-    static Action* twin_emperors_dodge_blizzard(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsDodgeBlizzardAction(botAI);
-    }
-    static Action* twin_emperors_dodge_explode_bug(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsDodgeExplodeBugAction(botAI);
-    }
-    static Action* twin_emperors_avoid_veklor(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsAvoidVeklorAction(botAI);
-    }
-    static Action* twin_emperors_hold_split(PlayerbotAI* botAI) { return new Aq40TwinEmperorsHoldSplitAction(botAI); }
-    static Action* twin_emperors_pre_pull_stage(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsPrePullStageAction(botAI);
-    }
-    static Action* twin_emperors_warlock_tank(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsWarlockTankAction(botAI);
-    }
-    static Action* twin_emperors_emergency_split_recovery(PlayerbotAI* botAI)
-    {
-        return new Aq40TwinEmperorsEmergencySplitRecoveryAction(botAI);
-    }
     static Action* ouro_choose_target(PlayerbotAI* botAI) { return new Aq40OuroChooseTargetAction(botAI); }
     static Action* ouro_hold_melee_contact(PlayerbotAI* botAI)
     {

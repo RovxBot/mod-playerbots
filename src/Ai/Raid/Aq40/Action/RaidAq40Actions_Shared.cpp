@@ -10,7 +10,8 @@
 #include "ObjectGuid.h"
 #include "../RaidAq40BossHelper.h"
 #include "../RaidAq40SpellIds.h"
-#include "../Util/RaidAq40Helpers.h"
+#include "../Util/RaidAq40Helpers_Shared.h"
+#include "../Util/RaidAq40Helpers_Skeram.h"
 #include "../../RaidBossHelpers.h"
 
 namespace
@@ -20,9 +21,7 @@ struct Aq40ManagedResistanceState
     bool natureCombatEnabled = false;
     bool natureNonCombatEnabled = false;
     bool shamanNatureCombatEnabled = false;
-    bool shadowCombatEnabled = false;
-    bool shadowNonCombatEnabled = false;
-    bool warlockShadowBuffApplied = false;
+
 };
 
 std::unordered_map<uint64, Aq40ManagedResistanceState> sManagedResistanceStateByBot;
@@ -62,12 +61,6 @@ bool ClearManagedAq40ResistanceStrategies(Player* bot, PlayerbotAI* botAI)
     if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
     {
         botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
-        cleaned = true;
-    }
-
-    if (bot->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff))
-    {
-        bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
         cleaned = true;
     }
 
@@ -233,9 +226,6 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
     bool const needNatureResistance =
         inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
             { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
-    bool const needShadowResistance =
-        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
-            { "emperor vek'nilash", "emperor vek'lor" });
 
     bool acted = false;
 
@@ -306,91 +296,16 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
         }
     }
 
-    if (bot->getClass() == CLASS_PRIEST || bot->getClass() == CLASS_PALADIN)
-    {
-        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
-        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
-
-        if (needShadowResistance)
-        {
-            if (!hasShadowStrategyCombat)
-            {
-                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_COMBAT);
-                managedState.shadowCombatEnabled = true;
-                acted = true;
-            }
-            if (!hasShadowStrategyNonCombat)
-            {
-                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_NON_COMBAT);
-                managedState.shadowNonCombatEnabled = true;
-                acted = true;
-            }
-
-            if (bot->getClass() == CLASS_PRIEST)
-            {
-                if (!botAI->HasAura("shadow protection", bot) &&
-                    !botAI->HasAura("prayer of shadow protection", bot))
-                    acted = botAI->DoSpecificAction("shadow protection on party", Event(), true) || acted;
-            }
-            else if (bot->getClass() == CLASS_PALADIN)
-            {
-                acted = botAI->DoSpecificAction("shadow resistance aura", Event(), true) || acted;
-            }
-        }
-        else if (managedState.shadowCombatEnabled || managedState.shadowNonCombatEnabled)
-        {
-            if (managedState.shadowCombatEnabled && hasShadowStrategyCombat)
-            {
-                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
-                managedState.shadowCombatEnabled = false;
-                acted = true;
-            }
-            if (managedState.shadowNonCombatEnabled && hasShadowStrategyNonCombat)
-            {
-                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
-                managedState.shadowNonCombatEnabled = false;
-                acted = true;
-            }
-        }
-    }
-
-    if (bot->getClass() == CLASS_WARLOCK)
-    {
-        if (needShadowResistance)
-        {
-            if (!managedState.warlockShadowBuffApplied &&
-                !botAI->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot))
-            {
-                Aura* const aura = bot->AddAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot);
-                if (aura)
-                {
-                    managedState.warlockShadowBuffApplied = true;
-                    acted = true;
-                }
-            }
-        }
-        else if (managedState.warlockShadowBuffApplied)
-        {
-            bot->RemoveAurasDueToSpell(Aq40SpellIds::TwinWarlockShadowResistBuff);
-            managedState.warlockShadowBuffApplied = false;
-            acted = true;
-        }
-    }
-
     if (!managedState.natureCombatEnabled && !managedState.natureNonCombatEnabled &&
-        !managedState.shamanNatureCombatEnabled &&
-        !managedState.shadowCombatEnabled && !managedState.shadowNonCombatEnabled &&
-        !managedState.warlockShadowBuffApplied)
+        !managedState.shamanNatureCombatEnabled)
         sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue());
 
     if (acted)
     {
         std::ostringstream fields;
-        fields << "boss=resistance nature=" << (needNatureResistance ? 1 : 0)
-               << " shadow=" << (needShadowResistance ? 1 : 0);
+        fields << "boss=resistance nature=" << (needNatureResistance ? 1 : 0);
         Aq40Helpers::LogAq40Info(bot, "resistance_strategy",
-            std::string("nature:") + (needNatureResistance ? "1" : "0") +
-            ":shadow:" + (needShadowResistance ? "1" : "0"),
+            std::string("nature:") + (needNatureResistance ? "1" : "0"),
             fields.str());
     }
 
@@ -408,9 +323,6 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
     bool const needNatureResistance =
         inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
             { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
-    bool const needShadowResistance =
-        inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
-            { "emperor vek'nilash", "emperor vek'lor" });
 
     if (bot->getClass() == CLASS_HUNTER)
     {
@@ -427,26 +339,6 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
         return (needNatureResistance &&
                 (!hasNatureTotemStrategyCombat || !botAI->HasAura("nature resistance totem", bot))) ||
                (!needNatureResistance && hasNatureTotemStrategyCombat);
-    }
-
-    if (bot->getClass() == CLASS_PRIEST || bot->getClass() == CLASS_PALADIN)
-    {
-        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
-        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
-        bool const missingShadowBuff =
-            (bot->getClass() == CLASS_PRIEST) ?
-                (!botAI->HasAura("shadow protection", bot) && !botAI->HasAura("prayer of shadow protection", bot)) :
-                !botAI->HasAura("shadow resistance aura", bot);
-
-        return (needShadowResistance &&
-                (!hasShadowStrategyCombat || !hasShadowStrategyNonCombat || missingShadowBuff)) ||
-               (!needShadowResistance && (hasShadowStrategyCombat || hasShadowStrategyNonCombat));
-    }
-
-    if (bot->getClass() == CLASS_WARLOCK)
-    {
-        bool const hasBuff = botAI->HasAura(Aq40SpellIds::TwinWarlockShadowResistBuff, bot);
-        return (needShadowResistance && !hasBuff) || (!needShadowResistance && hasBuff);
     }
 
     return false;
@@ -467,11 +359,9 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
         return false;
 
     bool const hadManagedResistance = ClearManagedAq40ResistanceStrategies(bot, botAI);
-    bool const hadTwinHealerFocus = Aq40Helpers::ClearTwinHealerFocusTargets(bot, botAI);
-    bool const hadTwinTemporaryStrategies = Aq40Helpers::ClearTwinTemporaryCombatStrategies(bot, botAI);
     bool const hadPersistentEncounterState = Aq40Helpers::ResetEncounterState(bot);
     bool const recoveredDirtyState =
-        hadManagedResistance || hadTwinHealerFocus || hadTwinTemporaryStrategies || hadPersistentEncounterState;
+        hadManagedResistance || hadPersistentEncounterState;
 
     LogAq40CleanupTransition(bot, recoveredDirtyState);
     return true;

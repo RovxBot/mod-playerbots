@@ -80,28 +80,6 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("aq40 huhuran poison phase",
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
 
-    // Twin Emperors baseline strategy:
-    // - tanks move to assigned sides on room entry, raid holds center
-    // - warlock tanks engage Vek'lor, melee tanks engage Vek'nilash
-    // - at teleport each side's appropriate tank picks up the new boss
-    // - tanks that can't tank the current boss on their side hold position
-    triggers.push_back(new TriggerNode("aq40 twin emperors room entry",
-        { NextAction("aq40 twin emperors pre pull stage", ACTION_RAID + 8) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors emergency split",
-        { NextAction("aq40 twin emperors emergency split recovery", ACTION_RAID + 11) }));
-    triggers.push_back(new TriggerNode("aq40 twin emperors active",
-        {
-            NextAction("aq40 twin emperors dodge blizzard", ACTION_RAID + 10),
-            NextAction("aq40 twin emperors dodge explode bug", ACTION_RAID + 9),
-            NextAction("aq40 twin emperors warlock tank", ACTION_RAID + 8),
-            NextAction("aq40 twin emperors hold split", ACTION_RAID + 7),
-            NextAction("aq40 twin emperors post swap hold", ACTION_RAID + 6),
-            NextAction("aq40 twin emperors healer support", ACTION_RAID + 5),
-            NextAction("aq40 twin emperors choose target", ACTION_RAID + 4),
-            NextAction("aq40 twin emperors avoid veklor", ACTION_RAID + 3),
-            NextAction("avoid aoe", ACTION_RAID + 2),
-        }));
-
     // Ouro baseline strategy:
     // - keep melee contact to reduce avoidable submerge windows
     // - non-tanks avoid sweep range and dirt mound submerge hazards
@@ -169,7 +147,6 @@ void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new Aq40FankrissMultiplier(botAI));
     multipliers.push_back(new Aq40HuhuranMultiplier(botAI));
     multipliers.push_back(new Aq40OuroMultiplier(botAI));
-    multipliers.push_back(new Aq40TwinEmperorsMultiplier(botAI));
     multipliers.push_back(new Aq40ViscidusMultiplier(botAI));
     multipliers.push_back(new Aq40CthunMultiplier(botAI));
 }

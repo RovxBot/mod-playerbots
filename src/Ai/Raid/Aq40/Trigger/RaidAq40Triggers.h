@@ -148,30 +148,6 @@ public:
     bool IsActive() override;
 };
 
-class Aq40TwinEmperorsActiveTrigger : public Trigger
-{
-public:
-    Aq40TwinEmperorsActiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin emperors active") {}
-    bool IsActive() override;
-};
-
-class Aq40TwinEmperorsRoomEntryTrigger : public Trigger
-{
-public:
-    Aq40TwinEmperorsRoomEntryTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin emperors room entry") {}
-    bool IsActive() override;
-};
-
-class Aq40TwinEmperorsEmergencySplitTrigger : public Trigger
-{
-public:
-    Aq40TwinEmperorsEmergencySplitTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "aq40 twin emperors emergency split")
-    {
-    }
-    bool IsActive() override;
-};
-
 class Aq40OuroActiveTrigger : public Trigger
 {
 public:
