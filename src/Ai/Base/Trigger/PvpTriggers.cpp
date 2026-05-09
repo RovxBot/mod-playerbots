@@ -300,6 +300,10 @@ bool PlayerWantsInBattlegroundTrigger::IsActive()
     // No specific Battleground template is available at this stage.
     // BGJoinAction performs the concrete per-BG eligibility check once a queue
     // candidate is being evaluated.
+
+    if (bot->IsDeserter())
+        return false;
+
     return true;
 }
 

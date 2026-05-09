@@ -348,6 +348,10 @@ bool BGJoinAction::isUseful()
     if (bot->IsInCombat())
         return false;
 
+    // check Deserter debuff
+    if (bot->IsDeserter())
+        return false;
+
     // check if has free queue slots (pointless as already making sure not in queue)
     // keeping just in case.
     if (!bot->HasFreeBattlegroundQueueId())
