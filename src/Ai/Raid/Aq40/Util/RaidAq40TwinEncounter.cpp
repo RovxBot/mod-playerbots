@@ -39,6 +39,10 @@ float constexpr kSideHealerTowardBossParkDistance = 14.0f;
 float constexpr kSideHealerLateralDistance = 8.0f;
 float constexpr kTwinRoomReadyRadius = 180.0f;
 float constexpr kTwinRoomExtendedRadius = 220.0f;
+uint32 constexpr kTwinTeleportCadenceEarliestMs = 30000;
+uint32 constexpr kTwinTeleportCadenceLatestMs = 35000;
+uint32 constexpr kTwinSwapPrepLeadMs = 5000;
+uint32 constexpr kTwinClosestTargetGrantDelayMs = 1000;
 size_t constexpr kTwinRequiredWarlockTanks = 2u;
 size_t constexpr kTwinRequiredMeleeTanks = 2u;
 size_t constexpr kTwinRequiredSideHealers = 2u;
@@ -116,12 +120,41 @@ bool HasMeaningfulHazards(TwinScriptedHazardWindows const& hazards)
            hazards.unbalancingStrikeAtMs;
 }
 
+bool HasMeaningfulCadence(TwinEncounterState const& state)
+{
+    return state.lastTeleportAtMs || state.nextTeleportEarliestAtMs || state.nextTeleportLatestAtMs ||
+           state.swapPrepStartAtMs || state.swapPrepArmedAtMs ||
+           state.closestTargetGrantDelayMs != kTwinClosestTargetGrantDelayMs;
+}
+
+void ResetTeleportCadence(TwinEncounterState& state)
+{
+    state.lastTeleportAtMs = 0;
+    state.nextTeleportEarliestAtMs = 0;
+    state.nextTeleportLatestAtMs = 0;
+    state.swapPrepStartAtMs = 0;
+    state.closestTargetGrantDelayMs = kTwinClosestTargetGrantDelayMs;
+    state.swapPrepArmedAtMs = 0;
+}
+
+void ScheduleNextTeleportCadence(TwinEncounterState& state, uint32 referenceMs)
+{
+    state.nextTeleportEarliestAtMs = referenceMs + kTwinTeleportCadenceEarliestMs;
+    state.nextTeleportLatestAtMs = referenceMs + kTwinTeleportCadenceLatestMs;
+    state.swapPrepStartAtMs = state.nextTeleportEarliestAtMs > kTwinSwapPrepLeadMs
+        ? state.nextTeleportEarliestAtMs - kTwinSwapPrepLeadMs
+        : referenceMs;
+    state.swapPrepArmedAtMs = 0;
+    if (!state.closestTargetGrantDelayMs)
+        state.closestTargetGrantDelayMs = kTwinClosestTargetGrantDelayMs;
+}
+
 bool HasMeaningfulEncounterState(TwinEncounterState const& state)
 {
     if ((state.mode != TwinStrategyMode::Inactive && state.mode != TwinStrategyMode::StandardCompReady) ||
         state.phase != TwinEncounterPhase::PrePull ||
         state.recovery.splitBand != TwinSplitBand::Stable || state.recovery.splitBandEnteredAtMs ||
-        HasMeaningfulHazards(state.scriptedHazards))
+        HasMeaningfulHazards(state.scriptedHazards) || HasMeaningfulCadence(state))
     {
         return true;
     }
@@ -370,6 +403,7 @@ void ConfigurePrePullOwnership(TwinEncounterState& state, TwinAssignmentBuildRes
 
     state.recovery = TwinRecoveryState();
     state.scriptedHazards = TwinScriptedHazardWindows();
+    ResetTeleportCadence(state);
 }
 
 void ClearPrePullAssignments(TwinEncounterState& state, uint32 nowMs, bool clearReason)
@@ -382,6 +416,7 @@ void ClearPrePullAssignments(TwinEncounterState& state, uint32 nowMs, bool clear
     state.ownership[ToIndex(TwinBoss::Veknilash)] = TwinStableOwnership();
     state.recovery = TwinRecoveryState();
     state.scriptedHazards = TwinScriptedHazardWindows();
+    ResetTeleportCadence(state);
     if (clearReason)
         state.unsupportedReason.clear();
 
@@ -1114,6 +1149,61 @@ uint32 GetPhaseElapsedMs(TwinEncounterState const& state, uint32 nowMs)
     return GetElapsedSince(state.phaseEnteredAtMs, ResolveNow(nowMs));
 }
 
+bool HasTeleportCadence(TwinEncounterState const& state)
+{
+    return state.nextTeleportEarliestAtMs && state.nextTeleportLatestAtMs && state.swapPrepStartAtMs;
+}
+
+void ArmTeleportCadence(TwinEncounterState& state, uint32 nowMs)
+{
+    uint32 const now = ResolveNow(nowMs);
+    if (!state.closestTargetGrantDelayMs)
+        state.closestTargetGrantDelayMs = kTwinClosestTargetGrantDelayMs;
+
+    if (HasTeleportCadence(state) && now < state.nextTeleportLatestAtMs)
+        return;
+
+    ScheduleNextTeleportCadence(state, now);
+}
+
+bool IsSwapPrepActive(TwinEncounterState const& state, uint32 nowMs)
+{
+    if (state.phase == TwinEncounterPhase::PrePull || state.phase == TwinEncounterPhase::TeleportWindow ||
+        state.phase == TwinEncounterPhase::PickupRecovery || IsTerminalPhase(state.phase))
+    {
+        return false;
+    }
+
+    if (!HasTeleportCadence(state))
+        return false;
+
+    uint32 const now = ResolveNow(nowMs);
+    return now >= state.swapPrepStartAtMs && now <= state.nextTeleportLatestAtMs;
+}
+
+bool IsSwapPrepActive(Player const* bot, uint32 nowMs)
+{
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state && IsSwapPrepActive(*state, nowMs);
+}
+
+bool ArmSwapPrep(TwinEncounterState& state, uint32 nowMs)
+{
+    uint32 const now = ResolveNow(nowMs);
+    if (!IsSwapPrepActive(state, now) || state.swapPrepArmedAtMs)
+        return false;
+
+    for (TwinBoss boss : { TwinBoss::Veklor, TwinBoss::Veknilash })
+    {
+        TwinStableOwnership& ownership = GetOwnership(state, boss);
+        if (!ownership.expectedOwner.IsEmpty() && !ownership.reserveOwner.IsEmpty())
+            std::swap(ownership.expectedOwner, ownership.reserveOwner);
+    }
+
+    state.swapPrepArmedAtMs = now;
+    return true;
+}
+
 uint32 GetScriptedEventAtMs(TwinEncounterState const& state, TwinScriptedEvent event)
 {
     switch (event)
@@ -1474,17 +1564,21 @@ uint32 GetSplitBandAgeMs(TwinEncounterState const& state, uint32 nowMs)
 
 void EnterDualPullWindow(TwinEncounterState& state, uint32 nowMs)
 {
+    ArmTeleportCadence(state, nowMs);
     SetPhase(state, TwinEncounterPhase::DualPullWindow, nowMs);
 }
 
 void EnterStablePhase(TwinEncounterState& state, uint32 nowMs)
 {
+    ArmTeleportCadence(state, nowMs);
     SetPhase(state, TwinEncounterPhase::Stable, nowMs);
 }
 
 void EnterTeleportWindow(TwinEncounterState& state, uint32 threatHoldDurationMs, uint32 nowMs)
 {
     uint32 const now = ResolveNow(nowMs);
+    state.lastTeleportAtMs = now;
+    ScheduleNextTeleportCadence(state, now);
     SetPhase(state, TwinEncounterPhase::TeleportWindow, now);
 
     for (TwinBoss boss : { TwinBoss::Veklor, TwinBoss::Veknilash })
@@ -1533,6 +1627,8 @@ TwinEncounterState* GetEncounterState(Player* bot)
         ResetEncounterState(state, instanceId);
 
     RefreshPrePullAssignments(bot, state);
+    if (state.phase != TwinEncounterPhase::PrePull && !IsTerminalPhase(state.phase))
+        ArmTeleportCadence(state);
     return &state;
 }
 

@@ -32,6 +32,7 @@ public:
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
         creators["aq40 twin prepull ready"] = &RaidAq40TriggerContext::twin_prepull_ready;
         creators["aq40 twin dual pull"] = &RaidAq40TriggerContext::twin_dual_pull;
+        creators["aq40 twin swap prep"] = &RaidAq40TriggerContext::twin_swap_prep;
         creators["aq40 twin active"] = &RaidAq40TriggerContext::twin_active;
         creators["aq40 twin blizzard"] = &RaidAq40TriggerContext::twin_blizzard;
         creators["aq40 twin explode bug"] = &RaidAq40TriggerContext::twin_explode_bug;
@@ -84,6 +85,7 @@ private:
     static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
     static Trigger* twin_prepull_ready(PlayerbotAI* botAI) { return new Aq40TwinPrePullReadyTrigger(botAI); }
     static Trigger* twin_dual_pull(PlayerbotAI* botAI) { return new Aq40TwinDualPullTrigger(botAI); }
+    static Trigger* twin_swap_prep(PlayerbotAI* botAI) { return new Aq40TwinSwapPrepTrigger(botAI); }
     static Trigger* twin_active(PlayerbotAI* botAI) { return new Aq40TwinActiveTrigger(botAI); }
     static Trigger* twin_blizzard(PlayerbotAI* botAI) { return new Aq40TwinBlizzardTrigger(botAI); }
     static Trigger* twin_explode_bug(PlayerbotAI* botAI) { return new Aq40TwinExplodeBugTrigger(botAI); }

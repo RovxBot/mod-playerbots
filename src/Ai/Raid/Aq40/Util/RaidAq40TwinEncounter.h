@@ -167,6 +167,12 @@ struct TwinEncounterState
     std::array<TwinStableOwnership, 2> ownership;
     TwinRecoveryState recovery;
     TwinScriptedHazardWindows scriptedHazards;
+    uint32 lastTeleportAtMs = 0;
+    uint32 nextTeleportEarliestAtMs = 0;
+    uint32 nextTeleportLatestAtMs = 0;
+    uint32 swapPrepStartAtMs = 0;
+    uint32 closestTargetGrantDelayMs = 1000;
+    uint32 swapPrepArmedAtMs = 0;
     std::vector<TwinRoleAssignment> assignments;
     std::string unsupportedReason;
 };
@@ -201,6 +207,11 @@ bool IsActivePhase(TwinEncounterPhase phase);
 bool IsRecoveryPhase(TwinEncounterPhase phase);
 bool IsTerminalPhase(TwinEncounterPhase phase);
 uint32 GetPhaseElapsedMs(TwinEncounterState const& state, uint32 nowMs = 0);
+bool HasTeleportCadence(TwinEncounterState const& state);
+void ArmTeleportCadence(TwinEncounterState& state, uint32 nowMs = 0);
+bool IsSwapPrepActive(TwinEncounterState const& state, uint32 nowMs = 0);
+bool IsSwapPrepActive(Player const* bot, uint32 nowMs = 0);
+bool ArmSwapPrep(TwinEncounterState& state, uint32 nowMs = 0);
 uint32 GetScriptedEventAtMs(TwinEncounterState const& state, TwinScriptedEvent event);
 bool IsScriptedEventActive(TwinEncounterState const& state, TwinScriptedEvent event, uint32 windowMs,
                            uint32 nowMs = 0, uint32* outElapsedMs = nullptr);

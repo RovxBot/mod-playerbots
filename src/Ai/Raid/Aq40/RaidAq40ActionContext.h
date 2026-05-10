@@ -29,6 +29,7 @@ public:
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
         creators["aq40 twin prepull stage"] = &RaidAq40ActionContext::twin_prepull_stage;
         creators["aq40 twin dual pull engage"] = &RaidAq40ActionContext::twin_dual_pull_engage;
+        creators["aq40 twin swap prep stage"] = &RaidAq40ActionContext::twin_swap_prep_stage;
         creators["aq40 twin healer support"] = &RaidAq40ActionContext::twin_healer_support;
         creators["aq40 twin choose target"] = &RaidAq40ActionContext::twin_choose_target;
         creators["aq40 twin hold split"] = &RaidAq40ActionContext::twin_hold_split;
@@ -101,6 +102,10 @@ private:
     static Action* twin_dual_pull_engage(PlayerbotAI* botAI)
     {
         return new Aq40TwinDualPullEngageAction(botAI);
+    }
+    static Action* twin_swap_prep_stage(PlayerbotAI* botAI)
+    {
+        return new Aq40TwinSwapPrepStageAction(botAI);
     }
     static Action* twin_healer_support(PlayerbotAI* botAI)
     {

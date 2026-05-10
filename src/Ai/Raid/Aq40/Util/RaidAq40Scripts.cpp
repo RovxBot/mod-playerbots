@@ -279,6 +279,65 @@ void RequestInterruptForTwinBots(std::vector<Player*> const& twinBots, Unit* sou
 		Aq40TwinEncounter::RequestImmediateMovementInterrupt(bot);
 	}
 }
+
+bool ClearTwinTerminalFailureCombatState(Player* bot)
+{
+	if (!bot)
+		return false;
+
+	Aq40TwinEncounter::RequestImmediateMovementInterrupt(bot);
+
+	bool changed = false;
+	if (bot->GetVictim())
+	{
+		bot->AttackStop();
+		changed = true;
+	}
+
+	if (bot->GetTarget())
+	{
+		bot->SetTarget();
+		bot->SetSelection(ObjectGuid());
+		changed = true;
+	}
+
+	PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+	if (!botAI || !botAI->GetAiObjectContext())
+		return changed;
+
+	auto* context = botAI->GetAiObjectContext();
+	if (context->GetValue<Unit*>("old target")->Get())
+	{
+		context->GetValue<Unit*>("old target")->Set(nullptr);
+		changed = true;
+	}
+
+	if (context->GetValue<Unit*>("current target")->Get())
+	{
+		context->GetValue<Unit*>("current target")->Set(nullptr);
+		changed = true;
+	}
+
+	if (!context->GetValue<GuidVector>("prioritized targets")->Get().empty())
+	{
+		context->GetValue<GuidVector>("prioritized targets")->Reset();
+		changed = true;
+	}
+
+	if (!context->GetValue<ObjectGuid>("pull target")->Get().IsEmpty())
+	{
+		context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
+		changed = true;
+	}
+
+	if (!context->GetValue<ObjectGuid>("pull strategy target")->Get().IsEmpty())
+	{
+		context->GetValue<ObjectGuid>("pull strategy target")->Set(ObjectGuid::Empty);
+		changed = true;
+	}
+
+	return changed;
+}
 }    // namespace
 
 class Aq40TwinEmperorsListenerScript : public AllSpellScript
@@ -367,11 +426,29 @@ public:
 			{
 				UpdateHazardTimestamp(hazards.healBrotherAtMs, nowMs);
 				Aq40TwinEncounter::EnterTerminalFailure(state, nowMs);
+				RequestInterruptForTwinBots(twinBots, caster);
+
+				size_t clearedBotCount = 0u;
+				for (Player* twinBot : twinBots)
+				{
+					if (ClearTwinTerminalFailureCombatState(twinBot))
+						++clearedBotCount;
+				}
 
 				std::ostringstream fields;
 				fields << "boss=twin spell=" << spellInfo->Id
 					   << " hazard=heal_brother source=" << Aq40Helpers::GetAq40LogUnit(caster)
-					   << " phase=" << Aq40TwinEncounter::ToString(state.phase);
+					   << " phase=" << Aq40TwinEncounter::ToString(state.phase)
+					   << " mode=" << Aq40TwinEncounter::ToString(state.mode)
+					   << " split_band=" << Aq40TwinEncounter::ToString(state.recovery.splitBand)
+					   << " cleared_bots=" << clearedBotCount
+					   << " veklor_pickup_established="
+					   << (Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veklor) ? 1 : 0)
+					   << " veknilash_pickup_established="
+					   << (Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veknilash) ? 1 : 0)
+					   << " phase_elapsed_ms=" << Aq40TwinEncounter::GetPhaseElapsedMs(state, nowMs)
+					   << " since_last_teleport_ms="
+					   << (state.lastTeleportAtMs ? getMSTimeDiff(state.lastTeleportAtMs, nowMs) : 0u);
 				Aq40Helpers::LogAq40Warn(logBot, "twin_terminal_failure", "twin:heal_brother", fields.str(), 1000);
 				return;
 			}

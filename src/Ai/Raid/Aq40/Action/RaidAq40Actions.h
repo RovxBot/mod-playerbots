@@ -303,6 +303,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinSwapPrepStageAction : public MovementAction
+{
+public:
+    Aq40TwinSwapPrepStageAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin swap prep stage") {}
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinHealerSupportAction : public MovementAction
 {
 public:

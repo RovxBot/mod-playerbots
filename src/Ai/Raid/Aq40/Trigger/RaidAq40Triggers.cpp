@@ -96,6 +96,31 @@ Unit* FindClosestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& unit
 
     return nearestBug;
 }
+
+bool IsTwinPrimaryTankController(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state)
+{
+    if (!bot)
+        return false;
+
+    Aq40TwinEncounter::TwinRoleAssignment const* assignment =
+        Aq40TwinEncounter::GetAssignmentForMember(state, bot->GetGUID());
+    if (!assignment)
+        return false;
+
+    if (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::WarlockTank)
+    {
+        return Aq40TwinEncounter::IsPrimaryController(
+            state, Aq40TwinEncounter::TwinBoss::Veklor, assignment->memberGuid);
+    }
+
+    if (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::MeleeTank)
+    {
+        return Aq40TwinEncounter::IsPrimaryController(
+            state, Aq40TwinEncounter::TwinBoss::Veknilash, assignment->memberGuid);
+    }
+
+    return false;
+}
 }    // namespace
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
@@ -460,6 +485,14 @@ bool Aq40TwinDualPullTrigger::IsActive()
     return state && state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow;
 }
 
+bool Aq40TwinSwapPrepTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return state && Aq40TwinEncounter::IsTwinEncounterParticipant(bot) &&
+           Aq40TwinEncounter::IsActivePhase(state->phase) && !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+           Aq40TwinEncounter::IsSwapPrepActive(*state);
+}
+
 bool Aq40TwinActiveTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
@@ -483,7 +516,8 @@ bool Aq40TwinBlizzardTrigger::IsActive()
 
 bool Aq40TwinExplodeBugTrigger::IsActive()
 {
-    if (!Aq40TwinActiveTrigger(botAI).IsActive() || Aq40BossHelper::IsEncounterTank(bot, bot))
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    if (!Aq40TwinActiveTrigger(botAI).IsActive() || !state || IsTwinPrimaryTankController(bot, *state))
         return false;
 
     GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
@@ -491,8 +525,7 @@ bool Aq40TwinExplodeBugTrigger::IsActive()
     if (!explodeBug)
         return false;
 
-    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    if (state && Aq40TwinEncounter::IsScriptedEventActive(
+    if (Aq40TwinEncounter::IsScriptedEventActive(
             *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, 2500))
     {
         return true;
@@ -532,6 +565,13 @@ bool Aq40TwinSplitRiskTrigger::IsActive()
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
     if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase))
         return false;
+
+    if (state->phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
+        state->phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery ||
+        state->phase == Aq40TwinEncounter::TwinEncounterPhase::Degraded)
+    {
+        return false;
+    }
 
     return state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Warning ||
            state->recovery.splitBand == Aq40TwinEncounter::TwinSplitBand::Urgent;

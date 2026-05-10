@@ -65,7 +65,9 @@ bool IsTwinRegistrationWindow(Player* bot)
                               (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
                                (Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state) &&
                                 Aq40TwinEncounter::IsTwinEncounterParticipant(bot)));
-    return prepullReady || activeTwin || postSwapHold;
+    bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
+    return prepullReady || activeTwin || postSwapHold || terminalTwin;
 }
 }    // namespace
 
@@ -312,6 +314,8 @@ float Aq40TwinMultiplier::GetValue(Action* action)
                               state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
     bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
                             !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+    bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
     bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
                               (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
                                Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
@@ -322,12 +326,31 @@ float Aq40TwinMultiplier::GetValue(Action* action)
 
     std::string const actionName = action->getName();
     bool const isTwinAction = actionName.compare(0, 10, "aq40 twin ") == 0;
+    if (terminalTwin)
+    {
+        if (isTwinAction || actionName == "aq40 choose target")
+            return 0.0f;
+
+        if (actionName.compare(0, 5, "aq40 ") == 0 && actionName.compare(0, 10, "aq40 twin ") != 0 &&
+            actionName != "aq40 manage resistance strategies" && actionName != "aq40 erase timers and trackers")
+        {
+            return 0.0f;
+        }
+
+        if (dynamic_cast<CastReachTargetSpellAction*>(action) || dynamic_cast<MovementAction*>(action))
+            return 0.0f;
+
+        return 1.0f;
+    }
+
     if (isTwinAction)
     {
         if (actionName == "aq40 twin prepull stage")
             return prepullReady ? 3.0f : 1.0f;
         if (actionName == "aq40 twin dual pull engage")
             return state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow ? 3.5f : 1.0f;
+        if (actionName == "aq40 twin swap prep stage")
+            return Aq40TwinEncounter::IsSwapPrepActive(*state) ? 4.0f : 1.0f;
         if (actionName == "aq40 twin post swap hold")
             return postSwapHold ? 4.0f : 1.0f;
         if (actionName == "aq40 twin hold split")

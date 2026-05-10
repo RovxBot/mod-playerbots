@@ -93,6 +93,10 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             NextAction("aq40 twin dual pull engage", ACTION_RAID + 5),
             NextAction("aq40 twin choose target", ACTION_RAID + 4),
         }));
+    triggers.push_back(new TriggerNode("aq40 twin swap prep",
+        {
+            NextAction("aq40 twin swap prep stage", ACTION_RAID + 6),
+        }));
     triggers.push_back(new TriggerNode("aq40 twin active",
         {
             NextAction("aq40 twin choose target", ACTION_RAID + 2),

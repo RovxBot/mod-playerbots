@@ -162,6 +162,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinSwapPrepTrigger : public Trigger
+{
+public:
+    Aq40TwinSwapPrepTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin swap prep") {}
+    bool IsActive() override;
+};
+
 class Aq40TwinActiveTrigger : public Trigger
 {
 public:
