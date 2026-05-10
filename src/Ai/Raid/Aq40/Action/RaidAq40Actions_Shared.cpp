@@ -359,9 +359,17 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
         return false;
 
     bool const hadManagedResistance = ClearManagedAq40ResistanceStrategies(bot, botAI);
+    bool const hadTwinWarlockTankOverlay = Aq40TwinEncounter::ClearTwinWarlockTankStrategy(bot);
     bool const hadPersistentEncounterState = Aq40Helpers::ResetEncounterState(bot);
     bool const recoveredDirtyState =
-        hadManagedResistance || hadPersistentEncounterState;
+        hadManagedResistance || hadTwinWarlockTankOverlay || hadPersistentEncounterState;
+
+    if (hadTwinWarlockTankOverlay)
+    {
+        Aq40Helpers::LogAq40Info(bot, "twin_strategy",
+            "twin:warlock_tank_overlay:cleanup",
+            "boss=twin strategy=tank action=cleanup", 1000);
+    }
 
     LogAq40CleanupTransition(bot, recoveredDirtyState);
     return true;

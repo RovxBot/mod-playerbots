@@ -2,6 +2,7 @@
 #define _PLAYERBOT_RAIDAQ40TWINENCOUNTER_H_
 
 #include <array>
+#include <string>
 #include <vector>
 
 #include "ObjectGuid.h"
@@ -87,37 +88,16 @@ struct TwinCenterSpreadSlot
     TwinAnchor anchor;
 };
 
-struct TwinRoomAnchors
-{
-    TwinAnchor center;
-    std::array<TwinAnchor, 2> sideTank;
-    std::array<TwinAnchor, 2> sideHealer;
-    std::array<TwinCenterSpreadSlot, 6> centerSpread;
-};
-
-struct TwinSynchronizedPullAnchors
-{
-    TwinAnchor veklorTank;
-    TwinAnchor veknilashTank;
-};
-
-struct TwinTeleportReceivingAnchors
-{
-    std::array<TwinAnchor, 2> warlockTank;
-    std::array<TwinAnchor, 2> meleeTank;
-};
-
-struct TwinWallFacingAnchors
-{
-    std::array<TwinAnchor, 2> veknilashTank;
-};
-
 struct TwinEncounterGeometry
 {
-    TwinRoomAnchors room;
-    TwinSynchronizedPullAnchors synchronizedPull;
-    TwinTeleportReceivingAnchors teleportReceiving;
-    TwinWallFacingAnchors wallFacing;
+    TwinAnchor roomCenter;
+    std::array<TwinAnchor, 2> bossPark;
+    std::array<TwinAnchor, 2> sidePrep;
+    std::array<TwinAnchor, 2> stableVeklorWarlock;
+    std::array<TwinAnchor, 2> reserveMeleeProxy;
+    std::array<TwinAnchor, 2> reserveWarlockPrep;
+    std::array<TwinAnchor, 2> sideHealer;
+    std::array<TwinCenterSpreadSlot, 6> centerSpread;
 };
 
 struct TwinRoleAssignment
@@ -188,14 +168,26 @@ struct TwinEncounterState
     TwinRecoveryState recovery;
     TwinScriptedHazardWindows scriptedHazards;
     std::vector<TwinRoleAssignment> assignments;
+    std::string unsupportedReason;
 };
 
 TwinBoss GetOtherBoss(TwinBoss boss);
 TwinSide GetInitialSideForBoss(TwinBoss boss);
 TwinSide GetOppositeSide(TwinSide side);
 bool IsKnownSide(TwinSide side);
+bool IsTwinEncounterParticipant(Player const* bot, bool allowExtendedRoom = true);
 
 TwinEncounterGeometry const& GetGeometry();
+TwinRoleAssignment const* GetAssignmentForMember(TwinEncounterState const& state, ObjectGuid memberGuid);
+TwinRoleAssignment const* GetAssignmentForMember(Player const* bot);
+bool IsAssignedToCohort(TwinEncounterState const& state, ObjectGuid memberGuid, TwinRoleCohort cohort);
+bool HasDeterministicAssignments(TwinEncounterState const& state);
+std::string const& GetUnsupportedReason(TwinEncounterState const& state);
+bool IsTwinPrePullReady(Player const* bot);
+bool IsTwinDesignatedWarlockTank(Player const* bot);
+bool ShouldUseTwinWarlockTankStrategy(Player const* bot);
+bool SyncTwinWarlockTankStrategy(Player* bot);
+bool ClearTwinWarlockTankStrategy(Player* bot);
 
 TwinStableOwnership& GetOwnership(TwinEncounterState& state, TwinBoss boss);
 TwinStableOwnership const& GetOwnership(TwinEncounterState const& state, TwinBoss boss);

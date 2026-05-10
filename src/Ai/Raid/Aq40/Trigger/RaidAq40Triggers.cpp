@@ -451,9 +451,7 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 
 bool Aq40TwinPrePullReadyTrigger::IsActive()
 {
-    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    return state && !bot->IsInCombat() && state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
-           state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
+    return !bot->IsInCombat() && Aq40TwinEncounter::IsTwinPrePullReady(bot);
 }
 
 bool Aq40TwinDualPullTrigger::IsActive()
@@ -465,7 +463,8 @@ bool Aq40TwinDualPullTrigger::IsActive()
 bool Aq40TwinActiveTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    return state && Aq40TwinEncounter::IsActivePhase(state->phase) &&
+    return state && Aq40TwinEncounter::IsTwinEncounterParticipant(bot) &&
+           Aq40TwinEncounter::IsActivePhase(state->phase) &&
            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
 }
 
@@ -508,7 +507,7 @@ bool Aq40TwinArcaneBurstRiskTrigger::IsActive()
     if (!Aq40TwinActiveTrigger(botAI).IsActive())
         return false;
 
-    if (bot->getClass() == CLASS_WARLOCK && Aq40BossHelper::IsEncounterTank(bot, bot))
+    if (Aq40TwinEncounter::IsTwinDesignatedWarlockTank(bot))
         return false;
 
     GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));

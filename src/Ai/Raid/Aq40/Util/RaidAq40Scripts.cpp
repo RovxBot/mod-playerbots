@@ -67,9 +67,9 @@ Aq40TwinEncounter::TwinSide GetTwinSideForPosition(float x, float y)
 {
 	Aq40TwinEncounter::TwinEncounterGeometry const& geometry = Aq40TwinEncounter::GetGeometry();
 	float const side0Distance = GetDistance2d(x, y,
-		geometry.room.sideTank[0].position.GetPositionX(), geometry.room.sideTank[0].position.GetPositionY());
+		geometry.bossPark[0].position.GetPositionX(), geometry.bossPark[0].position.GetPositionY());
 	float const side1Distance = GetDistance2d(x, y,
-		geometry.room.sideTank[1].position.GetPositionX(), geometry.room.sideTank[1].position.GetPositionY());
+		geometry.bossPark[1].position.GetPositionX(), geometry.bossPark[1].position.GetPositionY());
 	return side0Distance <= side1Distance ? Aq40TwinEncounter::TwinSide::Side0 : Aq40TwinEncounter::TwinSide::Side1;
 }
 
@@ -88,7 +88,7 @@ bool IsTwinRelevantBot(Player* player, Unit* source)
 		return false;
 	}
 
-	Position const& center = Aq40TwinEncounter::GetGeometry().room.center.position;
+	Position const& center = Aq40TwinEncounter::GetGeometry().roomCenter.position;
 	if (player->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) <= kTwinRoomBotRadius)
 		return true;
 
@@ -179,6 +179,13 @@ Player* ResolveBossOwnerForSpell(Spell* spell, Unit* caster, uint32 spellId)
 
 void MarkEncounterCombat(Aq40TwinEncounter::TwinEncounterState& state, uint32 nowMs)
 {
+	if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull &&
+		(state.mode != Aq40TwinEncounter::TwinStrategyMode::StandardCompReady ||
+		 !Aq40TwinEncounter::HasDeterministicAssignments(state)))
+	{
+		return;
+	}
+
 	Aq40TwinEncounter::SetMode(state, Aq40TwinEncounter::TwinStrategyMode::Combat, nowMs);
 	if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull)
 		Aq40TwinEncounter::EnterDualPullWindow(state, nowMs);
@@ -200,8 +207,8 @@ void MaybeLockPickupAnchor(Aq40TwinEncounter::TwinEncounterState const& state, P
 	Aq40TwinEncounter::TwinEncounterGeometry const& geometry = Aq40TwinEncounter::GetGeometry();
 	Aq40TwinEncounter::TwinAnchor const& anchor =
 		boss == Aq40TwinEncounter::TwinBoss::Veklor
-			? geometry.teleportReceiving.warlockTank[ToSideIndex(side)]
-			: geometry.teleportReceiving.meleeTank[ToSideIndex(side)];
+			? geometry.stableVeklorWarlock[ToSideIndex(side)]
+			: geometry.bossPark[ToSideIndex(side)];
 
 	uint32 const durationMs = std::max(
 		Aq40TwinEncounter::GetThreatHoldRemainingMs(state, boss, nowMs), kTwinPickupAnchorDurationMs);

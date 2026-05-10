@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 #include <unordered_map>
 
+#include "../RaidAq40BossHelper.h"
+#include "RaidAq40Helpers_Shared.h"
 #include "Playerbots.h"
 #include "Timer.h"
 
@@ -12,31 +15,70 @@ namespace Aq40TwinEncounter
 namespace
 {
 float constexpr kPi = 3.14159265358979323846f;
-float constexpr kRoomCenterX = -8954.855f;
-float constexpr kRoomCenterY = 1235.7107f;
-float constexpr kRoomCenterZ = -112.62047f;
-float constexpr kInitialVeklorX = -8868.31f;
-float constexpr kInitialVeklorY = 1205.97f;
-float constexpr kInitialVeklorZ = -104.231f;
-float constexpr kInitialVeknilashX = -9023.67f;
-float constexpr kInitialVeknilashY = 1176.24f;
-float constexpr kInitialVeknilashZ = -104.226f;
+float constexpr kRoomCenterX = -8954.043f;
+float constexpr kRoomCenterY = 1236.379f;
+float constexpr kRoomCenterZ = -112.619f;
+float constexpr kBossParkSide0X = -9027.082f;
+float constexpr kBossParkSide0Y = 1260.673f;
+float constexpr kBossParkSide0Z = -112.295f;
+float constexpr kBossParkSide1X = -8895.334f;
+float constexpr kBossParkSide1Y = 1284.836f;
+float constexpr kBossParkSide1Z = -112.293f;
+float constexpr kSidePrepSide0X = -9000.572f;
+float constexpr kSidePrepSide0Y = 1196.334f;
+float constexpr kSidePrepSide0Z = -112.304f;
+float constexpr kSidePrepSide1X = -8897.111f;
+float constexpr kSidePrepSide1Y = 1215.582f;
+float constexpr kSidePrepSide1Z = -112.306f;
 uint32 constexpr kInitialVeklorSideIndex = 1u;
 uint32 constexpr kInitialVeknilashSideIndex = 0u;
-float constexpr kSideTankAnchorDistance = 150.0f;
-float constexpr kSideHealerAnchorDistance = 120.0f;
-float constexpr kVeklorPullRange = 26.0f;
-float constexpr kVeknilashPullRange = 5.0f;
-float constexpr kVeklorReceivingRange = 22.0f;
-float constexpr kVeknilashReceivingRange = 5.0f;
-float constexpr kWallFacingRange = 3.5f;
+float constexpr kStableVeklorWarlockDistance = 23.0f;
+float constexpr kReserveMeleeProxyDistance = 8.0f;
+float constexpr kReserveWarlockPrepDistance = 8.0f;
+float constexpr kSideHealerTowardBossParkDistance = 14.0f;
+float constexpr kSideHealerLateralDistance = 8.0f;
+float constexpr kTwinRoomReadyRadius = 180.0f;
+float constexpr kTwinRoomExtendedRadius = 220.0f;
+size_t constexpr kTwinRequiredWarlockTanks = 2u;
+size_t constexpr kTwinRequiredMeleeTanks = 2u;
+size_t constexpr kTwinRequiredSideHealers = 2u;
+size_t constexpr kTwinRequiredRaidHealers = 1u;
+size_t constexpr kTwinRequiredHunters = 1u;
+size_t constexpr kTwinRequiredRangedDps = 1u;
+size_t constexpr kTwinRequiredMeleeDps = 1u;
+
+struct TwinAssignmentBuildResult
+{
+    std::vector<TwinRoleAssignment> assignments;
+    std::string unsupportedReason;
+    std::array<ObjectGuid, 2> warlockTankBySide = { ObjectGuid::Empty, ObjectGuid::Empty };
+    std::array<ObjectGuid, 2> meleeTankBySide = { ObjectGuid::Empty, ObjectGuid::Empty };
+    std::array<ObjectGuid, 2> sideHealerBySide = { ObjectGuid::Empty, ObjectGuid::Empty };
+    size_t stagedCount = 0u;
+    size_t raidHealerCount = 0u;
+    size_t hunterCount = 0u;
+    size_t rangedCount = 0u;
+    size_t meleeCount = 0u;
+};
+
+struct TwinManagedWarlockTankOverlay
+{
+    uint32 instanceId = 0;
+    bool addedByTwin = false;
+};
 
 std::unordered_map<uint32, TwinEncounterState> sTwinStateByInstance;
 std::unordered_map<uint64, TwinLockedPickupAnchor> sTwinPickupAnchorByBot;
+std::unordered_map<uint64, TwinManagedWarlockTankOverlay> sTwinWarlockTankOverlayByBot;
 
 size_t ToIndex(TwinBoss boss)
 {
     return boss == TwinBoss::Veknilash ? 1u : 0u;
+}
+
+size_t ToSideIndex(TwinSide side)
+{
+    return side == TwinSide::Side1 ? 1u : 0u;
 }
 
 uint32 ResolveNow(uint32 nowMs)
@@ -76,8 +118,8 @@ bool HasMeaningfulHazards(TwinScriptedHazardWindows const& hazards)
 
 bool HasMeaningfulEncounterState(TwinEncounterState const& state)
 {
-    if (state.mode != TwinStrategyMode::Inactive || state.modeEnteredAtMs ||
-        state.phase != TwinEncounterPhase::PrePull || state.phaseEnteredAtMs || !state.assignments.empty() ||
+    if ((state.mode != TwinStrategyMode::Inactive && state.mode != TwinStrategyMode::StandardCompReady) ||
+        state.phase != TwinEncounterPhase::PrePull ||
         state.recovery.splitBand != TwinSplitBand::Stable || state.recovery.splitBandEnteredAtMs ||
         HasMeaningfulHazards(state.scriptedHazards))
     {
@@ -98,6 +140,531 @@ uint64 GetBotKey(Player const* bot)
     return bot ? bot->GetGUID().GetRawValue() : 0;
 }
 
+bool IsNearTwinRoom(Player const* bot, float radius)
+{
+    if (!bot || !bot->IsInWorld() || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    Position const& center = GetGeometry().roomCenter.position;
+    return const_cast<Player*>(bot)->GetExactDist2d(center.GetPositionX(), center.GetPositionY()) <= radius;
+}
+
+std::string BuildUnsupportedReason(char const* cohortToken, size_t requiredCount, size_t availableCount)
+{
+    std::ostringstream out;
+    out << "missing_" << cohortToken << "_need_" << requiredCount << "_have_" << availableCount;
+    return out.str();
+}
+
+bool AreAssignmentsEqual(std::vector<TwinRoleAssignment> const& left, std::vector<TwinRoleAssignment> const& right)
+{
+    if (left.size() != right.size())
+        return false;
+
+    for (size_t index = 0; index < left.size(); ++index)
+    {
+        TwinRoleAssignment const& leftAssignment = left[index];
+        TwinRoleAssignment const& rightAssignment = right[index];
+        if (leftAssignment.memberGuid != rightAssignment.memberGuid ||
+            leftAssignment.cohort != rightAssignment.cohort ||
+            leftAssignment.stableSide != rightAssignment.stableSide ||
+            leftAssignment.slotIndex != rightAssignment.slotIndex)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void SortMembersByGuid(std::vector<Player*>& members)
+{
+    std::stable_sort(members.begin(), members.end(), [](Player* left, Player* right)
+    {
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+}
+
+uint32 GetTankAssignmentPriority(Player* member, Group const* group)
+{
+    if (!member)
+        return 99u;
+
+    if (PlayerbotAI::IsMainTank(member))
+        return 0u;
+    if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+        return 1u;
+    if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
+        return 2u;
+    if (group && group->IsAssistant(member->GetGUID()))
+        return 3u;
+    return 10u;
+}
+
+template <typename PriorityFn>
+void SortMembersByPriority(std::vector<Player*>& members, PriorityFn&& priorityFn)
+{
+    std::stable_sort(members.begin(), members.end(), [&](Player* left, Player* right)
+    {
+        uint32 const leftPriority = priorityFn(left);
+        uint32 const rightPriority = priorityFn(right);
+        if (leftPriority != rightPriority)
+            return leftPriority < rightPriority;
+
+        return left->GetGUID().GetRawValue() < right->GetGUID().GetRawValue();
+    });
+}
+
+std::vector<Player*> CollectTwinStagedMembers(Player* bot)
+{
+    std::vector<Player*> members;
+    if (!bot || !Aq40BossHelper::IsInAq40(bot))
+        return members;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return members;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInWorld())
+            continue;
+        if (!Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+        if (!IsNearTwinRoom(member, kTwinRoomReadyRadius))
+            continue;
+
+        members.push_back(member);
+    }
+
+    return members;
+}
+
+bool AnyTwinStagedMemberInCombat(std::vector<Player*> const& stagedMembers)
+{
+    return std::any_of(stagedMembers.begin(), stagedMembers.end(), [](Player* member)
+    {
+        return member && member->IsInCombat();
+    });
+}
+
+bool IsReadyPrePullState(TwinEncounterState const& state)
+{
+    return state.phase == TwinEncounterPhase::PrePull &&
+           state.mode == TwinStrategyMode::StandardCompReady &&
+           HasDeterministicAssignments(state);
+}
+
+bool HasAssignedMemberInCombat(Player* bot, TwinEncounterState const& state)
+{
+    if (!bot || state.assignments.empty())
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsInWorld() || !Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+
+        if (!GetAssignmentForMember(state, member->GetGUID()))
+            continue;
+
+        if (member->IsInCombat())
+            return true;
+    }
+
+    return false;
+}
+
+bool ClearWarlockTankOverlaysForInstance(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = GetInstanceId(bot);
+    if (!instanceId)
+        return false;
+
+    bool cleared = false;
+    Map::PlayerList const& players = bot->GetMap()->GetPlayers();
+    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+    {
+        Player* member = itr->GetSource();
+        if (!member || !member->IsInWorld() || GetInstanceId(member) != instanceId)
+            continue;
+
+        uint64 const botKey = GetBotKey(member);
+        auto const overlayItr = sTwinWarlockTankOverlayByBot.find(botKey);
+        if (overlayItr == sTwinWarlockTankOverlayByBot.end() || overlayItr->second.instanceId != instanceId)
+            continue;
+
+        ClearTwinWarlockTankStrategy(member);
+        Aq40Helpers::LogAq40Info(member, "twin_strategy",
+            "twin:warlock_tank_overlay:instance_reset",
+            "boss=twin strategy=tank action=instance_reset", 1000);
+        cleared = true;
+    }
+
+    for (auto itr = sTwinWarlockTankOverlayByBot.begin(); itr != sTwinWarlockTankOverlayByBot.end();)
+    {
+        if (itr->second.instanceId == instanceId)
+        {
+            itr = sTwinWarlockTankOverlayByBot.erase(itr);
+            cleared = true;
+            continue;
+        }
+
+        ++itr;
+    }
+
+    return cleared;
+}
+
+void PushAssignment(std::vector<TwinRoleAssignment>& assignments, Player* member, TwinRoleCohort cohort,
+                    TwinSide side, uint8 slotIndex)
+{
+    if (!member)
+        return;
+
+    TwinRoleAssignment assignment;
+    assignment.memberGuid = member->GetGUID();
+    assignment.cohort = cohort;
+    assignment.stableSide = side;
+    assignment.slotIndex = slotIndex;
+    assignments.push_back(assignment);
+}
+
+void AssignBalancedSideCohort(std::vector<Player*> const& members, TwinRoleCohort cohort,
+                              std::array<size_t, 2>& sideLoad,
+                              std::vector<TwinRoleAssignment>& assignments)
+{
+    uint8 slotIndex = 0;
+    for (Player* member : members)
+    {
+        TwinSide const side = sideLoad[0] <= sideLoad[1] ? TwinSide::Side0 : TwinSide::Side1;
+        PushAssignment(assignments, member, cohort, side, slotIndex++);
+        ++sideLoad[ToSideIndex(side)];
+    }
+}
+
+void ConfigurePrePullOwnership(TwinEncounterState& state, TwinAssignmentBuildResult const& buildResult)
+{
+    state.ownership[ToIndex(TwinBoss::Veklor)] = TwinStableOwnership();
+    state.ownership[ToIndex(TwinBoss::Veknilash)] = TwinStableOwnership();
+
+    TwinStableOwnership& veklorOwnership = state.ownership[ToIndex(TwinBoss::Veklor)];
+    veklorOwnership.expectedOwner = buildResult.warlockTankBySide[ToSideIndex(GetInitialSideForBoss(TwinBoss::Veklor))];
+    veklorOwnership.reserveOwner =
+        buildResult.warlockTankBySide[ToSideIndex(GetOppositeSide(GetInitialSideForBoss(TwinBoss::Veklor)))];
+
+    TwinStableOwnership& veknilashOwnership = state.ownership[ToIndex(TwinBoss::Veknilash)];
+    veknilashOwnership.expectedOwner =
+        buildResult.meleeTankBySide[ToSideIndex(GetInitialSideForBoss(TwinBoss::Veknilash))];
+    veknilashOwnership.reserveOwner =
+        buildResult.meleeTankBySide[ToSideIndex(GetOppositeSide(GetInitialSideForBoss(TwinBoss::Veknilash)))];
+
+    state.recovery = TwinRecoveryState();
+    state.scriptedHazards = TwinScriptedHazardWindows();
+}
+
+void ClearPrePullAssignments(TwinEncounterState& state, uint32 nowMs, bool clearReason)
+{
+    if (state.phase != TwinEncounterPhase::PrePull)
+        return;
+
+    state.assignments.clear();
+    state.ownership[ToIndex(TwinBoss::Veklor)] = TwinStableOwnership();
+    state.ownership[ToIndex(TwinBoss::Veknilash)] = TwinStableOwnership();
+    state.recovery = TwinRecoveryState();
+    state.scriptedHazards = TwinScriptedHazardWindows();
+    if (clearReason)
+        state.unsupportedReason.clear();
+
+    SetMode(state, TwinStrategyMode::Inactive, nowMs);
+}
+
+Player* ChooseTwinLogBot(Player* fallbackBot, std::vector<Player*> const& stagedMembers)
+{
+    if (fallbackBot && GET_PLAYERBOT_AI(fallbackBot) && IsNearTwinRoom(fallbackBot, kTwinRoomExtendedRadius))
+        return fallbackBot;
+
+    for (Player* member : stagedMembers)
+    {
+        if (member && GET_PLAYERBOT_AI(member))
+            return member;
+    }
+
+    return fallbackBot;
+}
+
+Player* FindTwinStagedMember(std::vector<Player*> const& stagedMembers, ObjectGuid guid)
+{
+    if (guid.IsEmpty())
+        return nullptr;
+
+    auto const itr = std::find_if(stagedMembers.begin(), stagedMembers.end(), [guid](Player* member)
+    {
+        return member && member->GetGUID() == guid;
+    });
+
+    return itr != stagedMembers.end() ? *itr : nullptr;
+}
+
+TwinAssignmentBuildResult BuildTwinAssignments(Player* bot)
+{
+    TwinAssignmentBuildResult buildResult;
+    PlayerbotAI* referenceAI = GET_PLAYERBOT_AI(bot);
+    if (!bot || !referenceAI)
+        return buildResult;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return buildResult;
+
+    std::vector<Player*> stagedMembers = CollectTwinStagedMembers(bot);
+    buildResult.stagedCount = stagedMembers.size();
+    if (stagedMembers.empty() || AnyTwinStagedMemberInCombat(stagedMembers))
+        return buildResult;
+
+    std::vector<Player*> warlockCandidates;
+    std::vector<Player*> meleeTankCandidates;
+    std::vector<Player*> healerCandidates;
+    std::vector<Player*> hunterCandidates;
+    std::vector<Player*> rangedDpsCandidates;
+    std::vector<Player*> meleeDpsCandidates;
+
+    for (Player* member : stagedMembers)
+    {
+        bool const isHealer = referenceAI->IsHeal(member);
+        bool const isTank = PlayerbotAI::IsTank(member, true);
+        bool const isRanged = PlayerbotAI::IsRanged(member);
+
+        if (member->getClass() == CLASS_WARLOCK)
+        {
+            warlockCandidates.push_back(member);
+            continue;
+        }
+
+        if (isTank)
+        {
+            meleeTankCandidates.push_back(member);
+            continue;
+        }
+
+        if (isHealer)
+        {
+            healerCandidates.push_back(member);
+            continue;
+        }
+
+        if (member->getClass() == CLASS_HUNTER)
+        {
+            hunterCandidates.push_back(member);
+            continue;
+        }
+
+        if (isRanged)
+        {
+            rangedDpsCandidates.push_back(member);
+            continue;
+        }
+
+        meleeDpsCandidates.push_back(member);
+    }
+
+    SortMembersByPriority(warlockCandidates, [&](Player* member)
+    {
+        return GetTankAssignmentPriority(member, group);
+    });
+    SortMembersByPriority(meleeTankCandidates, [&](Player* member)
+    {
+        return GetTankAssignmentPriority(member, group);
+    });
+    SortMembersByGuid(healerCandidates);
+    SortMembersByGuid(hunterCandidates);
+    SortMembersByGuid(rangedDpsCandidates);
+    SortMembersByGuid(meleeDpsCandidates);
+
+    if (warlockCandidates.size() < kTwinRequiredWarlockTanks)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("warlock_tanks", kTwinRequiredWarlockTanks, warlockCandidates.size());
+        return buildResult;
+    }
+
+    if (meleeTankCandidates.size() < kTwinRequiredMeleeTanks)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("melee_tanks", kTwinRequiredMeleeTanks, meleeTankCandidates.size());
+        return buildResult;
+    }
+
+    if (healerCandidates.size() < kTwinRequiredSideHealers)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("side_healers", kTwinRequiredSideHealers, healerCandidates.size());
+        return buildResult;
+    }
+
+    size_t const raidHealerCount = healerCandidates.size() - kTwinRequiredSideHealers;
+    if (raidHealerCount < kTwinRequiredRaidHealers)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("raid_healers", kTwinRequiredRaidHealers, raidHealerCount);
+        return buildResult;
+    }
+
+    rangedDpsCandidates.insert(rangedDpsCandidates.end(),
+        warlockCandidates.begin() + kTwinRequiredWarlockTanks, warlockCandidates.end());
+    meleeDpsCandidates.insert(meleeDpsCandidates.end(),
+        meleeTankCandidates.begin() + kTwinRequiredMeleeTanks, meleeTankCandidates.end());
+
+    SortMembersByGuid(rangedDpsCandidates);
+    SortMembersByGuid(meleeDpsCandidates);
+
+    if (rangedDpsCandidates.size() < kTwinRequiredRangedDps)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("ranged_dps", kTwinRequiredRangedDps, rangedDpsCandidates.size());
+        return buildResult;
+    }
+
+    if (hunterCandidates.size() < kTwinRequiredHunters)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("hunters", kTwinRequiredHunters, hunterCandidates.size());
+        return buildResult;
+    }
+
+    if (meleeDpsCandidates.size() < kTwinRequiredMeleeDps)
+    {
+        buildResult.unsupportedReason =
+            BuildUnsupportedReason("melee_dps", kTwinRequiredMeleeDps, meleeDpsCandidates.size());
+        return buildResult;
+    }
+
+    std::array<size_t, 2> sideLoad = { 0u, 0u };
+
+    buildResult.warlockTankBySide[0] = warlockCandidates[0]->GetGUID();
+    buildResult.warlockTankBySide[1] = warlockCandidates[1]->GetGUID();
+    buildResult.meleeTankBySide[0] = meleeTankCandidates[0]->GetGUID();
+    buildResult.meleeTankBySide[1] = meleeTankCandidates[1]->GetGUID();
+    buildResult.sideHealerBySide[0] = healerCandidates[0]->GetGUID();
+    buildResult.sideHealerBySide[1] = healerCandidates[1]->GetGUID();
+
+    PushAssignment(buildResult.assignments, warlockCandidates[0], TwinRoleCohort::WarlockTank, TwinSide::Side0, 0);
+    PushAssignment(buildResult.assignments, warlockCandidates[1], TwinRoleCohort::WarlockTank, TwinSide::Side1, 1);
+    ++sideLoad[0];
+    ++sideLoad[1];
+
+    PushAssignment(buildResult.assignments, meleeTankCandidates[0], TwinRoleCohort::MeleeTank, TwinSide::Side0, 0);
+    PushAssignment(buildResult.assignments, meleeTankCandidates[1], TwinRoleCohort::MeleeTank, TwinSide::Side1, 1);
+    ++sideLoad[0];
+    ++sideLoad[1];
+
+    PushAssignment(buildResult.assignments, healerCandidates[0], TwinRoleCohort::SideHealer, TwinSide::Side0, 0);
+    PushAssignment(buildResult.assignments, healerCandidates[1], TwinRoleCohort::SideHealer, TwinSide::Side1, 1);
+    ++sideLoad[0];
+    ++sideLoad[1];
+
+    for (size_t index = kTwinRequiredSideHealers; index < healerCandidates.size(); ++index)
+        PushAssignment(buildResult.assignments, healerCandidates[index], TwinRoleCohort::RaidHealer,
+                       TwinSide::Unknown, static_cast<uint8>(index - kTwinRequiredSideHealers));
+
+    buildResult.raidHealerCount = raidHealerCount;
+    buildResult.rangedCount = rangedDpsCandidates.size();
+    buildResult.hunterCount = hunterCandidates.size();
+    buildResult.meleeCount = meleeDpsCandidates.size();
+
+    AssignBalancedSideCohort(rangedDpsCandidates, TwinRoleCohort::RangedDps, sideLoad, buildResult.assignments);
+    AssignBalancedSideCohort(hunterCandidates, TwinRoleCohort::Hunter, sideLoad, buildResult.assignments);
+    AssignBalancedSideCohort(meleeDpsCandidates, TwinRoleCohort::MeleeDps, sideLoad, buildResult.assignments);
+
+    return buildResult;
+}
+
+void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
+{
+    if (!bot || state.phase != TwinEncounterPhase::PrePull)
+        return;
+
+    uint32 const now = ResolveNow(0);
+    std::vector<Player*> const stagedMembers = CollectTwinStagedMembers(bot);
+    Player* logBot = ChooseTwinLogBot(bot, stagedMembers);
+    bool const wasReady = IsReadyPrePullState(state);
+    bool const preserveReadyState = wasReady && HasAssignedMemberInCombat(bot, state);
+
+    if (preserveReadyState)
+    {
+        if (logBot)
+        {
+            std::ostringstream fields;
+            fields << "boss=twin state=retain_ready reason=first_contact_pending"
+                   << " assignments=" << state.assignments.size();
+            Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:retain_ready:first_contact",
+                                     fields.str(), 5000);
+        }
+
+        return;
+    }
+
+    if (stagedMembers.empty() || AnyTwinStagedMemberInCombat(stagedMembers))
+    {
+        ClearPrePullAssignments(state, now, true);
+        return;
+    }
+
+    TwinAssignmentBuildResult const buildResult = BuildTwinAssignments(bot);
+
+    bool const assignmentsChanged = !AreAssignmentsEqual(state.assignments, buildResult.assignments);
+    bool const reasonChanged = state.unsupportedReason != buildResult.unsupportedReason;
+
+    if (!buildResult.unsupportedReason.empty())
+    {
+        ClearPrePullAssignments(state, now, false);
+        state.unsupportedReason = buildResult.unsupportedReason;
+
+        if ((assignmentsChanged || reasonChanged || wasReady) && logBot)
+        {
+            std::ostringstream fields;
+            fields << "boss=twin state=unsupported reason=" << buildResult.unsupportedReason
+                   << " staged=" << buildResult.stagedCount;
+            Aq40Helpers::LogAq40Warn(logBot, "twin_prepull", "twin:unsupported:" + buildResult.unsupportedReason,
+                                     fields.str(), 1000);
+        }
+
+        return;
+    }
+
+    state.assignments = buildResult.assignments;
+    state.unsupportedReason.clear();
+    ConfigurePrePullOwnership(state, buildResult);
+    SetMode(state, TwinStrategyMode::StandardCompReady, now);
+    SetPhase(state, TwinEncounterPhase::PrePull, now);
+
+    if ((!wasReady || assignmentsChanged || reasonChanged) && logBot)
+    {
+        std::ostringstream fields;
+        fields << "boss=twin state=ready"
+               << " warlock_side0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.warlockTankBySide[0]))
+               << " warlock_side1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.warlockTankBySide[1]))
+               << " melee_side0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.meleeTankBySide[0]))
+               << " melee_side1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.meleeTankBySide[1]))
+               << " side_healer0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.sideHealerBySide[0]))
+               << " side_healer1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(stagedMembers, buildResult.sideHealerBySide[1]))
+               << " raid_healers=" << buildResult.raidHealerCount
+               << " ranged=" << buildResult.rangedCount
+               << " hunters=" << buildResult.hunterCount
+               << " melee=" << buildResult.meleeCount;
+        Aq40Helpers::LogAq40Info(logBot, "twin_assignments", "twin:ready", fields.str(), 1000);
+    }
+}
+
 TwinAnchor MakeAnchor(float x, float y, float z, float preferredRange = 0.0f, float facing = 0.0f)
 {
     TwinAnchor anchor;
@@ -112,37 +679,71 @@ float ComputeFacing(Position const& from, Position const& to)
     return std::atan2(to.GetPositionY() - from.GetPositionY(), to.GetPositionX() - from.GetPositionX());
 }
 
-Position BuildRadialPosition(float originX, float originY, float originZ, float distance, bool towardCenter)
+struct Direction2d
+{
+    float x = 0.0f;
+    float y = 0.0f;
+    float length = 0.0f;
+};
+
+Position MakePosition(float x, float y, float z)
 {
     Position position;
-    float dirX = towardCenter ? (kRoomCenterX - originX) : (originX - kRoomCenterX);
-    float dirY = towardCenter ? (kRoomCenterY - originY) : (originY - kRoomCenterY);
-    float length = std::sqrt(dirX * dirX + dirY * dirY);
-
-    if (length < 0.01f)
-    {
-        position.Relocate(originX, originY, originZ);
-        return position;
-    }
-
-    float const zRatio = towardCenter ? std::min(distance / length, 1.0f) : 0.0f;
-    position.Relocate(originX + (dirX / length) * distance,
-                      originY + (dirY / length) * distance,
-                      originZ + (kRoomCenterZ - originZ) * zRatio);
+    position.Relocate(x, y, z);
     return position;
 }
 
-TwinAnchor BuildRadialAnchor(float originX, float originY, float originZ, float distance, bool towardCenter)
+Direction2d GetDirection2d(Position const& from, Position const& to)
 {
-    Position center;
-    center.Relocate(kRoomCenterX, kRoomCenterY, kRoomCenterZ);
+    Direction2d direction;
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    direction.length = std::sqrt(dx * dx + dy * dy);
 
-    Position position = BuildRadialPosition(originX, originY, originZ, distance, towardCenter);
-    TwinAnchor anchor;
-    anchor.position = position;
-    anchor.preferredRange = distance;
-    anchor.facing = towardCenter ? ComputeFacing(position, center) : ComputeFacing(position, MakeAnchor(originX, originY, originZ).position);
-    return anchor;
+    if (direction.length >= 0.01f)
+    {
+        direction.x = dx / direction.length;
+        direction.y = dy / direction.length;
+    }
+
+    return direction;
+}
+
+Position TranslatePosition(Position const& origin, Position const& toward, float forwardDistance,
+                           float lateralDistance = 0.0f)
+{
+    Direction2d const direction = GetDirection2d(origin, toward);
+    Position position;
+
+    if (direction.length < 0.01f)
+    {
+        position.Relocate(origin.GetPositionX(), origin.GetPositionY(), origin.GetPositionZ());
+        return position;
+    }
+
+    float const rightX = direction.y;
+    float const rightY = -direction.x;
+    float const zRatio = std::min(std::fabs(forwardDistance) / direction.length, 1.0f);
+
+    position.Relocate(origin.GetPositionX() + direction.x * forwardDistance + rightX * lateralDistance,
+        origin.GetPositionY() + direction.y * forwardDistance + rightY * lateralDistance,
+        origin.GetPositionZ() + (toward.GetPositionZ() - origin.GetPositionZ()) * zRatio);
+    return position;
+}
+
+TwinAnchor BuildDerivedAnchor(Position const& origin, Position const& toward, float forwardDistance,
+                              Position const& facingTarget, float preferredRange = 0.0f,
+                              float lateralDistance = 0.0f)
+{
+    Position const position = TranslatePosition(origin, toward, forwardDistance, lateralDistance);
+    float const range = preferredRange > 0.0f ? preferredRange : std::fabs(forwardDistance);
+    return MakeAnchor(position.GetPositionX(), position.GetPositionY(), position.GetPositionZ(),
+        range, ComputeFacing(position, facingTarget));
+}
+
+float ComputeOutwardFacing(Position const& from, Position const& center)
+{
+    return Position::NormalizeOrientation(ComputeFacing(from, center) + kPi);
 }
 
 TwinCenterSpreadSlot BuildCenterSpreadSlot(uint8 slotIndex, float radius, float angleDegrees)
@@ -162,19 +763,57 @@ TwinEncounterGeometry BuildGeometry()
 {
     TwinEncounterGeometry geometry;
 
-    geometry.room.center = MakeAnchor(kRoomCenterX, kRoomCenterY, kRoomCenterZ);
+    Position const roomCenter = MakePosition(kRoomCenterX, kRoomCenterY, kRoomCenterZ);
+    Position const bossParkSide0 = MakePosition(kBossParkSide0X, kBossParkSide0Y, kBossParkSide0Z);
+    Position const bossParkSide1 = MakePosition(kBossParkSide1X, kBossParkSide1Y, kBossParkSide1Z);
+    Position const sidePrepSide0 = MakePosition(kSidePrepSide0X, kSidePrepSide0Y, kSidePrepSide0Z);
+    Position const sidePrepSide1 = MakePosition(kSidePrepSide1X, kSidePrepSide1Y, kSidePrepSide1Z);
 
-    geometry.room.sideTank[kInitialVeklorSideIndex] =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kSideTankAnchorDistance, true);
-    geometry.room.sideTank[kInitialVeknilashSideIndex] =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kSideTankAnchorDistance, true);
+    geometry.roomCenter = MakeAnchor(kRoomCenterX, kRoomCenterY, kRoomCenterZ);
 
-    geometry.room.sideHealer[kInitialVeklorSideIndex] =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kSideHealerAnchorDistance, true);
-    geometry.room.sideHealer[kInitialVeknilashSideIndex] =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kSideHealerAnchorDistance, true);
+    geometry.bossPark[kInitialVeknilashSideIndex] =
+        MakeAnchor(kBossParkSide0X, kBossParkSide0Y, kBossParkSide0Z, 0.0f,
+            ComputeOutwardFacing(bossParkSide0, roomCenter));
+    geometry.bossPark[kInitialVeklorSideIndex] =
+        MakeAnchor(kBossParkSide1X, kBossParkSide1Y, kBossParkSide1Z, 0.0f,
+            ComputeOutwardFacing(bossParkSide1, roomCenter));
 
-    geometry.room.centerSpread = {
+    geometry.sidePrep[kInitialVeknilashSideIndex] =
+        MakeAnchor(kSidePrepSide0X, kSidePrepSide0Y, kSidePrepSide0Z, 0.0f,
+            ComputeFacing(sidePrepSide0, bossParkSide0));
+    geometry.sidePrep[kInitialVeklorSideIndex] =
+        MakeAnchor(kSidePrepSide1X, kSidePrepSide1Y, kSidePrepSide1Z, 0.0f,
+            ComputeFacing(sidePrepSide1, bossParkSide1));
+
+    geometry.stableVeklorWarlock[kInitialVeknilashSideIndex] =
+        BuildDerivedAnchor(bossParkSide0, roomCenter, kStableVeklorWarlockDistance, bossParkSide0,
+            kStableVeklorWarlockDistance);
+    geometry.stableVeklorWarlock[kInitialVeklorSideIndex] =
+        BuildDerivedAnchor(bossParkSide1, roomCenter, kStableVeklorWarlockDistance, bossParkSide1,
+            kStableVeklorWarlockDistance);
+
+    geometry.reserveMeleeProxy[kInitialVeknilashSideIndex] =
+        BuildDerivedAnchor(bossParkSide0, roomCenter, kReserveMeleeProxyDistance, bossParkSide0,
+            kReserveMeleeProxyDistance);
+    geometry.reserveMeleeProxy[kInitialVeklorSideIndex] =
+        BuildDerivedAnchor(bossParkSide1, roomCenter, kReserveMeleeProxyDistance, bossParkSide1,
+            kReserveMeleeProxyDistance);
+
+    geometry.reserveWarlockPrep[kInitialVeknilashSideIndex] =
+        BuildDerivedAnchor(bossParkSide0, sidePrepSide0, kReserveWarlockPrepDistance, bossParkSide0,
+            kReserveWarlockPrepDistance);
+    geometry.reserveWarlockPrep[kInitialVeklorSideIndex] =
+        BuildDerivedAnchor(bossParkSide1, sidePrepSide1, kReserveWarlockPrepDistance, bossParkSide1,
+            kReserveWarlockPrepDistance);
+
+    geometry.sideHealer[kInitialVeknilashSideIndex] =
+        BuildDerivedAnchor(sidePrepSide0, bossParkSide0, kSideHealerTowardBossParkDistance, bossParkSide0, 0.0f,
+            -kSideHealerLateralDistance);
+    geometry.sideHealer[kInitialVeklorSideIndex] =
+        BuildDerivedAnchor(sidePrepSide1, bossParkSide1, kSideHealerTowardBossParkDistance, bossParkSide1, 0.0f,
+            kSideHealerLateralDistance);
+
+    geometry.centerSpread = {
         BuildCenterSpreadSlot(0, 18.0f, 20.0f),
         BuildCenterSpreadSlot(1, 26.0f, 80.0f),
         BuildCenterSpreadSlot(2, 18.0f, 140.0f),
@@ -182,25 +821,6 @@ TwinEncounterGeometry BuildGeometry()
         BuildCenterSpreadSlot(4, 18.0f, 260.0f),
         BuildCenterSpreadSlot(5, 26.0f, 320.0f),
     };
-
-    geometry.synchronizedPull.veklorTank =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kVeklorPullRange, true);
-    geometry.synchronizedPull.veknilashTank =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kVeknilashPullRange, true);
-
-    geometry.teleportReceiving.warlockTank[kInitialVeklorSideIndex] =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kVeklorReceivingRange, true);
-    geometry.teleportReceiving.meleeTank[kInitialVeklorSideIndex] =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kVeknilashReceivingRange, true);
-    geometry.teleportReceiving.warlockTank[kInitialVeknilashSideIndex] =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kVeklorReceivingRange, true);
-    geometry.teleportReceiving.meleeTank[kInitialVeknilashSideIndex] =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kVeknilashReceivingRange, true);
-
-    geometry.wallFacing.veknilashTank[kInitialVeklorSideIndex] =
-        BuildRadialAnchor(kInitialVeklorX, kInitialVeklorY, kInitialVeklorZ, kWallFacingRange, false);
-    geometry.wallFacing.veknilashTank[kInitialVeknilashSideIndex] =
-        BuildRadialAnchor(kInitialVeknilashX, kInitialVeknilashY, kInitialVeknilashZ, kWallFacingRange, false);
 
     return geometry;
 }
@@ -241,9 +861,144 @@ bool IsKnownSide(TwinSide side)
     return side == TwinSide::Side0 || side == TwinSide::Side1;
 }
 
+bool IsTwinEncounterParticipant(Player const* bot, bool allowExtendedRoom)
+{
+    if (!bot || !bot->IsAlive() || !bot->IsInWorld() || !Aq40BossHelper::IsInAq40(bot))
+        return false;
+
+    if (allowExtendedRoom && HasActiveLockedPickupAnchor(bot))
+        return true;
+
+    return IsNearTwinRoom(bot, allowExtendedRoom ? kTwinRoomExtendedRadius : kTwinRoomReadyRadius);
+}
+
 TwinEncounterGeometry const& GetGeometry()
 {
     return sTwinGeometry;
+}
+
+TwinRoleAssignment const* GetAssignmentForMember(TwinEncounterState const& state, ObjectGuid memberGuid)
+{
+    if (memberGuid.IsEmpty())
+        return nullptr;
+
+    auto const itr = std::find_if(state.assignments.begin(), state.assignments.end(),
+        [memberGuid](TwinRoleAssignment const& assignment)
+        {
+            return assignment.memberGuid == memberGuid;
+        });
+
+    return itr != state.assignments.end() ? &(*itr) : nullptr;
+}
+
+TwinRoleAssignment const* GetAssignmentForMember(Player const* bot)
+{
+    if (!bot)
+        return nullptr;
+
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state ? GetAssignmentForMember(*state, bot->GetGUID()) : nullptr;
+}
+
+bool IsAssignedToCohort(TwinEncounterState const& state, ObjectGuid memberGuid, TwinRoleCohort cohort)
+{
+    TwinRoleAssignment const* assignment = GetAssignmentForMember(state, memberGuid);
+    return assignment && assignment->cohort == cohort;
+}
+
+bool HasDeterministicAssignments(TwinEncounterState const& state)
+{
+    return state.unsupportedReason.empty() && !state.assignments.empty();
+}
+
+std::string const& GetUnsupportedReason(TwinEncounterState const& state)
+{
+    return state.unsupportedReason;
+}
+
+bool IsTwinPrePullReady(Player const* bot)
+{
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state && HasDeterministicAssignments(*state) && state->mode == TwinStrategyMode::StandardCompReady &&
+           state->phase == TwinEncounterPhase::PrePull && IsTwinEncounterParticipant(bot, false);
+}
+
+bool IsTwinDesignatedWarlockTank(Player const* bot)
+{
+    if (!bot || bot->getClass() != CLASS_WARLOCK)
+        return false;
+
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state && HasDeterministicAssignments(*state) &&
+           IsAssignedToCohort(*state, bot->GetGUID(), TwinRoleCohort::WarlockTank);
+}
+
+bool ShouldUseTwinWarlockTankStrategy(Player const* bot)
+{
+    TwinEncounterState const* state = GetEncounterState(bot);
+    if (!state || IsTerminalPhase(state->phase) || !IsTwinDesignatedWarlockTank(bot))
+        return false;
+
+    return IsTwinPrePullReady(bot) || (IsActivePhase(state->phase) && IsTwinEncounterParticipant(bot));
+}
+
+bool SyncTwinWarlockTankStrategy(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return false;
+
+    uint64 const botKey = GetBotKey(bot);
+    uint32 const instanceId = GetInstanceId(bot);
+    auto managedItr = sTwinWarlockTankOverlayByBot.find(botKey);
+    if (managedItr != sTwinWarlockTankOverlayByBot.end() && managedItr->second.instanceId != instanceId)
+    {
+        sTwinWarlockTankOverlayByBot.erase(managedItr);
+        managedItr = sTwinWarlockTankOverlayByBot.end();
+    }
+
+    if (!ShouldUseTwinWarlockTankStrategy(bot))
+        return ClearTwinWarlockTankStrategy(bot);
+
+    if (botAI->HasStrategy("tank", BOT_STATE_COMBAT))
+        return false;
+
+    botAI->ChangeStrategy("+tank", BOT_STATE_COMBAT);
+
+    TwinManagedWarlockTankOverlay& overlay = sTwinWarlockTankOverlayByBot[botKey];
+    overlay.instanceId = instanceId;
+    overlay.addedByTwin = true;
+    return true;
+}
+
+bool ClearTwinWarlockTankStrategy(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    uint64 const botKey = GetBotKey(bot);
+    auto managedItr = sTwinWarlockTankOverlayByBot.find(botKey);
+    if (managedItr == sTwinWarlockTankOverlayByBot.end())
+        return false;
+
+    bool removed = false;
+    if (managedItr->second.addedByTwin)
+    {
+        if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+        {
+            if (botAI->HasStrategy("tank", BOT_STATE_COMBAT))
+            {
+                botAI->ChangeStrategy("-tank", BOT_STATE_COMBAT);
+                removed = true;
+            }
+        }
+    }
+
+    sTwinWarlockTankOverlayByBot.erase(managedItr);
+    return removed;
 }
 
 TwinStableOwnership& GetOwnership(TwinEncounterState& state, TwinBoss boss)
@@ -751,31 +1506,25 @@ uint32 GetInstanceId(Player const* bot)
 TwinEncounterState* GetEncounterState(Player* bot)
 {
     uint32 const instanceId = GetInstanceId(bot);
-    if (!instanceId)
+    if (!instanceId || !Aq40BossHelper::IsInAq40(bot))
         return nullptr;
 
-    auto itr = sTwinStateByInstance.find(instanceId);
-    return itr != sTwinStateByInstance.end() ? &itr->second : nullptr;
-}
-
-TwinEncounterState const* GetEncounterState(Player const* bot)
-{
-    uint32 const instanceId = GetInstanceId(bot);
-    if (!instanceId)
-        return nullptr;
-
-    auto itr = sTwinStateByInstance.find(instanceId);
-    return itr != sTwinStateByInstance.end() ? &itr->second : nullptr;
-}
-
-TwinEncounterState& EnsureEncounterState(Player* bot)
-{
-    uint32 const instanceId = GetInstanceId(bot);
     TwinEncounterState& state = sTwinStateByInstance[instanceId];
     if (state.instanceId != instanceId)
         ResetEncounterState(state, instanceId);
 
-    return state;
+    RefreshPrePullAssignments(bot, state);
+    return &state;
+}
+
+TwinEncounterState const* GetEncounterState(Player const* bot)
+{
+    return bot ? GetEncounterState(const_cast<Player*>(bot)) : nullptr;
+}
+
+TwinEncounterState& EnsureEncounterState(Player* bot)
+{
+    return *GetEncounterState(bot);
 }
 
 TwinLockedPickupAnchor* GetLockedPickupAnchor(Player* bot)
@@ -922,7 +1671,8 @@ bool ResetState(Player* bot)
     if (!instanceId)
         return false;
 
-    bool erased = sTwinStateByInstance.erase(instanceId) > 0;
+    bool erased = ClearWarlockTankOverlaysForInstance(bot);
+    erased = sTwinStateByInstance.erase(instanceId) > 0 || erased;
     for (auto itr = sTwinPickupAnchorByBot.begin(); itr != sTwinPickupAnchorByBot.end();)
     {
         if (itr->second.instanceId == instanceId)

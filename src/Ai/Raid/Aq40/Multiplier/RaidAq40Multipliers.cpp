@@ -57,13 +57,14 @@ bool IsTwinRegistrationWindow(Player* bot)
     if (!state)
         return false;
 
-    bool const prepullReady = state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
-                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
+    bool const prepullReady = Aq40TwinEncounter::IsTwinPrePullReady(bot);
     bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
-                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+                            !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                            Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
     bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
                               (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
-                               Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
+                               (Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state) &&
+                                Aq40TwinEncounter::IsTwinEncounterParticipant(bot)));
     return prepullReady || activeTwin || postSwapHold;
 }
 }    // namespace
@@ -343,7 +344,7 @@ float Aq40TwinMultiplier::GetValue(Action* action)
         if (actionName == "aq40 twin avoid veklor")
             return activeTwin ? 3.0f : 1.0f;
         if (actionName == "aq40 twin warlock tank")
-            return activeTwin && bot->getClass() == CLASS_WARLOCK ? 2.5f : 1.0f;
+            return Aq40TwinEncounter::ShouldUseTwinWarlockTankStrategy(bot) ? 2.5f : 0.0f;
         if (actionName == "aq40 twin choose target")
             return activeTwin ? 2.0f : 1.0f;
         return 1.0f;
