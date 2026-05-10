@@ -1301,6 +1301,7 @@ bool SyncTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
 
     if (changed)
     {
+        Aq40TwinEncounter::MarkTwinLocalCleanupState(bot);
         std::ostringstream fields;
         fields << "boss=twin phase=" << Aq40TwinEncounter::ToString(state.phase)
                << " mode=" << Aq40TwinEncounter::ToString(state.mode)
@@ -1554,104 +1555,6 @@ TwinPrePullAnchorChoice GetTwinHazardRecoveryAnchorChoice(
         return { GetVeknilashSideAnchor(botAI, units), "veknilash_side" };
 
     return { GetCenterSpreadAnchor(bot), "center_spread" };
-}
-
-bool ClearTwinPrePullIntent(Player* bot, PlayerbotAI* botAI)
-{
-    if (!bot || !botAI || !botAI->GetAiObjectContext())
-        return false;
-
-    auto* context = botAI->GetAiObjectContext();
-    bool changed = false;
-
-    if (context->GetValue<Unit*>("old target")->Get())
-    {
-        context->GetValue<Unit*>("old target")->Set(nullptr);
-        changed = true;
-    }
-
-    if (context->GetValue<Unit*>("current target")->Get())
-    {
-        context->GetValue<Unit*>("current target")->Set(nullptr);
-        changed = true;
-    }
-
-    if (!context->GetValue<GuidVector>("prioritized targets")->Get().empty())
-    {
-        context->GetValue<GuidVector>("prioritized targets")->Reset();
-        changed = true;
-    }
-
-    if (!context->GetValue<ObjectGuid>("pull target")->Get().IsEmpty())
-    {
-        context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
-        changed = true;
-    }
-
-    if (!context->GetValue<ObjectGuid>("pull strategy target")->Get().IsEmpty())
-    {
-        context->GetValue<ObjectGuid>("pull strategy target")->Set(ObjectGuid::Empty);
-        changed = true;
-    }
-
-    if (bot->GetTarget())
-    {
-        bot->SetTarget();
-        bot->SetSelection(ObjectGuid());
-        changed = true;
-    }
-
-    std::list<ObjectGuid> const& focusHealTargets = context->GetValue<std::list<ObjectGuid>>("focus heal targets")->Get();
-    if (!focusHealTargets.empty())
-    {
-        context->GetValue<std::list<ObjectGuid>>("focus heal targets")->Set(std::list<ObjectGuid>());
-        changed = true;
-    }
-
-    if (botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT))
-    {
-        botAI->ChangeStrategy("-focus heal targets", BOT_STATE_COMBAT);
-        changed = true;
-    }
-
-    if (!context->GetValue<std::string>("rti")->Get().empty())
-    {
-        context->GetValue<std::string>("rti")->Set("");
-        changed = true;
-    }
-
-    if (!context->GetValue<std::string>("rti cc")->Get().empty())
-    {
-        context->GetValue<std::string>("rti cc")->Set("");
-        changed = true;
-    }
-
-    if (context->GetValue<Unit*>("rti target")->Get())
-    {
-        context->GetValue<Unit*>("rti target")->Set(nullptr);
-        changed = true;
-    }
-
-    if (context->GetValue<Unit*>("rti cc target")->Get())
-    {
-        context->GetValue<Unit*>("rti cc target")->Set(nullptr);
-        changed = true;
-    }
-
-    if (Pet* pet = bot->GetPet())
-    {
-        bool petNeedsFollow = pet->GetVictim() || pet->IsInCombat();
-        if (CharmInfo* charmInfo = pet->GetCharmInfo())
-            petNeedsFollow = petNeedsFollow || charmInfo->IsCommandAttack() || !charmInfo->IsReturning();
-
-        if (petNeedsFollow)
-        {
-            botAI->PetFollow();
-            changed = true;
-        }
-    }
-
-    return changed;
 }
 
 Aq40TwinEncounter::TwinAnchor GetTwinMeleeDpsStageAnchor(Aq40TwinEncounter::TwinSide side, uint8 slotIndex)
@@ -1966,6 +1869,9 @@ bool SyncTwinWarlockTankOverlay(Player* bot, PlayerbotAI* botAI)
     if (!Aq40TwinEncounter::SyncTwinWarlockTankStrategy(bot))
         return false;
 
+    if (shouldUseTankOverlay)
+        Aq40TwinEncounter::MarkTwinLocalCleanupState(bot);
+
     Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
     std::ostringstream fields;
     fields << "boss=twin strategy=tank action=" << (shouldUseTankOverlay ? "enable" : "disable");
@@ -1996,7 +1902,8 @@ bool Aq40TwinPrePullStageAction::Execute(Event /*event*/)
     if (!assignment)
         return overlayChanged;
 
-    bool const clearedIntent = ClearTwinPrePullIntent(bot, botAI);
+    Aq40TwinEncounter::MarkTwinLocalCleanupState(bot);
+    bool const clearedIntent = Aq40TwinEncounter::ClearTwinLocalCombatState(bot, botAI, false);
     bool const petChanged = SyncTwinEncounterPetPolicy(bot, botAI, *state, assignment, nullptr, GuidVector());
     TwinPrePullAnchorChoice const anchorChoice = GetTwinPrePullAnchorChoice(*assignment);
     Aq40TwinEncounter::TwinAnchor const& anchor = anchorChoice.anchor;

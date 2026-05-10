@@ -216,9 +216,19 @@ bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI)
         return false;
 
     bool const hasManagedResistanceStrategy = HasManagedResistanceStrategy(bot, botAI);
+    bool const hasTwinLocalCleanupState = Aq40TwinEncounter::HasTwinLocalCleanupState(bot);
+    Aq40TwinEncounter::TwinEncounterState const* twinState = Aq40TwinEncounter::GetEncounterState(bot);
+    bool const isTwinPrePullReady =
+        twinState &&
+        twinState->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+        twinState->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull &&
+        Aq40TwinEncounter::HasDeterministicAssignments(*twinState);
     bool const hasPersistentEncounterState = HasPersistentEncounterState(bot);
 
     if (hasManagedResistanceStrategy)
+        return true;
+
+    if (hasTwinLocalCleanupState && !isTwinPrePullReady)
         return true;
 
     if (!hasPersistentEncounterState)

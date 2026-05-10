@@ -9,6 +9,8 @@
 #include "Player.h"
 #include "Position.h"
 
+class PlayerbotAI;
+
 namespace Aq40TwinEncounter
 {
 enum class TwinBoss : uint8
@@ -203,6 +205,9 @@ bool HasDeterministicAssignments(TwinEncounterState const& state);
 std::string const& GetUnsupportedReason(TwinEncounterState const& state);
 bool IsTwinPrePullReady(Player const* bot);
 bool IsTwinDesignatedWarlockTank(Player const* bot);
+bool MarkTwinLocalCleanupState(Player* bot);
+bool HasTwinLocalCleanupState(Player const* bot);
+bool ClearTwinLocalCombatState(Player* bot, PlayerbotAI* botAI, bool clearCleanupState = true);
 bool ShouldUseTwinWarlockTankStrategy(Player const* bot);
 bool SyncTwinWarlockTankStrategy(Player* bot);
 bool ClearTwinWarlockTankStrategy(Player* bot);

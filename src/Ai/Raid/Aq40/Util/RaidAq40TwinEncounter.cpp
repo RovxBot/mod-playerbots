@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <list>
 #include <sstream>
 #include <unordered_map>
 
@@ -81,6 +82,7 @@ std::unordered_map<uint32, TwinEncounterState> sTwinStateByInstance;
 std::unordered_map<uint64, TwinLockedPickupAnchor> sTwinPickupAnchorByBot;
 std::unordered_map<uint64, TwinManagedWarlockTankOverlay> sTwinWarlockTankOverlayByBot;
 std::unordered_map<uint64, TwinPetControlState> sTwinPetControlByBot;
+std::unordered_map<uint64, uint32> sTwinLocalCleanupByBot;
 
 size_t ToIndex(TwinBoss boss)
 {
@@ -1142,6 +1144,143 @@ bool ClearTwinWarlockTankStrategy(Player* bot)
 
     sTwinWarlockTankOverlayByBot.erase(managedItr);
     return removed;
+}
+
+bool MarkTwinLocalCleanupState(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    uint32 const instanceId = GetInstanceId(bot);
+    if (!instanceId)
+        return false;
+
+    uint64 const botKey = GetBotKey(bot);
+    auto itr = sTwinLocalCleanupByBot.find(botKey);
+    if (itr != sTwinLocalCleanupByBot.end() && itr->second == instanceId)
+        return false;
+
+    sTwinLocalCleanupByBot[botKey] = instanceId;
+    return true;
+}
+
+bool HasTwinLocalCleanupState(Player const* bot)
+{
+    if (!bot)
+        return false;
+
+    uint32 const instanceId = GetInstanceId(bot);
+    if (!instanceId)
+        return false;
+
+    auto const itr = sTwinLocalCleanupByBot.find(GetBotKey(bot));
+    return itr != sTwinLocalCleanupByBot.end() && itr->second == instanceId;
+}
+
+bool ClearTwinLocalCombatState(Player* bot, PlayerbotAI* botAI, bool clearCleanupState)
+{
+    if (!bot || !botAI || !botAI->GetAiObjectContext())
+        return false;
+
+    auto* context = botAI->GetAiObjectContext();
+    bool changed = false;
+
+    if (context->GetValue<Unit*>("old target")->Get())
+    {
+        context->GetValue<Unit*>("old target")->Set(nullptr);
+        changed = true;
+    }
+
+    if (context->GetValue<Unit*>("current target")->Get())
+    {
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+        changed = true;
+    }
+
+    if (!context->GetValue<GuidVector>("prioritized targets")->Get().empty())
+    {
+        context->GetValue<GuidVector>("prioritized targets")->Reset();
+        changed = true;
+    }
+
+    if (!context->GetValue<ObjectGuid>("pull target")->Get().IsEmpty())
+    {
+        context->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
+        changed = true;
+    }
+
+    if (!context->GetValue<ObjectGuid>("pull strategy target")->Get().IsEmpty())
+    {
+        context->GetValue<ObjectGuid>("pull strategy target")->Set(ObjectGuid::Empty);
+        changed = true;
+    }
+
+    if (bot->GetTarget())
+    {
+        bot->SetTarget();
+        bot->SetSelection(ObjectGuid());
+        changed = true;
+    }
+
+    std::list<ObjectGuid> const& focusHealTargets = context->GetValue<std::list<ObjectGuid>>("focus heal targets")->Get();
+    if (!focusHealTargets.empty())
+    {
+        context->GetValue<std::list<ObjectGuid>>("focus heal targets")->Set(std::list<ObjectGuid>());
+        changed = true;
+    }
+
+    if (botAI->HasStrategy("focus heal targets", BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy("-focus heal targets", BOT_STATE_COMBAT);
+        changed = true;
+    }
+
+    if (!context->GetValue<std::string>("rti")->Get().empty())
+    {
+        context->GetValue<std::string>("rti")->Set("");
+        changed = true;
+    }
+
+    if (!context->GetValue<std::string>("rti cc")->Get().empty())
+    {
+        context->GetValue<std::string>("rti cc")->Set("");
+        changed = true;
+    }
+
+    if (context->GetValue<Unit*>("rti target")->Get())
+    {
+        context->GetValue<Unit*>("rti target")->Set(nullptr);
+        changed = true;
+    }
+
+    if (context->GetValue<Unit*>("rti cc target")->Get())
+    {
+        context->GetValue<Unit*>("rti cc target")->Set(nullptr);
+        changed = true;
+    }
+
+    if (Pet* pet = bot->GetPet())
+    {
+        bool petNeedsFollow = pet->GetVictim() || pet->IsInCombat();
+        if (CharmInfo* charmInfo = pet->GetCharmInfo())
+            petNeedsFollow = petNeedsFollow || charmInfo->IsCommandAttack() || !charmInfo->IsReturning();
+
+        if (petNeedsFollow)
+        {
+            botAI->PetFollow();
+            changed = true;
+        }
+    }
+
+    if (!clearCleanupState)
+        return changed;
+
+    auto itr = sTwinLocalCleanupByBot.find(GetBotKey(bot));
+    if (itr == sTwinLocalCleanupByBot.end() || itr->second != GetInstanceId(bot))
+        return changed;
+
+    sTwinLocalCleanupByBot.erase(itr);
+    return true;
 }
 
 TwinStableOwnership& GetOwnership(TwinEncounterState& state, TwinBoss boss)
