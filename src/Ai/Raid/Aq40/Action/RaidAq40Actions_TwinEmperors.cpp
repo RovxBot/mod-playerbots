@@ -212,6 +212,63 @@ Unit* FindNearestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& unit
     return nearestBug;
 }
 
+bool IsTwinExplodeBugCast(Spell const* spell)
+{
+    return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinExplodeBug });
+}
+
+bool TryGetTwinExplodeBugHazard(Player* bot, PlayerbotAI* botAI,
+                               Aq40TwinEncounter::TwinEncounterState const& state,
+                               GuidVector const& units, float maxDistance, bool allowTrackedSource,
+                               Unit*& outBug, Position& outPosition)
+{
+    outBug = nullptr;
+    if (!bot || !botAI)
+        return false;
+
+    if (allowTrackedSource)
+    {
+        ObjectGuid const trackedSourceGuid = Aq40TwinEncounter::GetExplodeBugSourceGuid(state);
+        if (!trackedSourceGuid.IsEmpty())
+        {
+            outPosition = Aq40TwinEncounter::GetExplodeBugSourcePosition(state);
+            if (Unit* trackedBug = botAI->GetUnit(trackedSourceGuid);
+                trackedBug && trackedBug->IsAlive() && trackedBug->IsInWorld() &&
+                Aq40SpellIds::IsTwinBugEntry(trackedBug->GetEntry()))
+            {
+                outBug = trackedBug;
+                outPosition = trackedBug->GetPosition();
+                if (bot->GetDistance2d(trackedBug) <= maxDistance)
+                    return true;
+            }
+            else if (bot->GetExactDist2d(outPosition.GetPositionX(), outPosition.GetPositionY()) <= maxDistance)
+            {
+                return true;
+            }
+        }
+    }
+
+    for (ObjectGuid const guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || !Aq40SpellIds::IsTwinBugEntry(unit->GetEntry()))
+            continue;
+
+        if (!IsTwinExplodeBugCast(unit->GetCurrentSpell(CURRENT_GENERIC_SPELL)))
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        if (distance > maxDistance)
+            continue;
+
+        outBug = unit;
+        outPosition = unit->GetPosition();
+        return true;
+    }
+
+    return false;
+}
+
 bool IsTwinEncounterActive(Aq40TwinEncounter::TwinEncounterState const* state)
 {
     return state && Aq40TwinEncounter::IsActivePhase(state->phase) &&
@@ -941,6 +998,9 @@ std::list<ObjectGuid> BuildTwinSideHealerFocusTargets(Aq40TwinEncounter::TwinEnc
     if (side == GetTwinExpectedOwnerSide(state, Aq40TwinEncounter::TwinBoss::Veklor))
     {
         pushTarget(warlockGuid);
+        if (Aq40TwinEncounter::IsSwapPrepActive(state) && !warlockGuid.IsEmpty())
+            return focusTargets;
+
         pushTarget(meleeGuid);
         return focusTargets;
     }
@@ -992,6 +1052,85 @@ bool SyncTwinHealerFocusTargets(Player* bot, PlayerbotAI* botAI,
     }
 
     return changed;
+}
+
+Player* GetTwinSwapPrepHealerPreloadTarget(PlayerbotAI* botAI,
+                                           Aq40TwinEncounter::TwinEncounterState const& state,
+                                           Aq40TwinEncounter::TwinRoleAssignment const& assignment)
+{
+    if (!botAI || !Aq40TwinEncounter::IsSwapPrepActive(state) ||
+        assignment.stableSide != GetTwinExpectedOwnerSide(state, Aq40TwinEncounter::TwinBoss::Veklor))
+    {
+        return nullptr;
+    }
+
+    Aq40TwinEncounter::TwinRoleAssignment const* warlockAssignment =
+        GetTwinAssignmentForSideAndCohort(state, assignment.stableSide, Aq40TwinEncounter::TwinRoleCohort::WarlockTank);
+    if (!warlockAssignment)
+        return nullptr;
+
+    Unit* target = botAI->GetUnit(warlockAssignment->memberGuid);
+    Player* playerTarget = target ? target->ToPlayer() : nullptr;
+    return playerTarget && playerTarget->IsAlive() && playerTarget->IsInWorld() ? playerTarget : nullptr;
+}
+
+bool TryTwinHealerPreloadSpell(Player* bot, PlayerbotAI* botAI, Player* target,
+                               Aq40TwinEncounter::TwinEncounterState const& state, char const* spellName,
+                               bool requireMissingAura, bool requireInjuredTarget)
+{
+    if (!bot || !botAI || !target)
+        return false;
+
+    if (requireMissingAura && botAI->HasAura(spellName, target))
+        return false;
+
+    if (requireInjuredTarget && target->IsFullHealth())
+        return false;
+
+    if (!botAI->CanCastSpell(spellName, target) || !botAI->CastSpell(spellName, target))
+        return false;
+
+    std::ostringstream fields;
+    fields << "boss=twin phase=" << Aq40TwinEncounter::ToString(state.phase)
+           << " mode=" << Aq40TwinEncounter::ToString(state.mode)
+           << " reason=swap_prep_preload"
+           << " spell=" << spellName
+           << " target=" << Aq40Helpers::GetAq40LogUnit(target);
+    Aq40Helpers::LogAq40Info(bot, "twin_strategy", "twin:side_healer:preload_cast", fields.str(), 1000);
+    return true;
+}
+
+bool TryTwinSwapPrepHealerPreload(Player* bot, PlayerbotAI* botAI,
+                                  Aq40TwinEncounter::TwinEncounterState const& state,
+                                  Aq40TwinEncounter::TwinRoleAssignment const& assignment)
+{
+    if (!bot || !botAI || bot->GetCurrentSpell(CURRENT_GENERIC_SPELL) || bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        return false;
+
+    Player* target = GetTwinSwapPrepHealerPreloadTarget(botAI, state, assignment);
+    if (!target)
+        return false;
+
+    switch (bot->getClass())
+    {
+        case CLASS_PRIEST:
+            return TryTwinHealerPreloadSpell(bot, botAI, target, state, "power word: shield", true, false) ||
+                   TryTwinHealerPreloadSpell(bot, botAI, target, state, "renew", true, false);
+        case CLASS_DRUID:
+            return TryTwinHealerPreloadSpell(bot, botAI, target, state, "rejuvenation", true, false) ||
+                   TryTwinHealerPreloadSpell(bot, botAI, target, state, "regrowth", true, false);
+        case CLASS_SHAMAN:
+            return TryTwinHealerPreloadSpell(bot, botAI, target, state, "earth shield", true, false) ||
+                   TryTwinHealerPreloadSpell(bot, botAI, target, state, "riptide", true, false);
+        case CLASS_PALADIN:
+            return TryTwinHealerPreloadSpell(bot, botAI, target, state, "sacred shield", true, false) ||
+                   TryTwinHealerPreloadSpell(bot, botAI, target, state, "holy shock", false, true) ||
+                   TryTwinHealerPreloadSpell(bot, botAI, target, state, "flash of light", false, true);
+        default:
+            break;
+    }
+
+    return false;
 }
 
 bool FaceTwinAnchorIfNeeded(Player* bot, Aq40TwinEncounter::TwinAnchor const& anchor)
@@ -1884,9 +2023,12 @@ bool Aq40TwinHealerSupportAction::Execute(Event /*event*/)
             Aq40TwinEncounter::IsSwapPrepActive(*state) ? "swap_prep_preload" : "side_tank_package");
         TwinPrePullAnchorChoice const anchorChoice =
             GetTwinSideHealerRecoveryAnchorChoice(*state, *assignment, bot);
-        return MaintainTwinAssignedAnchor(bot, *state, *assignment, anchorChoice.anchor,
-                   "twin:side_healer:hold", anchorChoice.label) ||
-               focusChanged;
+        bool const repositioned = MaintainTwinAssignedAnchor(
+            bot, *state, *assignment, anchorChoice.anchor, "twin:side_healer:hold", anchorChoice.label);
+        if (repositioned)
+            return true;
+
+        return TryTwinSwapPrepHealerPreload(bot, botAI, *state, *assignment) || focusChanged;
     }
 
     bool const focusChanged = SyncTwinHealerFocusTargets(bot, botAI, *state, std::list<ObjectGuid>(),
@@ -2202,16 +2344,14 @@ bool Aq40TwinDodgeBlizzardAction::Execute(Event /*event*/)
         return true;
     }
 
-    if (!hasBlizzardAura && !hasBlizzardDynObj)
-        return false;
-
     GuidVector const encounterUnits = GetTwinEncounterUnits(botAI);
     Aq40TwinEncounter::TwinRoleAssignment const* assignment =
         Aq40TwinEncounter::GetAssignmentForMember(*state, bot->GetGUID());
     TwinPrePullAnchorChoice const anchorChoice =
         GetTwinHazardRecoveryAnchorChoice(bot, botAI, *state, assignment, encounterUnits);
     return MoveTwinToHazardAnchor(bot, botAI, *state, assignment, anchorChoice,
-        "twin:blizzard:fallback_anchor", hasBlizzardDynObj ? "dynamic_object" : "aura");
+        "twin:blizzard:fallback_anchor",
+        hasBlizzardDynObj ? "dynamic_object" : (hasBlizzardAura ? "aura" : "scripted_window"));
 }
 
 bool Aq40TwinDodgeExplodeBugAction::Execute(Event /*event*/)
@@ -2225,31 +2365,39 @@ bool Aq40TwinDodgeExplodeBugAction::Execute(Event /*event*/)
     if (IsTwinPrimaryTankController(*state, assignment))
         return false;
 
-    GuidVector const encounterUnits = GetTwinEncounterUnits(botAI);
-    Unit* explodeBug = FindNearestTwinBug(bot, botAI, encounterUnits, kTwinExplodeBugDangerRadius);
-    if (!explodeBug)
-        return false;
-
-    Spell* spell = explodeBug->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     bool const scriptedWindow = Aq40TwinEncounter::IsScriptedEventActive(
         *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, kTwinExplodeBugWindowMs);
-    bool const castingExplosion = spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinExplodeBug });
+    GuidVector const encounterUnits = GetTwinEncounterUnits(botAI);
+    Unit* explodeBug = nullptr;
+    Position explodeSourcePosition;
+    if (!TryGetTwinExplodeBugHazard(bot, botAI, *state, encounterUnits, kTwinExplodeBugDangerRadius,
+            scriptedWindow, explodeBug, explodeSourcePosition))
+    {
+        return false;
+    }
+
+    Spell* spell = explodeBug ? explodeBug->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
+    bool const castingExplosion = IsTwinExplodeBugCast(spell);
     if (!scriptedWindow && !castingExplosion)
         return false;
 
     Aq40TwinEncounter::RequestImmediateMovementInterrupt(bot);
     Aq40Helpers::LogAq40Info(bot, "avoid_hazard",
         "twin:explode_bug:flee",
-        "boss=twin hazard=explode_bug source=" + Aq40Helpers::GetAq40LogUnit(explodeBug),
+        "boss=twin hazard=explode_bug source=" +
+            (explodeBug ? Aq40Helpers::GetAq40LogUnit(explodeBug) : std::string("tracked_script_source")),
         1000);
-    if (FleePosition(explodeBug->GetPosition(), kTwinExplodeBugDangerRadius, 250U))
+    if (FleePosition(explodeSourcePosition, kTwinExplodeBugDangerRadius, 250U))
         return true;
 
-    float const distance = bot->GetDistance2d(explodeBug);
-    if (distance < kTwinExplodeBugDangerRadius &&
-        MoveAway(explodeBug, kTwinExplodeBugDangerRadius - distance))
+    if (explodeBug)
     {
-        return true;
+        float const distance = bot->GetDistance2d(explodeBug);
+        if (distance < kTwinExplodeBugDangerRadius &&
+            MoveAway(explodeBug, kTwinExplodeBugDangerRadius - distance))
+        {
+            return true;
+        }
     }
 
     TwinPrePullAnchorChoice const anchorChoice =

@@ -73,7 +73,12 @@ Unit* FindTwinUnitByEntry(PlayerbotAI* botAI, GuidVector const& units, uint32 en
     return nullptr;
 }
 
-Unit* FindClosestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& units, float maxDistance)
+bool IsTwinExplodeBugCast(Spell const* spell)
+{
+    return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinExplodeBug });
+}
+
+Unit* FindClosestTwinExplodeBug(Player* bot, PlayerbotAI* botAI, GuidVector const& units, float maxDistance)
 {
     if (!bot || !botAI)
         return nullptr;
@@ -86,6 +91,9 @@ Unit* FindClosestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& unit
         if (!unit || !unit->IsAlive() || !Aq40SpellIds::IsTwinBugEntry(unit->GetEntry()))
             continue;
 
+        if (!IsTwinExplodeBugCast(unit->GetCurrentSpell(CURRENT_GENERIC_SPELL)))
+            continue;
+
         float const distance = bot->GetDistance2d(unit);
         if (distance > maxDistance || distance >= nearestDistance)
             continue;
@@ -95,6 +103,33 @@ Unit* FindClosestTwinBug(Player* bot, PlayerbotAI* botAI, GuidVector const& unit
     }
 
     return nearestBug;
+}
+
+bool HasTwinExplodeBugHazard(Player* bot, PlayerbotAI* botAI, Aq40TwinEncounter::TwinEncounterState const& state,
+                             GuidVector const& units, float maxDistance, bool allowTrackedSource)
+{
+    if (!bot || !botAI)
+        return false;
+
+    if (allowTrackedSource)
+    {
+        ObjectGuid const trackedSourceGuid = Aq40TwinEncounter::GetExplodeBugSourceGuid(state);
+        if (!trackedSourceGuid.IsEmpty())
+        {
+            if (Unit* trackedBug = botAI->GetUnit(trackedSourceGuid);
+                trackedBug && trackedBug->IsAlive() && trackedBug->IsInWorld() &&
+                Aq40SpellIds::IsTwinBugEntry(trackedBug->GetEntry()) && bot->GetDistance2d(trackedBug) <= maxDistance)
+            {
+                return true;
+            }
+
+            Position const& trackedPosition = Aq40TwinEncounter::GetExplodeBugSourcePosition(state);
+            if (bot->GetExactDist2d(trackedPosition.GetPositionX(), trackedPosition.GetPositionY()) <= maxDistance)
+                return true;
+        }
+    }
+
+    return FindClosestTwinExplodeBug(bot, botAI, units, maxDistance) != nullptr;
 }
 
 bool IsTwinPrimaryTankController(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state)
@@ -520,19 +555,16 @@ bool Aq40TwinExplodeBugTrigger::IsActive()
     if (!Aq40TwinActiveTrigger(botAI).IsActive() || !state || IsTwinPrimaryTankController(bot, *state))
         return false;
 
+    bool const scriptedWindow = Aq40TwinEncounter::IsScriptedEventActive(
+        *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, 2500);
     GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
-    Unit* explodeBug = FindClosestTwinBug(bot, botAI, encounterUnits, 17.0f);
-    if (!explodeBug)
+    if (!HasTwinExplodeBugHazard(bot, botAI, *state, encounterUnits, 17.0f, scriptedWindow))
         return false;
 
-    if (Aq40TwinEncounter::IsScriptedEventActive(
-            *state, Aq40TwinEncounter::TwinScriptedEvent::ExplodeBug, 2500))
-    {
+    if (scriptedWindow)
         return true;
-    }
 
-    Spell* spell = explodeBug->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    return spell && Aq40SpellIds::MatchesAnySpellId(spell->GetSpellInfo(), { Aq40SpellIds::TwinExplodeBug });
+    return FindClosestTwinExplodeBug(bot, botAI, encounterUnits, 17.0f) != nullptr;
 }
 
 bool Aq40TwinArcaneBurstRiskTrigger::IsActive()

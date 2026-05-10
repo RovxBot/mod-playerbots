@@ -265,7 +265,9 @@ void ConfirmBossOwner(Aq40TwinEncounter::TwinEncounterState& state, Spell* spell
 }
 
 void RequestInterruptForTwinBots(std::vector<Player*> const& twinBots, Unit* source, Player* excludedBot = nullptr,
-								 float maxDistance = 0.0f, bool excludeEncounterTanks = false)
+								 float maxDistance = 0.0f,
+								 Aq40TwinEncounter::TwinEncounterState const* state = nullptr,
+								 bool excludeEncounterTanks = false)
 {
 	for (Player* bot : twinBots)
 	{
@@ -273,8 +275,22 @@ void RequestInterruptForTwinBots(std::vector<Player*> const& twinBots, Unit* sou
 			continue;
 		if (maxDistance > 0.0f && (!source || bot->GetDistance2d(source) > maxDistance))
 			continue;
-		if (excludeEncounterTanks && Aq40BossHelper::IsEncounterTank(bot, bot))
-			continue;
+		if (excludeEncounterTanks)
+		{
+			if (state)
+			{
+				ObjectGuid const botGuid = bot->GetGUID();
+				if (Aq40TwinEncounter::IsPrimaryController(*state, Aq40TwinEncounter::TwinBoss::Veklor, botGuid) ||
+					Aq40TwinEncounter::IsPrimaryController(*state, Aq40TwinEncounter::TwinBoss::Veknilash, botGuid))
+				{
+					continue;
+				}
+			}
+			else if (Aq40BossHelper::IsEncounterTank(bot, bot))
+			{
+				continue;
+			}
+		}
 
 		Aq40TwinEncounter::RequestImmediateMovementInterrupt(bot);
 	}
@@ -456,11 +472,13 @@ public:
 			case Aq40SpellIds::TwinExplodeBug:
 			{
 				UpdateHazardTimestamp(hazards.explodeBugAtMs, nowMs);
-				RequestInterruptForTwinBots(twinBots, caster, nullptr, kTwinExplodeBugInterruptRadius, true);
+				Aq40TwinEncounter::SetExplodeBugSource(state, caster->GetGUID(), caster->GetPosition());
+				RequestInterruptForTwinBots(twinBots, caster, nullptr, kTwinExplodeBugInterruptRadius, &state, true);
 
 				std::ostringstream fields;
 				fields << "boss=twin spell=" << spellInfo->Id
-					   << " hazard=explode_bug source=" << Aq40Helpers::GetAq40LogUnit(caster);
+					   << " hazard=explode_bug source=" << Aq40Helpers::GetAq40LogUnit(caster)
+					   << " phase=" << Aq40TwinEncounter::ToString(state.phase);
 				Aq40Helpers::LogAq40Info(logBot, "twin_script_hazard", "twin:explode_bug", fields.str(), 1000);
 				return;
 			}

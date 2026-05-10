@@ -116,8 +116,15 @@ bool HasMeaningfulRecovery(TwinBossRecoveryState const& recovery)
 bool HasMeaningfulHazards(TwinScriptedHazardWindows const& hazards)
 {
     return hazards.teleportAtMs || hazards.blizzardAtMs || hazards.arcaneBurstAtMs || hazards.healBrotherAtMs ||
-           hazards.explodeBugAtMs || hazards.mutateBugAtMs || hazards.uppercutAtMs ||
+           hazards.explodeBugAtMs || !hazards.explodeBugSourceGuid.IsEmpty() || hazards.mutateBugAtMs || hazards.uppercutAtMs ||
            hazards.unbalancingStrikeAtMs;
+}
+
+bool IsSamePosition(Position const& left, Position const& right)
+{
+    return std::fabs(left.GetPositionX() - right.GetPositionX()) < 0.01f &&
+           std::fabs(left.GetPositionY() - right.GetPositionY()) < 0.01f &&
+           std::fabs(left.GetPositionZ() - right.GetPositionZ()) < 0.01f;
 }
 
 bool HasMeaningfulCadence(TwinEncounterState const& state)
@@ -1246,6 +1253,33 @@ bool IsScriptedEventActive(Player const* bot, TwinScriptedEvent event, uint32 wi
 {
     TwinEncounterState const* state = GetEncounterState(bot);
     return state && IsScriptedEventActive(*state, event, windowMs, nowMs, outElapsedMs);
+}
+
+ObjectGuid GetExplodeBugSourceGuid(TwinEncounterState const& state)
+{
+    return state.scriptedHazards.explodeBugSourceGuid;
+}
+
+Position const& GetExplodeBugSourcePosition(TwinEncounterState const& state)
+{
+    return state.scriptedHazards.explodeBugSourcePosition;
+}
+
+bool SetExplodeBugSource(TwinEncounterState& state, ObjectGuid sourceGuid, Position const& sourcePosition)
+{
+    TwinScriptedHazardWindows& hazards = state.scriptedHazards;
+    if (hazards.explodeBugSourceGuid == sourceGuid && IsSamePosition(hazards.explodeBugSourcePosition, sourcePosition))
+        return false;
+
+    hazards.explodeBugSourceGuid = sourceGuid;
+    hazards.explodeBugSourcePosition = sourcePosition;
+    return true;
+}
+
+void ClearExplodeBugSource(TwinEncounterState& state)
+{
+    state.scriptedHazards.explodeBugSourceGuid = ObjectGuid::Empty;
+    state.scriptedHazards.explodeBugSourcePosition.Relocate(0.0f, 0.0f, 0.0f);
 }
 
 bool SetExpectedOwner(TwinEncounterState& state, TwinBoss boss, ObjectGuid ownerGuid)

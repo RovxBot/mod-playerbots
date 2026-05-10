@@ -126,6 +126,8 @@ struct TwinScriptedHazardWindows
     uint32 arcaneBurstAtMs = 0;
     uint32 healBrotherAtMs = 0;
     uint32 explodeBugAtMs = 0;
+    ObjectGuid explodeBugSourceGuid = ObjectGuid::Empty;
+    Position explodeBugSourcePosition;
     uint32 mutateBugAtMs = 0;
     uint32 uppercutAtMs = 0;
     uint32 unbalancingStrikeAtMs = 0;
@@ -217,6 +219,10 @@ bool IsScriptedEventActive(TwinEncounterState const& state, TwinScriptedEvent ev
                            uint32 nowMs = 0, uint32* outElapsedMs = nullptr);
 bool IsScriptedEventActive(Player const* bot, TwinScriptedEvent event, uint32 windowMs, uint32 nowMs = 0,
                            uint32* outElapsedMs = nullptr);
+ObjectGuid GetExplodeBugSourceGuid(TwinEncounterState const& state);
+Position const& GetExplodeBugSourcePosition(TwinEncounterState const& state);
+bool SetExplodeBugSource(TwinEncounterState& state, ObjectGuid sourceGuid, Position const& sourcePosition);
+void ClearExplodeBugSource(TwinEncounterState& state);
 
 bool SetExpectedOwner(TwinEncounterState& state, TwinBoss boss, ObjectGuid ownerGuid);
 bool SetReserveOwner(TwinEncounterState& state, TwinBoss boss, ObjectGuid ownerGuid);
