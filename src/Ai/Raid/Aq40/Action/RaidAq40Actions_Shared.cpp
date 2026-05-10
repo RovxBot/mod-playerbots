@@ -13,6 +13,7 @@
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers_Shared.h"
 #include "../Util/RaidAq40Helpers_Skeram.h"
+#include "../Util/RaidAq40TwinEncounter.h"
 #include "../../RaidBossHelpers.h"
 
 namespace
