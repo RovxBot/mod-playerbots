@@ -159,6 +159,16 @@ struct TwinLockedPickupAnchor
     TwinAnchor anchor;
 };
 
+struct TwinPetControlState
+{
+    uint32 instanceId = 0;
+    ObjectGuid petGuid = ObjectGuid::Empty;
+    bool forcedPassive = false;
+    bool previousReactStateCaptured = false;
+    uint8 previousReactState = 0;
+    std::vector<uint32> disabledAutocastSpellIds;
+};
+
 struct TwinEncounterState
 {
     uint32 instanceId = 0;
@@ -272,6 +282,9 @@ TwinEncounterState& EnsureEncounterState(Player* bot);
 TwinLockedPickupAnchor* GetLockedPickupAnchor(Player* bot);
 TwinLockedPickupAnchor const* GetLockedPickupAnchor(Player const* bot);
 TwinLockedPickupAnchor& EnsureLockedPickupAnchor(Player* bot);
+TwinPetControlState* GetPetControlState(Player* bot);
+TwinPetControlState const* GetPetControlState(Player const* bot);
+TwinPetControlState& EnsurePetControlState(Player* bot);
 bool IsLockedPickupAnchorExpired(TwinLockedPickupAnchor const& state, uint32 nowMs = 0);
 bool HasLockedPickupAnchor(Player const* bot, TwinBoss boss, uint32 nowMs = 0);
 bool SetLockedPickupAnchor(Player* bot, TwinBoss boss, TwinSide side, TwinAnchor const& anchor, uint32 durationMs,
@@ -285,6 +298,8 @@ bool RequestImmediateMovementInterrupt(Player* bot);
 
 void ResetEncounterState(TwinEncounterState& state, uint32 instanceId);
 void ResetPickupAnchorState(TwinLockedPickupAnchor& state);
+void ResetPetControlState(TwinPetControlState& state);
+bool RestorePetControlState(Player* bot);
 bool ResetState(Player* bot);
 bool HasPersistentState(Player* bot);
 uint32 GetInstanceId(Player const* bot);

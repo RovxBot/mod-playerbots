@@ -8,6 +8,11 @@
 #include <sstream>
 #include <string>
 
+#include "CharmInfo.h"
+#include "Pet.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+
 #include "../RaidAq40SpellIds.h"
 #include "../Util/RaidAq40Helpers_Shared.h"
 #include "../Util/RaidAq40TwinEncounter.h"
@@ -807,52 +812,307 @@ Unit* FindTwinBugServiceTarget(Player* bot, PlayerbotAI* botAI,
     return best.target;
 }
 
-bool SyncTwinHunterPetBugSafety(Player* bot, PlayerbotAI* botAI, Unit* target)
+void BindTwinPetControlState(Aq40TwinEncounter::TwinPetControlState& controlState, Pet* pet)
 {
-    if (!bot || !botAI || bot->getClass() != CLASS_HUNTER)
-        return false;
+    if (!pet)
+        return;
 
-    Pet* pet = bot->GetPet();
+    if (controlState.petGuid == pet->GetGUID())
+        return;
+
+    controlState.petGuid = pet->GetGUID();
+    controlState.forcedPassive = false;
+    controlState.previousReactStateCaptured = false;
+    controlState.previousReactState = static_cast<uint8>(pet->GetReactState());
+    controlState.disabledAutocastSpellIds.clear();
+}
+
+bool IsTwinPetAutocastEnabled(Pet const* pet, uint32 spellId)
+{
     if (!pet)
         return false;
 
+    return std::find(pet->m_autospells.begin(), pet->m_autospells.end(), spellId) != pet->m_autospells.end();
+}
+
+bool SetTwinPetReactState(Pet* pet, ReactStates reactState)
+{
+    if (!pet || pet->GetReactState() == reactState)
+        return false;
+
+    pet->SetReactState(reactState);
+    if (CharmInfo* charmInfo = pet->GetCharmInfo())
+        charmInfo->SetPlayerReactState(reactState);
+
+    return true;
+}
+
+bool IsTwinPetTauntSpell(SpellInfo const* spellInfo)
+{
+    if (!spellInfo)
+        return false;
+
+    std::string const spellToken = Aq40Helpers::GetAq40LogToken(spellInfo->SpellName[0]);
+    return spellToken == "growl" || spellToken == "torment" || spellToken == "suffering";
+}
+
+bool DisableTwinPetTauntAutocast(Player* bot, Pet* pet)
+{
+    if (!bot || !pet)
+        return false;
+
+    Aq40TwinEncounter::TwinPetControlState& controlState = Aq40TwinEncounter::EnsurePetControlState(bot);
+    BindTwinPetControlState(controlState, pet);
+
     bool changed = false;
-    bool const shouldHoldPet = target && Aq40SpellIds::IsTwinBugEntry(target->GetEntry());
-    if (shouldHoldPet)
+    for (PetSpellMap::const_iterator itr = pet->m_spells.begin(); itr != pet->m_spells.end(); ++itr)
     {
-        bool needsFollow = false;
-        if (pet->GetVictim())
+        if (itr->second.state == PETSPELL_REMOVED)
+            continue;
+
+        uint32 const spellId = itr->first;
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+        if (!spellInfo || !spellInfo->IsAutocastable() || !IsTwinPetTauntSpell(spellInfo) ||
+            !IsTwinPetAutocastEnabled(pet, spellId))
         {
-            pet->AttackStop();
-            changed = true;
-            needsFollow = true;
+            continue;
         }
 
-        if (pet->GetReactState() != REACT_PASSIVE)
+        pet->ToggleAutocast(spellInfo, false);
+        if (std::find(controlState.disabledAutocastSpellIds.begin(), controlState.disabledAutocastSpellIds.end(),
+                spellId) == controlState.disabledAutocastSpellIds.end())
         {
-            pet->SetReactState(REACT_PASSIVE);
-            changed = true;
-            needsFollow = true;
+            controlState.disabledAutocastSpellIds.push_back(spellId);
         }
 
-        if (needsFollow)
-            botAI->PetFollow();
-    }
-    else if (target && target->GetEntry() == Aq40SpellIds::TwinVeknilashNpcEntry &&
-             pet->GetReactState() == REACT_PASSIVE)
-    {
-        pet->SetReactState(REACT_DEFENSIVE);
         changed = true;
     }
 
     if (changed)
     {
-        Aq40Helpers::LogAq40Info(bot, "twin_pet",
-            shouldHoldPet ? "twin:hunter_pet:hold_bug" : "twin:hunter_pet:resume_boss",
-            std::string("boss=twin target=") + Aq40Helpers::GetAq40LogUnit(target), 1000);
+        Aq40Helpers::LogAq40Info(bot, "twin_pet", "twin:pet:disable_taunts",
+            std::string("boss=twin pet=") + Aq40Helpers::GetAq40LogUnit(pet), 1000);
     }
 
     return changed;
+}
+
+bool ForceTwinPetPassiveFollow(Player* bot, PlayerbotAI* botAI, Pet* pet)
+{
+    if (!bot || !botAI || !pet)
+        return false;
+
+    Aq40TwinEncounter::TwinPetControlState& controlState = Aq40TwinEncounter::EnsurePetControlState(bot);
+    BindTwinPetControlState(controlState, pet);
+
+    if (!controlState.previousReactStateCaptured)
+    {
+        controlState.previousReactState = static_cast<uint8>(pet->GetReactState());
+        controlState.previousReactStateCaptured = true;
+    }
+
+    bool changed = false;
+    bool needsFollow = pet->GetVictim() || pet->IsInCombat();
+    if (CharmInfo* charmInfo = pet->GetCharmInfo())
+        needsFollow = needsFollow || charmInfo->IsCommandAttack() || !charmInfo->IsReturning();
+
+    if (SetTwinPetReactState(pet, REACT_PASSIVE))
+    {
+        changed = true;
+        needsFollow = true;
+    }
+
+    controlState.forcedPassive = true;
+    if (needsFollow)
+    {
+        botAI->PetFollow();
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool ReleaseTwinPetPassive(Player* bot, Pet* pet)
+{
+    if (!bot || !pet)
+        return false;
+
+    Aq40TwinEncounter::TwinPetControlState* controlState = Aq40TwinEncounter::GetPetControlState(bot);
+    if (!controlState || controlState->petGuid != pet->GetGUID() || !controlState->forcedPassive)
+        return false;
+
+    ReactStates const reactState = controlState->previousReactStateCaptured
+        ? static_cast<ReactStates>(controlState->previousReactState)
+        : REACT_DEFENSIVE;
+    bool const changed = SetTwinPetReactState(pet, reactState);
+    controlState->forcedPassive = false;
+    controlState->previousReactStateCaptured = false;
+    controlState->previousReactState = static_cast<uint8>(reactState);
+    return changed;
+}
+
+bool ShouldApplyTwinPetPolicy(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state)
+{
+    if (!bot)
+        return false;
+
+    if (Aq40TwinEncounter::IsTwinPrePullReady(bot))
+        return true;
+
+    if (!Aq40TwinEncounter::IsTwinEncounterParticipant(bot))
+        return false;
+
+    return Aq40TwinEncounter::IsActivePhase(state.phase) || Aq40TwinEncounter::IsTerminalPhase(state.phase) ||
+           Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state) ||
+           Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
+}
+
+bool IsTwinHunterPetSafeTarget(Player* bot, PlayerbotAI* botAI,
+                               Aq40TwinEncounter::TwinEncounterState const& state,
+                               Aq40TwinEncounter::TwinRoleAssignment const* assignment,
+                               Unit* target, GuidVector const& units)
+{
+    if (!bot || !botAI || bot->getClass() != CLASS_HUNTER || !assignment ||
+        assignment->cohort != Aq40TwinEncounter::TwinRoleCohort::Hunter || !target || !target->IsAlive() ||
+        target->GetEntry() != Aq40SpellIds::TwinVeknilashNpcEntry)
+    {
+        return false;
+    }
+
+    if (state.phase != Aq40TwinEncounter::TwinEncounterPhase::Stable || Aq40TwinEncounter::IsSwapPrepActive(state) ||
+        Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
+        Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state) ||
+        Aq40TwinEncounter::IsTerminalPhase(state.phase))
+    {
+        return false;
+    }
+
+    Aq40TwinEncounter::TwinSide const targetSide =
+        GetTwinSideForPosition(target->GetPositionX(), target->GetPositionY());
+    if (GetTwinSideForPosition(bot->GetPositionX(), bot->GetPositionY()) != targetSide)
+        return false;
+
+    if (Pet* pet = bot->GetPet())
+    {
+        if (GetTwinSideForPosition(pet->GetPositionX(), pet->GetPositionY()) != targetSide)
+            return false;
+    }
+
+    Unit* veklor = FindTwinBoss(botAI, units, Aq40TwinEncounter::TwinBoss::Veklor);
+    if (!veklor)
+        return true;
+
+    float constexpr kTwinHunterPetSafeRadius = kTwinArcaneBurstLooseRadius + 2.0f;
+    if (bot->GetDistance2d(veklor) <= kTwinHunterPetSafeRadius)
+        return false;
+
+    if (Pet* pet = bot->GetPet())
+    {
+        if (pet->GetDistance2d(veklor) <= kTwinHunterPetSafeRadius)
+            return false;
+    }
+
+    return true;
+}
+
+char const* GetTwinPetHoldReason(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state, Unit* target)
+{
+    if (!bot)
+        return "invalid";
+
+    if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull)
+        return "prepull_stage";
+    if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow)
+        return "dual_pull";
+    if (Aq40TwinEncounter::IsSwapPrepActive(state))
+        return "swap_prep";
+    if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow)
+        return "teleport_window";
+    if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery)
+        return "pickup_recovery";
+    if (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) || Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state))
+        return "post_swap_hold";
+    if (Aq40TwinEncounter::IsTerminalPhase(state.phase))
+        return "terminal_failure";
+    if (!target)
+        return "no_safe_target";
+    if (Aq40SpellIds::IsTwinBugEntry(target->GetEntry()))
+        return "bug_target";
+    if (bot->getClass() != CLASS_HUNTER)
+        return "non_hunter_pet";
+    return "unsafe_target";
+}
+
+bool ShouldTwinHoldPetPassive(Player* bot, PlayerbotAI* botAI,
+                              Aq40TwinEncounter::TwinEncounterState const& state,
+                              Aq40TwinEncounter::TwinRoleAssignment const* assignment,
+                              Unit* target, GuidVector const& units)
+{
+    if (!ShouldApplyTwinPetPolicy(bot, state))
+        return false;
+
+    if (state.phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull ||
+        state.phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow ||
+        state.phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
+        state.phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery ||
+        Aq40TwinEncounter::IsSwapPrepActive(state) ||
+        Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
+        Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state) ||
+        Aq40TwinEncounter::IsTerminalPhase(state.phase))
+    {
+        return true;
+    }
+
+    if (!target || Aq40SpellIds::IsTwinBugEntry(target->GetEntry()))
+        return true;
+
+    if (bot->getClass() != CLASS_HUNTER)
+        return true;
+
+    return !IsTwinHunterPetSafeTarget(bot, botAI, state, assignment, target, units);
+}
+
+bool SyncTwinEncounterPetPolicy(Player* bot, PlayerbotAI* botAI,
+                                Aq40TwinEncounter::TwinEncounterState const& state,
+                                Aq40TwinEncounter::TwinRoleAssignment const* assignment,
+                                Unit* target, GuidVector const& units)
+{
+    if (!bot || !botAI)
+        return false;
+
+    Pet* pet = bot->GetPet();
+    if (!pet)
+        return Aq40TwinEncounter::RestorePetControlState(bot);
+
+    if (!ShouldApplyTwinPetPolicy(bot, state))
+        return Aq40TwinEncounter::RestorePetControlState(bot);
+
+    bool changed = DisableTwinPetTauntAutocast(bot, pet);
+    if (ShouldTwinHoldPetPassive(bot, botAI, state, assignment, target, units))
+    {
+        bool const passiveChanged = ForceTwinPetPassiveFollow(bot, botAI, pet);
+        if (passiveChanged)
+        {
+            Aq40Helpers::LogAq40Info(bot, "twin_pet", "twin:pet:hold_passive",
+                std::string("boss=twin reason=") + GetTwinPetHoldReason(bot, state, target) +
+                    " pet=" + Aq40Helpers::GetAq40LogUnit(pet) +
+                    " target=" + Aq40Helpers::GetAq40LogUnit(target),
+                1000);
+        }
+
+        return passiveChanged || changed;
+    }
+
+    bool const released = ReleaseTwinPetPassive(bot, pet);
+    if (released)
+    {
+        Aq40Helpers::LogAq40Info(bot, "twin_pet", "twin:pet:release_safe_target",
+            std::string("boss=twin pet=") + Aq40Helpers::GetAq40LogUnit(pet) +
+                " target=" + Aq40Helpers::GetAq40LogUnit(target),
+            1000);
+    }
+
+    return released || changed;
 }
 
 Aq40TwinEncounter::TwinSide GetTwinAssignedSide(Aq40TwinEncounter::TwinEncounterState const& state,
@@ -1737,6 +1997,7 @@ bool Aq40TwinPrePullStageAction::Execute(Event /*event*/)
         return overlayChanged;
 
     bool const clearedIntent = ClearTwinPrePullIntent(bot, botAI);
+    bool const petChanged = SyncTwinEncounterPetPolicy(bot, botAI, *state, assignment, nullptr, GuidVector());
     TwinPrePullAnchorChoice const anchorChoice = GetTwinPrePullAnchorChoice(*assignment);
     Aq40TwinEncounter::TwinAnchor const& anchor = anchorChoice.anchor;
 
@@ -1773,7 +2034,7 @@ bool Aq40TwinPrePullStageAction::Execute(Event /*event*/)
         }
     }
 
-    return overlayChanged || clearedIntent;
+    return overlayChanged || clearedIntent || petChanged;
 }
 
 bool Aq40TwinDualPullEngageAction::Execute(Event /*event*/)
@@ -2016,6 +2277,8 @@ bool Aq40TwinHealerSupportAction::Execute(Event /*event*/)
 
     Aq40TwinEncounter::TwinRoleAssignment const* assignment =
         Aq40TwinEncounter::GetAssignmentForMember(*state, bot->GetGUID());
+    GuidVector const encounterUnits = GetTwinEncounterUnits(botAI);
+    bool const petChanged = SyncTwinEncounterPetPolicy(bot, botAI, *state, assignment, nullptr, encounterUnits);
     if (IsTwinSideHealerMode(*state, assignment))
     {
         bool const focusChanged = SyncTwinHealerFocusTargets(
@@ -2028,7 +2291,7 @@ bool Aq40TwinHealerSupportAction::Execute(Event /*event*/)
         if (repositioned)
             return true;
 
-        return TryTwinSwapPrepHealerPreload(bot, botAI, *state, *assignment) || focusChanged;
+        return TryTwinSwapPrepHealerPreload(bot, botAI, *state, *assignment) || focusChanged || petChanged;
     }
 
     bool const focusChanged = SyncTwinHealerFocusTargets(bot, botAI, *state, std::list<ObjectGuid>(),
@@ -2049,16 +2312,16 @@ bool Aq40TwinHealerSupportAction::Execute(Event /*event*/)
             return MaintainTwinAssignedAnchor(bot, *state, *assignment,
                        GetCenterSpreadAnchor(assignment->slotIndex),
                        "twin:side_healer:degraded_fallback", "center_spread") ||
-                   focusChanged;
+                   focusChanged || petChanged;
         }
     }
 
     if (!state->assignments.empty())
-        return focusChanged;
+        return focusChanged || petChanged;
 
     Aq40TwinEncounter::TwinAnchor const& anchor = GetCenterSpreadAnchor(bot);
     if (bot->GetExactDist2d(anchor.position.GetPositionX(), anchor.position.GetPositionY()) <= kTwinAnchorTolerance)
-        return focusChanged;
+        return focusChanged || petChanged;
 
     Aq40TwinEncounter::RequestImmediateMovementInterrupt(bot);
     Aq40Helpers::LogAq40Info(bot, "spread_position",
@@ -2068,7 +2331,7 @@ bool Aq40TwinHealerSupportAction::Execute(Event /*event*/)
         1000);
     return MoveInside(bot->GetMapId(), anchor.position.GetPositionX(), anchor.position.GetPositionY(),
         anchor.position.GetPositionZ(), kTwinAnchorTolerance, MovementPriority::MOVEMENT_COMBAT) ||
-           focusChanged;
+           focusChanged || petChanged;
 }
 
 bool Aq40TwinChooseTargetAction::Execute(Event /*event*/)
@@ -2101,7 +2364,7 @@ bool Aq40TwinChooseTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    bool const petChanged = SyncTwinHunterPetBugSafety(bot, botAI, target);
+    bool const petChanged = SyncTwinEncounterPetPolicy(bot, botAI, *state, assignment, target, encounterUnits);
 
     if (AI_VALUE(Unit*, "current target") != target || bot->GetTarget() != target->GetGUID())
     {

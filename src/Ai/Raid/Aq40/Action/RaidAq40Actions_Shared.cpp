@@ -1,6 +1,7 @@
 #include "RaidAq40Actions.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -21,52 +22,233 @@ struct Aq40ManagedResistanceState
     bool natureCombatEnabled = false;
     bool natureNonCombatEnabled = false;
     bool shamanNatureCombatEnabled = false;
+    bool priestShadowNonCombatEnabled = false;
+    bool paladinShadowCombatEnabled = false;
+};
 
+enum class Aq40TwinShadowResistanceMode : uint8
+{
+    None = 0,
+    PriestBuff,
+    SidePaladinAuras,
+};
+
+struct Aq40TwinShadowResistanceContext
+{
+    bool required = false;
+    Aq40TwinShadowResistanceMode mode = Aq40TwinShadowResistanceMode::None;
+    Player* priestProvider = nullptr;
+    std::array<Player*, 2> paladinProviderBySide = { nullptr, nullptr };
+    std::array<Player*, 2> warlockTankBySide = { nullptr, nullptr };
 };
 
 std::unordered_map<uint64, Aq40ManagedResistanceState> sManagedResistanceStateByBot;
 std::unordered_map<uint64, bool> sAq40CleanupReportedDirtyByBot;
 
-bool ClearManagedAq40ResistanceStrategies(Player* bot, PlayerbotAI* botAI)
+bool HasAnyManagedResistanceFlags(Aq40ManagedResistanceState const& state)
+{
+    return state.natureCombatEnabled || state.natureNonCombatEnabled || state.shamanNatureCombatEnabled ||
+           state.priestShadowNonCombatEnabled || state.paladinShadowCombatEnabled;
+}
+
+bool IsTwinShadowResistanceWindow(Aq40TwinEncounter::TwinEncounterState const& state)
+{
+    if (Aq40TwinEncounter::IsTerminalPhase(state.phase) ||
+        !Aq40TwinEncounter::HasDeterministicAssignments(state))
+    {
+        return false;
+    }
+
+    return ((state.mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady) &&
+            state.phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull) ||
+           Aq40TwinEncounter::IsActivePhase(state.phase) ||
+           state.phase == Aq40TwinEncounter::TwinEncounterPhase::Degraded;
+}
+
+Aq40TwinShadowResistanceContext BuildTwinShadowResistanceContext(Player* bot)
+{
+    Aq40TwinShadowResistanceContext context;
+    if (!bot)
+        return context;
+
+    Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
+    if (!state || !IsTwinShadowResistanceWindow(*state))
+        return context;
+
+    context.required = true;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return context;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInWorld() || !Aq40BossHelper::IsSameInstance(bot, member))
+            continue;
+
+        Aq40TwinEncounter::TwinRoleAssignment const* assignment =
+            Aq40TwinEncounter::GetAssignmentForMember(*state, member->GetGUID());
+        if (!assignment)
+            continue;
+
+        if (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::WarlockTank &&
+            Aq40TwinEncounter::IsKnownSide(assignment->stableSide))
+        {
+            context.warlockTankBySide[assignment->stableSide == Aq40TwinEncounter::TwinSide::Side1 ? 1u : 0u] = member;
+        }
+
+        if (member->getClass() == CLASS_PRIEST)
+        {
+            if (!context.priestProvider || member->GetGUID().GetRawValue() < context.priestProvider->GetGUID().GetRawValue())
+                context.priestProvider = member;
+
+            continue;
+        }
+
+        if (member->getClass() != CLASS_PALADIN || !Aq40TwinEncounter::IsKnownSide(assignment->stableSide))
+            continue;
+
+        size_t const sideIndex = assignment->stableSide == Aq40TwinEncounter::TwinSide::Side1 ? 1u : 0u;
+        Player*& sideProvider = context.paladinProviderBySide[sideIndex];
+        if (!sideProvider || member->GetGUID().GetRawValue() < sideProvider->GetGUID().GetRawValue())
+            sideProvider = member;
+    }
+
+    if (context.priestProvider)
+        context.mode = Aq40TwinShadowResistanceMode::PriestBuff;
+    else if (context.paladinProviderBySide[0] && context.paladinProviderBySide[1])
+        context.mode = Aq40TwinShadowResistanceMode::SidePaladinAuras;
+
+    return context;
+}
+
+bool IsTwinSidePaladinProvider(Player* bot, Aq40TwinShadowResistanceContext const& context,
+                               Aq40TwinEncounter::TwinSide* outSide = nullptr)
+{
+    if (!bot || context.mode != Aq40TwinShadowResistanceMode::SidePaladinAuras)
+        return false;
+
+    for (size_t sideIndex = 0; sideIndex < context.paladinProviderBySide.size(); ++sideIndex)
+    {
+        if (context.paladinProviderBySide[sideIndex] != bot)
+            continue;
+
+        if (outSide)
+            *outSide = sideIndex == 1u ? Aq40TwinEncounter::TwinSide::Side1 : Aq40TwinEncounter::TwinSide::Side0;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool HasTwinShadowProtectionAura(PlayerbotAI* botAI, Player* target)
+{
+    return botAI && target &&
+           (botAI->HasAura("shadow protection", target) || botAI->HasAura("prayer of shadow protection", target));
+}
+
+bool HasTwinShadowProtectionMissing(PlayerbotAI* botAI, Aq40TwinShadowResistanceContext const& context)
+{
+    if (!botAI || context.mode != Aq40TwinShadowResistanceMode::PriestBuff)
+        return false;
+
+    for (Player* warlockTank : context.warlockTankBySide)
+    {
+        if (warlockTank && !HasTwinShadowProtectionAura(botAI, warlockTank))
+            return true;
+    }
+
+    return false;
+}
+
+char const* ToString(Aq40TwinShadowResistanceMode mode)
+{
+    switch (mode)
+    {
+        case Aq40TwinShadowResistanceMode::None: return "none";
+        case Aq40TwinShadowResistanceMode::PriestBuff: return "priest_buff";
+        case Aq40TwinShadowResistanceMode::SidePaladinAuras: return "side_paladin_auras";
+    }
+
+    return "none";
+}
+
+}    // namespace
+
+namespace Aq40Helpers
+{
+
+bool HasManagedResistanceState(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    auto const itr = sManagedResistanceStateByBot.find(bot->GetGUID().GetRawValue());
+    return itr != sManagedResistanceStateByBot.end() && HasAnyManagedResistanceFlags(itr->second);
+}
+
+bool ClearManagedResistanceStrategies(Player* bot, PlayerbotAI* botAI)
 {
     if (!bot || !botAI)
         return false;
 
+    auto itr = sManagedResistanceStateByBot.find(bot->GetGUID().GetRawValue());
+    if (itr == sManagedResistanceStateByBot.end())
+        return false;
+
+    Aq40ManagedResistanceState& managedState = itr->second;
     bool cleaned = false;
 
-    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
+    if (managedState.natureCombatEnabled && botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
     {
         botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_COMBAT);
+        managedState.natureCombatEnabled = false;
         cleaned = true;
     }
 
-    if (botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT))
+    if (managedState.natureNonCombatEnabled && botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT))
     {
         botAI->ChangeStrategy("-rnature", BotState::BOT_STATE_NON_COMBAT);
+        managedState.natureNonCombatEnabled = false;
         cleaned = true;
     }
 
-    if (botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT))
+    if (managedState.shamanNatureCombatEnabled && botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT))
     {
         botAI->ChangeStrategy("-nature resistance", BotState::BOT_STATE_COMBAT);
+        managedState.shamanNatureCombatEnabled = false;
         cleaned = true;
     }
 
-    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT))
+    if (managedState.paladinShadowCombatEnabled && botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT))
     {
         botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
+        managedState.paladinShadowCombatEnabled = false;
         cleaned = true;
     }
 
-    if (botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
+    if (managedState.priestShadowNonCombatEnabled && botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
     {
         botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
+        managedState.priestShadowNonCombatEnabled = false;
         cleaned = true;
     }
 
-    cleaned = sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue()) > 0 || cleaned;
+    if (!HasAnyManagedResistanceFlags(managedState))
+    {
+        sManagedResistanceStateByBot.erase(itr);
+        cleaned = true;
+    }
+
     return cleaned;
 }
+
+}    // namespace Aq40Helpers
+
+namespace
+{
 
 void LogAq40CleanupTransition(Player* bot, bool wasDirty)
 {
@@ -226,6 +408,9 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
     bool const needNatureResistance =
         inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
             { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    Aq40TwinShadowResistanceContext const twinShadowContext = BuildTwinShadowResistanceContext(bot);
+    bool const needTwinShadowResistance = twinShadowContext.required &&
+                                          twinShadowContext.mode != Aq40TwinShadowResistanceMode::None;
 
     bool acted = false;
 
@@ -296,16 +481,96 @@ bool Aq40ManageResistanceStrategiesAction::Execute(Event /*event*/)
         }
     }
 
-    if (!managedState.natureCombatEnabled && !managedState.natureNonCombatEnabled &&
-        !managedState.shamanNatureCombatEnabled)
+    if (bot->getClass() == CLASS_PRIEST)
+    {
+        bool const shouldProvideTwinShadow = twinShadowContext.mode == Aq40TwinShadowResistanceMode::PriestBuff &&
+                                             twinShadowContext.priestProvider == bot;
+        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+
+        if (shouldProvideTwinShadow)
+        {
+            if (!hasShadowStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_NON_COMBAT);
+                managedState.priestShadowNonCombatEnabled = true;
+                acted = true;
+            }
+
+            if (HasTwinShadowProtectionMissing(botAI, twinShadowContext))
+            {
+                for (Player* warlockTank : twinShadowContext.warlockTankBySide)
+                {
+                    if (!warlockTank || HasTwinShadowProtectionAura(botAI, warlockTank))
+                        continue;
+
+                    if (botAI->CastSpell("shadow protection", warlockTank))
+                    {
+                        Aq40Helpers::LogAq40Info(bot, "resistance_strategy",
+                            std::string("shadow:priest:") + Aq40Helpers::GetAq40LogUnit(warlockTank),
+                            std::string("boss=twin shadow=1 mode=priest_buff action=shadow_protection target=") +
+                                Aq40Helpers::GetAq40LogUnit(warlockTank),
+                            1000);
+                        acted = true;
+                        break;
+                    }
+                }
+            }
+        }
+        else if (managedState.priestShadowNonCombatEnabled)
+        {
+            if (hasShadowStrategyNonCombat)
+            {
+                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_NON_COMBAT);
+                acted = true;
+            }
+
+            managedState.priestShadowNonCombatEnabled = false;
+        }
+    }
+
+    if (bot->getClass() == CLASS_PALADIN)
+    {
+        bool const shouldProvideTwinShadow = needTwinShadowResistance &&
+                                             IsTwinSidePaladinProvider(bot, twinShadowContext);
+        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
+
+        if (shouldProvideTwinShadow)
+        {
+            if (!hasShadowStrategyCombat)
+            {
+                botAI->ChangeStrategy("+rshadow", BotState::BOT_STATE_COMBAT);
+                managedState.paladinShadowCombatEnabled = true;
+                acted = true;
+            }
+
+            if (!botAI->HasAura("shadow resistance aura", bot))
+                acted = botAI->DoSpecificAction("shadow resistance aura", Event(), true) || acted;
+        }
+        else if (managedState.paladinShadowCombatEnabled)
+        {
+            if (hasShadowStrategyCombat)
+            {
+                botAI->ChangeStrategy("-rshadow", BotState::BOT_STATE_COMBAT);
+                acted = true;
+            }
+
+            managedState.paladinShadowCombatEnabled = false;
+        }
+    }
+
+    if (!HasAnyManagedResistanceFlags(managedState))
         sManagedResistanceStateByBot.erase(bot->GetGUID().GetRawValue());
 
     if (acted)
     {
         std::ostringstream fields;
-        fields << "boss=resistance nature=" << (needNatureResistance ? 1 : 0);
+        fields << "boss=resistance nature=" << (needNatureResistance ? 1 : 0)
+               << " shadow=" << (needTwinShadowResistance ? 1 : 0)
+               << " shadow_mode=" << ToString(twinShadowContext.mode);
         Aq40Helpers::LogAq40Info(bot, "resistance_strategy",
-            std::string("nature:") + (needNatureResistance ? "1" : "0"),
+            std::string("nature:") + (needNatureResistance ? "1" : "0") +
+                ":shadow:" + (needTwinShadowResistance ? "1" : "0") +
+                ":mode:" + ToString(twinShadowContext.mode),
             fields.str());
     }
 
@@ -317,12 +582,17 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
     if (!bot)
         return false;
 
+    auto const managedStateItr = sManagedResistanceStateByBot.find(bot->GetGUID().GetRawValue());
+    Aq40ManagedResistanceState const* managedState =
+        managedStateItr != sManagedResistanceStateByBot.end() ? &managedStateItr->second : nullptr;
+
     GuidVector const attackers = context->GetValue<GuidVector>("attackers")->Get();
     GuidVector const activeUnits = Aq40BossHelper::GetActiveCombatUnits(botAI, attackers);
     bool const inAq40 = Aq40BossHelper::IsInAq40(bot);
     bool const needNatureResistance =
         inAq40 && Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
             { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    Aq40TwinShadowResistanceContext const twinShadowContext = BuildTwinShadowResistanceContext(bot);
 
     if (bot->getClass() == CLASS_HUNTER)
     {
@@ -330,7 +600,8 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
         bool const hasNatureStrategyNonCombat = botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT);
         return (needNatureResistance &&
                 (!hasNatureStrategyCombat || !hasNatureStrategyNonCombat || !botAI->HasAura("aspect of the wild", bot))) ||
-               (!needNatureResistance && (hasNatureStrategyCombat || hasNatureStrategyNonCombat));
+               (!needNatureResistance && managedState &&
+                (managedState->natureCombatEnabled || managedState->natureNonCombatEnabled));
     }
 
     if (bot->getClass() == CLASS_SHAMAN)
@@ -338,7 +609,24 @@ bool Aq40ManageResistanceStrategiesAction::isUseful()
         bool const hasNatureTotemStrategyCombat = botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT);
         return (needNatureResistance &&
                 (!hasNatureTotemStrategyCombat || !botAI->HasAura("nature resistance totem", bot))) ||
-               (!needNatureResistance && hasNatureTotemStrategyCombat);
+               (!needNatureResistance && managedState && managedState->shamanNatureCombatEnabled);
+    }
+
+    if (bot->getClass() == CLASS_PRIEST)
+    {
+        bool const isPriestProvider = twinShadowContext.mode == Aq40TwinShadowResistanceMode::PriestBuff &&
+                                      twinShadowContext.priestProvider == bot;
+        bool const hasShadowStrategyNonCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
+        return (isPriestProvider && (!hasShadowStrategyNonCombat || HasTwinShadowProtectionMissing(botAI, twinShadowContext))) ||
+               (!isPriestProvider && managedState && managedState->priestShadowNonCombatEnabled);
+    }
+
+    if (bot->getClass() == CLASS_PALADIN)
+    {
+        bool const isPaladinProvider = IsTwinSidePaladinProvider(bot, twinShadowContext);
+        bool const hasShadowStrategyCombat = botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT);
+        return (isPaladinProvider && (!hasShadowStrategyCombat || !botAI->HasAura("shadow resistance aura", bot))) ||
+               (!isPaladinProvider && managedState && managedState->paladinShadowCombatEnabled);
     }
 
     return false;
@@ -358,7 +646,7 @@ bool Aq40EraseTimersAndTrackersAction::Execute(Event /*event*/)
     if (!Aq40Helpers::ShouldRunOutOfCombatMaintenance(bot, botAI))
         return false;
 
-    bool const hadManagedResistance = ClearManagedAq40ResistanceStrategies(bot, botAI);
+    bool const hadManagedResistance = Aq40Helpers::ClearManagedResistanceStrategies(bot, botAI);
     bool const hadTwinWarlockTankOverlay = Aq40TwinEncounter::ClearTwinWarlockTankStrategy(bot);
     bool const hadPersistentEncounterState = Aq40Helpers::ResetEncounterState(bot);
     bool const recoveredDirtyState =

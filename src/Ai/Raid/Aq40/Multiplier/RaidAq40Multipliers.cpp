@@ -8,6 +8,8 @@
 #include "FollowActions.h"
 #include "GenericActions.h"
 #include "GenericSpellActions.h"
+#include "HunterActions.h"
+#include "MageActions.h"
 #include "MovementActions.h"
 #include "ObjectGuid.h"
 #include "PaladinActions.h"
@@ -68,6 +70,104 @@ bool IsTwinRegistrationWindow(Player* bot)
     bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
                               Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
     return prepullReady || activeTwin || postSwapHold || terminalTwin;
+}
+
+bool IsTwinSharedAq40Action(std::string const& actionName)
+{
+    return actionName == "aq40 manage resistance strategies" || actionName == "aq40 erase timers and trackers";
+}
+
+bool IsTwinGenericTargetAction(Action* action)
+{
+    return dynamic_cast<DpsAoeAction*>(action) ||
+           dynamic_cast<DpsAssistAction*>(action) ||
+           dynamic_cast<TankAssistAction*>(action) ||
+           dynamic_cast<AggressiveTargetAction*>(action) ||
+           dynamic_cast<AttackAnythingAction*>(action) ||
+           dynamic_cast<AttackLeastHpTargetAction*>(action) ||
+           dynamic_cast<AttackRtiTargetAction*>(action) ||
+           dynamic_cast<DropTargetAction*>(action);
+}
+
+bool IsTwinMovementDriftAction(Action* action)
+{
+    return dynamic_cast<CombatFormationMoveAction*>(action) ||
+           dynamic_cast<FollowAction*>(action) ||
+           dynamic_cast<FleeAction*>(action);
+}
+
+bool IsTwinQueuedEscapeAction(Action* action)
+{
+    return dynamic_cast<AvoidAoeAction*>(action) ||
+           dynamic_cast<MoveFromGroupAction*>(action) ||
+           dynamic_cast<RunAwayAction*>(action) ||
+           dynamic_cast<MoveOutOfEnemyContactAction*>(action) ||
+           dynamic_cast<CastDisengageAction*>(action) ||
+           dynamic_cast<CastBlinkBackAction*>(action);
+}
+
+bool IsTwinStableAnchorCohort(Aq40TwinEncounter::TwinRoleCohort cohort)
+{
+    switch (cohort)
+    {
+        case Aq40TwinEncounter::TwinRoleCohort::SideHealer:
+        case Aq40TwinEncounter::TwinRoleCohort::RaidHealer:
+        case Aq40TwinEncounter::TwinRoleCohort::RangedDps:
+        case Aq40TwinEncounter::TwinRoleCohort::Hunter:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+bool IsTwinVeklorTarget(Unit const* unit)
+{
+    return unit && unit->GetEntry() == Aq40SpellIds::TwinVeklorNpcEntry;
+}
+
+bool IsTwinBugTarget(Unit const* unit)
+{
+    return unit && Aq40SpellIds::IsTwinBugEntry(unit->GetEntry());
+}
+
+bool IsTwinUnsafePickupWindow(Aq40TwinEncounter::TwinEncounterState const& state, Player const* bot)
+{
+    return Aq40TwinEncounter::IsSwapPrepActive(state) ||
+           state.phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
+           state.phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery ||
+           Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state) ||
+           Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
+}
+
+Aq40TwinEncounter::TwinSide GetTwinSideForPosition(float x, float y)
+{
+    Aq40TwinEncounter::TwinEncounterGeometry const& geometry = Aq40TwinEncounter::GetGeometry();
+    float const side0Distance = geometry.bossPark[0].position.GetExactDist2d(x, y);
+    float const side1Distance = geometry.bossPark[1].position.GetExactDist2d(x, y);
+    return side0Distance <= side1Distance ? Aq40TwinEncounter::TwinSide::Side0
+                                          : Aq40TwinEncounter::TwinSide::Side1;
+}
+
+bool IsTwinHunterSafePetAttackWindow(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state,
+                                     Aq40TwinEncounter::TwinRoleAssignment const* assignment,
+                                     Unit const* currentTarget)
+{
+    if (!bot || bot->getClass() != CLASS_HUNTER || !assignment ||
+        assignment->cohort != Aq40TwinEncounter::TwinRoleCohort::Hunter || !currentTarget ||
+        currentTarget->GetEntry() != Aq40SpellIds::TwinVeknilashNpcEntry)
+    {
+        return false;
+    }
+
+    if (state.phase != Aq40TwinEncounter::TwinEncounterPhase::Stable ||
+        Aq40TwinEncounter::IsSwapPrepActive(state) || IsTwinUnsafePickupWindow(state, bot))
+    {
+        return false;
+    }
+
+    return GetTwinSideForPosition(bot->GetPositionX(), bot->GetPositionY()) ==
+           GetTwinSideForPosition(currentTarget->GetPositionX(), currentTarget->GetPositionY());
 }
 }    // namespace
 
@@ -321,8 +421,25 @@ float Aq40TwinMultiplier::GetValue(Action* action)
                                Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
     Aq40TwinEncounter::TwinRoleAssignment const* assignment =
         Aq40TwinEncounter::GetAssignmentForMember(*state, bot->GetGUID());
-    bool const stableAnchorPhase = state->phase == Aq40TwinEncounter::TwinEncounterPhase::Stable &&
-                                   !Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
+    bool const nonDegradedTwin = state->phase != Aq40TwinEncounter::TwinEncounterPhase::Degraded;
+    bool const activeNonDegradedTwin = activeTwin && nonDegradedTwin;
+    bool const immediateRepositionWindow = Aq40TwinEncounter::IsImmediateRepositionWindow(*state);
+    bool const authoritativeMovementWindow =
+        activeNonDegradedTwin &&
+        (immediateRepositionWindow || Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot));
+    bool const unsafePickupWindow = nonDegradedTwin && IsTwinUnsafePickupWindow(*state, bot);
+    bool const isPrimaryVeklorController = assignment &&
+                                           assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::WarlockTank &&
+                                           Aq40TwinEncounter::IsPrimaryController(
+                                               *state, Aq40TwinEncounter::TwinBoss::Veklor, assignment->memberGuid);
+    bool const suppressNonControllerWarlockVeklor = bot->getClass() == CLASS_WARLOCK &&
+                                                    !isPrimaryVeklorController &&
+                                                    (!Aq40TwinEncounter::IsPickupEstablished(
+                                                         *state, Aq40TwinEncounter::TwinBoss::Veklor) ||
+                                                     unsafePickupWindow);
+    bool const suppressUnsafeRangedVeklorThreat = unsafePickupWindow && !isPrimaryVeklorController && assignment &&
+                                                  (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::RangedDps ||
+                                                   assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::Hunter);
 
     std::string const actionName = action->getName();
     bool const isTwinAction = actionName.compare(0, 10, "aq40 twin ") == 0;
@@ -331,8 +448,14 @@ float Aq40TwinMultiplier::GetValue(Action* action)
         if (isTwinAction || actionName == "aq40 choose target")
             return 0.0f;
 
+        if (dynamic_cast<PetAttackAction*>(action) || dynamic_cast<SetPetStanceAction*>(action) ||
+            dynamic_cast<TogglePetSpellAutoCastAction*>(action))
+        {
+            return 0.0f;
+        }
+
         if (actionName.compare(0, 5, "aq40 ") == 0 && actionName.compare(0, 10, "aq40 twin ") != 0 &&
-            actionName != "aq40 manage resistance strategies" && actionName != "aq40 erase timers and trackers")
+            !IsTwinSharedAq40Action(actionName))
         {
             return 0.0f;
         }
@@ -381,45 +504,77 @@ float Aq40TwinMultiplier::GetValue(Action* action)
         return 0.0f;
 
     if (actionName.compare(0, 5, "aq40 ") == 0 && actionName.compare(0, 10, "aq40 twin ") != 0 &&
-        actionName != "aq40 manage resistance strategies" && actionName != "aq40 erase timers and trackers")
+        !IsTwinSharedAq40Action(actionName))
     {
         return 0.0f;
     }
 
-    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+    if (IsTwinGenericTargetAction(action))
+        return 0.0f;
+
+    if (dynamic_cast<SetPetStanceAction*>(action) || dynamic_cast<TogglePetSpellAutoCastAction*>(action))
+        return 0.0f;
+
+    if (dynamic_cast<PetAttackAction*>(action))
+    {
+        Unit* const petTarget = AI_VALUE(Unit*, "current target");
+        return IsTwinHunterSafePetAttackWindow(bot, *state, assignment, petTarget) ? 1.0f : 0.0f;
+    }
+
+    if (authoritativeMovementWindow && IsTwinQueuedEscapeAction(action))
         return 0.0f;
 
     if (assignment)
     {
-        bool const isStableAnchorCohort = assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::SideHealer ||
-                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::RaidHealer ||
-                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::RangedDps ||
-                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::Hunter;
         bool const isTwinTankAssignment = assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::MeleeTank ||
-                                          Aq40TwinEncounter::ShouldUseTwinWarlockTankStrategy(bot);
+                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::WarlockTank;
+        bool const isStableAnchorCohort = IsTwinStableAnchorCohort(assignment->cohort);
 
         if (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::MeleeTank &&
-            !Aq40TwinEncounter::IsImmediateRepositionWindow(*state) &&
+            !immediateRepositionWindow &&
             (dynamic_cast<TankFaceAction*>(action) || actionName == "set facing"))
         {
             return 0.0f;
         }
 
-        if (isTwinTankAssignment &&
+        if (nonDegradedTwin && isTwinTankAssignment &&
             (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
         {
             return 0.0f;
         }
 
-        if (stableAnchorPhase && isStableAnchorCohort &&
+        if (activeNonDegradedTwin && isStableAnchorCohort &&
             (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
         {
             return 0.0f;
         }
     }
 
-    if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
-        dynamic_cast<FleeAction*>(action))
+    if (IsTwinMovementDriftAction(action))
+    {
+        return 0.0f;
+    }
+
+    Unit* const actionTarget = action->GetTarget();
+    Unit* const currentTarget = AI_VALUE(Unit*, "current target");
+    bool const attackOrReachAction = dynamic_cast<AttackAction*>(action) ||
+                                     dynamic_cast<ReachTargetAction*>(action) ||
+                                     dynamic_cast<CastReachTargetSpellAction*>(action);
+    bool const offensiveSpellAction = dynamic_cast<CastSpellAction*>(action) &&
+                                      !dynamic_cast<CastHealingSpellAction*>(action);
+    bool const targetsVeklor = IsTwinVeklorTarget(actionTarget) ||
+                               (attackOrReachAction && IsTwinVeklorTarget(currentTarget));
+    bool const targetsTwinBug = IsTwinBugTarget(actionTarget) ||
+                                (attackOrReachAction && IsTwinBugTarget(currentTarget));
+
+    if ((suppressNonControllerWarlockVeklor || suppressUnsafeRangedVeklorThreat) && targetsVeklor &&
+        (attackOrReachAction || offensiveSpellAction))
+    {
+        return 0.0f;
+    }
+
+    if (unsafePickupWindow && targetsTwinBug &&
+        (attackOrReachAction || dynamic_cast<CastSpellAction*>(action)))
     {
         return 0.0f;
     }

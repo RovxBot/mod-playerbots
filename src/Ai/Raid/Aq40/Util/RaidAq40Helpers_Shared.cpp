@@ -152,20 +152,7 @@ bool HasManagedResistanceStrategy(Player* bot, PlayerbotAI* botAI)
     if (!bot || !botAI)
         return false;
 
-    switch (bot->getClass())
-    {
-        case CLASS_HUNTER:
-            return botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT) ||
-                   botAI->HasStrategy("rnature", BotState::BOT_STATE_NON_COMBAT);
-        case CLASS_SHAMAN:
-            return botAI->HasStrategy("nature resistance", BotState::BOT_STATE_COMBAT);
-        case CLASS_PRIEST:
-        case CLASS_PALADIN:
-            return botAI->HasStrategy("rshadow", BotState::BOT_STATE_COMBAT) ||
-                   botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT);
-        default:
-            return false;
-    }
+    return HasManagedResistanceState(bot);
 }
 
 bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers)
@@ -177,6 +164,16 @@ bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector co
     bool const needNatureResistance =
         Aq40BossHelper::HasAnyNamedUnit(botAI, activeUnits,
             { "princess huhuran", "viscidus", "glob of viscidus", "toxic slime" });
+    Aq40TwinEncounter::TwinEncounterState const* twinState = Aq40TwinEncounter::GetEncounterState(bot);
+    bool const needTwinShadowResistance =
+        twinState &&
+        Aq40TwinEncounter::HasDeterministicAssignments(*twinState) &&
+        Aq40TwinEncounter::GetAssignmentForMember(*twinState, bot->GetGUID()) &&
+        !Aq40TwinEncounter::IsTerminalPhase(twinState->phase) &&
+        (((twinState->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady) &&
+          twinState->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull) ||
+         Aq40TwinEncounter::IsActivePhase(twinState->phase) ||
+         twinState->phase == Aq40TwinEncounter::TwinEncounterPhase::Degraded);
 
     switch (bot->getClass())
     {
@@ -185,7 +182,7 @@ bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector co
             return needNatureResistance || HasManagedResistanceStrategy(bot, botAI);
         case CLASS_PRIEST:
         case CLASS_PALADIN:
-            return HasManagedResistanceStrategy(bot, botAI);
+            return needTwinShadowResistance || HasManagedResistanceStrategy(bot, botAI);
         default:
             return false;
     }

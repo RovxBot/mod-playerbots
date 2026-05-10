@@ -9,7 +9,9 @@
 
 namespace Aq40Helpers
 {
+bool HasManagedResistanceState(Player* bot);
 bool HasManagedResistanceStrategy(Player* bot, PlayerbotAI* botAI);
+bool ClearManagedResistanceStrategies(Player* bot, PlayerbotAI* botAI);
 bool IsResistanceManagementNeeded(Player* bot, PlayerbotAI* botAI, GuidVector const& attackers);
 bool ShouldRunOutOfCombatMaintenance(Player* bot, PlayerbotAI* botAI);
 bool HasPersistentEncounterState(Player* bot);

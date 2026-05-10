@@ -1,9 +1,15 @@
 #include "RaidAq40TwinEncounter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+
+#include "CharmInfo.h"
+#include "Pet.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 
 #include "../RaidAq40BossHelper.h"
 #include "RaidAq40Helpers_Shared.h"
@@ -74,6 +80,7 @@ struct TwinManagedWarlockTankOverlay
 std::unordered_map<uint32, TwinEncounterState> sTwinStateByInstance;
 std::unordered_map<uint64, TwinLockedPickupAnchor> sTwinPickupAnchorByBot;
 std::unordered_map<uint64, TwinManagedWarlockTankOverlay> sTwinWarlockTankOverlayByBot;
+std::unordered_map<uint64, TwinPetControlState> sTwinPetControlByBot;
 
 size_t ToIndex(TwinBoss boss)
 {
@@ -125,6 +132,14 @@ bool IsSamePosition(Position const& left, Position const& right)
     return std::fabs(left.GetPositionX() - right.GetPositionX()) < 0.01f &&
            std::fabs(left.GetPositionY() - right.GetPositionY()) < 0.01f &&
            std::fabs(left.GetPositionZ() - right.GetPositionZ()) < 0.01f;
+}
+
+bool IsPetSpellAutocastEnabled(Pet const* pet, uint32 spellId)
+{
+    if (!pet)
+        return false;
+
+    return std::find(pet->m_autospells.begin(), pet->m_autospells.end(), spellId) != pet->m_autospells.end();
 }
 
 bool HasMeaningfulCadence(TwinEncounterState const& state)
@@ -365,6 +380,47 @@ bool ClearWarlockTankOverlaysForInstance(Player* bot)
     return cleared;
 }
 
+bool ClearPetControlStateForInstance(Player* bot)
+{
+    if (!bot || !bot->GetMap())
+        return false;
+
+    uint32 const instanceId = GetInstanceId(bot);
+    if (!instanceId)
+        return false;
+
+    bool cleared = false;
+    Map::PlayerList const& players = bot->GetMap()->GetPlayers();
+    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+    {
+        Player* member = itr->GetSource();
+        if (!member || !member->IsInWorld() || GetInstanceId(member) != instanceId)
+            continue;
+
+        uint64 const botKey = GetBotKey(member);
+        auto const controlItr = sTwinPetControlByBot.find(botKey);
+        if (controlItr == sTwinPetControlByBot.end() || controlItr->second.instanceId != instanceId)
+            continue;
+
+        RestorePetControlState(member);
+        cleared = true;
+    }
+
+    for (auto itr = sTwinPetControlByBot.begin(); itr != sTwinPetControlByBot.end();)
+    {
+        if (itr->second.instanceId == instanceId)
+        {
+            itr = sTwinPetControlByBot.erase(itr);
+            cleared = true;
+            continue;
+        }
+
+        ++itr;
+    }
+
+    return cleared;
+}
+
 void PushAssignment(std::vector<TwinRoleAssignment>& assignments, Player* member, TwinRoleCohort cohort,
                     TwinSide side, uint8 slotIndex)
 {
@@ -455,6 +511,43 @@ Player* FindTwinStagedMember(std::vector<Player*> const& stagedMembers, ObjectGu
     });
 
     return itr != stagedMembers.end() ? *itr : nullptr;
+}
+
+std::string BuildTwinShadowResistanceUnsupportedReason(std::vector<Player*> const& stagedMembers,
+                                                       std::vector<TwinRoleAssignment> const& assignments)
+{
+    size_t priestCount = 0u;
+    for (Player* member : stagedMembers)
+    {
+        if (member && member->getClass() == CLASS_PRIEST)
+            ++priestCount;
+    }
+
+    if (priestCount > 0u)
+        return {};
+
+    std::array<bool, 2> paladinSideCoverage = { false, false };
+    for (TwinRoleAssignment const& assignment : assignments)
+    {
+        if (!IsKnownSide(assignment.stableSide))
+            continue;
+
+        Player* member = FindTwinStagedMember(stagedMembers, assignment.memberGuid);
+        if (!member || member->getClass() != CLASS_PALADIN)
+            continue;
+
+        paladinSideCoverage[ToSideIndex(assignment.stableSide)] = true;
+    }
+
+    if (paladinSideCoverage[0] && paladinSideCoverage[1])
+        return {};
+
+    size_t const sidePaladinCount = (paladinSideCoverage[0] ? 1u : 0u) + (paladinSideCoverage[1] ? 1u : 0u);
+    std::ostringstream out;
+    out << "missing_shadow_resistance_support_need_1_priest_or_2_side_paladins"
+        << "_have_priests_" << priestCount
+        << "_have_side_paladins_" << sidePaladinCount;
+    return out.str();
 }
 
 TwinAssignmentBuildResult BuildTwinAssignments(Player* bot)
@@ -626,6 +719,14 @@ TwinAssignmentBuildResult BuildTwinAssignments(Player* bot)
     AssignBalancedSideCohort(rangedDpsCandidates, TwinRoleCohort::RangedDps, sideLoad, buildResult.assignments);
     AssignBalancedSideCohort(hunterCandidates, TwinRoleCohort::Hunter, sideLoad, buildResult.assignments);
     AssignBalancedSideCohort(meleeDpsCandidates, TwinRoleCohort::MeleeDps, sideLoad, buildResult.assignments);
+
+    buildResult.unsupportedReason =
+        BuildTwinShadowResistanceUnsupportedReason(stagedMembers, buildResult.assignments);
+    if (!buildResult.unsupportedReason.empty())
+    {
+        buildResult.assignments.clear();
+        return buildResult;
+    }
 
     return buildResult;
 }
@@ -1716,6 +1817,46 @@ TwinLockedPickupAnchor& EnsureLockedPickupAnchor(Player* bot)
     return state;
 }
 
+TwinPetControlState* GetPetControlState(Player* bot)
+{
+    uint64 const key = GetBotKey(bot);
+    if (!key)
+        return nullptr;
+
+    auto itr = sTwinPetControlByBot.find(key);
+    if (itr != sTwinPetControlByBot.end() && itr->second.instanceId != GetInstanceId(bot))
+    {
+        sTwinPetControlByBot.erase(itr);
+        return nullptr;
+    }
+
+    return itr != sTwinPetControlByBot.end() ? &itr->second : nullptr;
+}
+
+TwinPetControlState const* GetPetControlState(Player const* bot)
+{
+    uint64 const key = GetBotKey(bot);
+    if (!key)
+        return nullptr;
+
+    auto itr = sTwinPetControlByBot.find(key);
+    if (itr != sTwinPetControlByBot.end() && itr->second.instanceId != GetInstanceId(bot))
+        return nullptr;
+
+    return itr != sTwinPetControlByBot.end() ? &itr->second : nullptr;
+}
+
+TwinPetControlState& EnsurePetControlState(Player* bot)
+{
+    uint64 const key = GetBotKey(bot);
+    TwinPetControlState& state = sTwinPetControlByBot[key];
+    if (state.instanceId != GetInstanceId(bot))
+        ResetPetControlState(state);
+
+    state.instanceId = GetInstanceId(bot);
+    return state;
+}
+
 bool IsLockedPickupAnchorExpired(TwinLockedPickupAnchor const& state, uint32 nowMs)
 {
     return !state.instanceId || !state.expiresAtMs || !IsActiveUntil(state.expiresAtMs, ResolveNow(nowMs));
@@ -1814,6 +1955,52 @@ void ResetPickupAnchorState(TwinLockedPickupAnchor& state)
     state = TwinLockedPickupAnchor();
 }
 
+void ResetPetControlState(TwinPetControlState& state)
+{
+    state = TwinPetControlState();
+}
+
+bool RestorePetControlState(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    uint64 const key = GetBotKey(bot);
+    auto itr = sTwinPetControlByBot.find(key);
+    if (itr == sTwinPetControlByBot.end())
+        return false;
+
+    TwinPetControlState const controlState = itr->second;
+    sTwinPetControlByBot.erase(itr);
+
+    Pet* pet = bot->GetPet();
+    if (!pet || pet->GetGUID() != controlState.petGuid)
+        return true;
+
+    for (uint32 spellId : controlState.disabledAutocastSpellIds)
+    {
+        if (!pet->HasSpell(spellId) || IsPetSpellAutocastEnabled(pet, spellId))
+            continue;
+
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+        if (!spellInfo || !spellInfo->IsAutocastable())
+            continue;
+
+        pet->ToggleAutocast(spellInfo, true);
+    }
+
+    if (controlState.forcedPassive && controlState.previousReactStateCaptured &&
+        pet->GetReactState() == REACT_PASSIVE)
+    {
+        ReactStates const reactState = static_cast<ReactStates>(controlState.previousReactState);
+        pet->SetReactState(reactState);
+        if (CharmInfo* charmInfo = pet->GetCharmInfo())
+            charmInfo->SetPlayerReactState(reactState);
+    }
+
+    return true;
+}
+
 bool ResetState(Player* bot)
 {
     uint32 const instanceId = GetInstanceId(bot);
@@ -1821,6 +2008,7 @@ bool ResetState(Player* bot)
         return false;
 
     bool erased = ClearWarlockTankOverlaysForInstance(bot);
+    erased = ClearPetControlStateForInstance(bot) || erased;
     erased = sTwinStateByInstance.erase(instanceId) > 0 || erased;
     for (auto itr = sTwinPickupAnchorByBot.begin(); itr != sTwinPickupAnchorByBot.end();)
     {
@@ -1850,6 +2038,12 @@ bool HasPersistentState(Player* bot)
     for (auto const& entry : sTwinPickupAnchorByBot)
     {
         if (entry.second.instanceId == instanceId && !IsLockedPickupAnchorExpired(entry.second))
+            return true;
+    }
+
+    for (auto const& entry : sTwinPetControlByBot)
+    {
+        if (entry.second.instanceId == instanceId)
             return true;
     }
 
