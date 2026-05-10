@@ -81,9 +81,14 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("aq40 huhuran poison spread", ACTION_RAID + 4) }));
 
     // Twin Emperors registration surface:
+    // - use an explicit approach stage before strict ready-to-open staging
     // - route target selection through encounter-specific target bias
     // - use request-first movement wrappers for script-armed hazards
     // - keep post-teleport hold logic under the Twin multiplier instead of generic follow/assist churn
+    triggers.push_back(new TriggerNode("aq40 twin approach",
+        {
+            NextAction("aq40 twin approach stage", ACTION_RAID + 1),
+        }));
     triggers.push_back(new TriggerNode("aq40 twin prepull ready",
         {
             NextAction("aq40 twin prepull stage", ACTION_RAID + 2),

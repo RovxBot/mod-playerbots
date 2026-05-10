@@ -1,5 +1,7 @@
 #include "RaidAq40Multipliers.h"
 
+#include <sstream>
+
 #include "Action.h"
 #include "AttackAction.h"
 #include "ChooseTargetActions.h"
@@ -53,12 +55,44 @@ bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& 
 
 // IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
 
+void LogTwinRegistrationDecision(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state,
+                                 bool registrationActive)
+{
+    if (!bot || registrationActive || state.phase != Aq40TwinEncounter::TwinEncounterPhase::PrePull ||
+        !Aq40TwinEncounter::HasDeterministicAssignments(state))
+    {
+        return;
+    }
+
+    Aq40TwinEncounter::TwinRoleAssignment const* assignment =
+        Aq40TwinEncounter::GetAssignmentForMember(state, bot->GetGUID());
+    if (!assignment)
+        return;
+
+    bool const distanceWait = !Aq40TwinEncounter::IsTwinEncounterParticipant(bot, false);
+    std::ostringstream fields;
+    fields << "boss=twin registration=inactive"
+           << " mode=" << Aq40TwinEncounter::ToString(state.mode)
+           << " wait=" << (distanceWait ? "distance" : "staged_raid_pending")
+           << " cohort=" << Aq40TwinEncounter::ToString(assignment->cohort)
+           << " side=" << Aq40TwinEncounter::ToString(assignment->stableSide)
+           << " slot=" << static_cast<uint32>(assignment->slotIndex)
+           << " approach=" << state.approachMemberCount
+           << " staged=" << state.stagedMemberCount
+           << " assigned=" << state.assignments.size()
+           << " unsupported_reason=" << (state.unsupportedReason.empty() ? "none" : state.unsupportedReason);
+    Aq40Helpers::LogAq40Info(bot, "twin_registration",
+        std::string("twin:registration:") + (distanceWait ? "distance" : "staged_raid_pending"),
+        fields.str(), 2000);
+}
+
 bool IsTwinRegistrationWindow(Player* bot)
 {
     Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
     if (!state)
         return false;
 
+    bool const approachTwin = Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
     bool const prepullReady = Aq40TwinEncounter::IsTwinPrePullReady(bot);
     bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
                             !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
@@ -69,7 +103,9 @@ bool IsTwinRegistrationWindow(Player* bot)
                                 Aq40TwinEncounter::IsTwinEncounterParticipant(bot)));
     bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
                               Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
-    return prepullReady || activeTwin || postSwapHold || terminalTwin;
+    bool const registrationActive = approachTwin || prepullReady || activeTwin || postSwapHold || terminalTwin;
+    LogTwinRegistrationDecision(bot, *state, registrationActive);
+    return registrationActive;
 }
 
 bool IsTwinSharedAq40Action(std::string const& actionName)
@@ -410,6 +446,7 @@ float Aq40TwinMultiplier::GetValue(Action* action)
     if (!state)
         return 1.0f;
 
+    bool const approachTwin = Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
     bool const prepullReady = state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
                               state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
     bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
@@ -468,6 +505,8 @@ float Aq40TwinMultiplier::GetValue(Action* action)
 
     if (isTwinAction)
     {
+        if (actionName == "aq40 twin approach stage")
+            return approachTwin ? 2.5f : 1.0f;
         if (actionName == "aq40 twin prepull stage")
             return prepullReady ? 3.0f : 1.0f;
         if (actionName == "aq40 twin dual pull engage")

@@ -514,6 +514,12 @@ bool Aq40TwinPrePullReadyTrigger::IsActive()
     return !bot->IsInCombat() && Aq40TwinEncounter::IsTwinPrePullReady(bot);
 }
 
+bool Aq40TwinApproachTrigger::IsActive()
+{
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    return !bot->IsInCombat() && state && Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
+}
+
 bool Aq40TwinDualPullTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);

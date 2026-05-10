@@ -178,6 +178,8 @@ struct TwinEncounterState
     uint32 modeEnteredAtMs = 0;
     TwinEncounterPhase phase = TwinEncounterPhase::PrePull;
     uint32 phaseEnteredAtMs = 0;
+    uint16 approachMemberCount = 0;
+    uint16 stagedMemberCount = 0;
     std::array<TwinStableOwnership, 2> ownership;
     TwinRecoveryState recovery;
     TwinScriptedHazardWindows scriptedHazards;
@@ -203,6 +205,8 @@ TwinRoleAssignment const* GetAssignmentForMember(Player const* bot);
 bool IsAssignedToCohort(TwinEncounterState const& state, ObjectGuid memberGuid, TwinRoleCohort cohort);
 bool HasDeterministicAssignments(TwinEncounterState const& state);
 std::string const& GetUnsupportedReason(TwinEncounterState const& state);
+bool IsTwinApproachWindow(TwinEncounterState const& state, Player const* bot);
+bool IsTwinApproachWindow(Player const* bot);
 bool IsTwinPrePullReady(Player const* bot);
 bool IsTwinDesignatedWarlockTank(Player const* bot);
 bool MarkTwinLocalCleanupState(Player* bot);

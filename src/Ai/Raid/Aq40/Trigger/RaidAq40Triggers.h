@@ -148,6 +148,13 @@ public:
     bool IsActive() override;
 };
 
+class Aq40TwinApproachTrigger : public Trigger
+{
+public:
+    Aq40TwinApproachTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 twin approach") {}
+    bool IsActive() override;
+};
+
 class Aq40TwinPrePullReadyTrigger : public Trigger
 {
 public:

@@ -289,6 +289,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class Aq40TwinApproachStageAction : public MovementAction
+{
+public:
+    Aq40TwinApproachStageAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin approach stage") {}
+    bool Execute(Event event) override;
+};
+
 class Aq40TwinPrePullStageAction : public MovementAction
 {
 public:

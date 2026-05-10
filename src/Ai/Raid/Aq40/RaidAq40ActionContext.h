@@ -27,6 +27,7 @@ public:
         creators["aq40 trash avoid dangerous aoe"] = &RaidAq40ActionContext::trash_avoid_dangerous_aoe;
         creators["aq40 huhuran choose target"] = &RaidAq40ActionContext::huhuran_choose_target;
         creators["aq40 huhuran poison spread"] = &RaidAq40ActionContext::huhuran_poison_spread;
+        creators["aq40 twin approach stage"] = &RaidAq40ActionContext::twin_approach_stage;
         creators["aq40 twin prepull stage"] = &RaidAq40ActionContext::twin_prepull_stage;
         creators["aq40 twin dual pull engage"] = &RaidAq40ActionContext::twin_dual_pull_engage;
         creators["aq40 twin swap prep stage"] = &RaidAq40ActionContext::twin_swap_prep_stage;
@@ -98,6 +99,7 @@ private:
     }
     static Action* huhuran_choose_target(PlayerbotAI* botAI) { return new Aq40HuhuranChooseTargetAction(botAI); }
     static Action* huhuran_poison_spread(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonSpreadAction(botAI); }
+    static Action* twin_approach_stage(PlayerbotAI* botAI) { return new Aq40TwinApproachStageAction(botAI); }
     static Action* twin_prepull_stage(PlayerbotAI* botAI) { return new Aq40TwinPrePullStageAction(botAI); }
     static Action* twin_dual_pull_engage(PlayerbotAI* botAI)
     {

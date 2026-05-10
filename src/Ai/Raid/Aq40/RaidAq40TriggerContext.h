@@ -30,6 +30,7 @@ public:
         creators["aq40 trash dangerous aoe"] = &RaidAq40TriggerContext::trash_dangerous_aoe;
         creators["aq40 huhuran active"] = &RaidAq40TriggerContext::huhuran_active;
         creators["aq40 huhuran poison phase"] = &RaidAq40TriggerContext::huhuran_poison_phase;
+        creators["aq40 twin approach"] = &RaidAq40TriggerContext::twin_approach;
         creators["aq40 twin prepull ready"] = &RaidAq40TriggerContext::twin_prepull_ready;
         creators["aq40 twin dual pull"] = &RaidAq40TriggerContext::twin_dual_pull;
         creators["aq40 twin swap prep"] = &RaidAq40TriggerContext::twin_swap_prep;
@@ -83,6 +84,7 @@ private:
     static Trigger* trash_dangerous_aoe(PlayerbotAI* botAI) { return new Aq40TrashDangerousAoeTrigger(botAI); }
     static Trigger* huhuran_active(PlayerbotAI* botAI) { return new Aq40HuhuranActiveTrigger(botAI); }
     static Trigger* huhuran_poison_phase(PlayerbotAI* botAI) { return new Aq40HuhuranPoisonPhaseTrigger(botAI); }
+    static Trigger* twin_approach(PlayerbotAI* botAI) { return new Aq40TwinApproachTrigger(botAI); }
     static Trigger* twin_prepull_ready(PlayerbotAI* botAI) { return new Aq40TwinPrePullReadyTrigger(botAI); }
     static Trigger* twin_dual_pull(PlayerbotAI* botAI) { return new Aq40TwinDualPullTrigger(botAI); }
     static Trigger* twin_swap_prep(PlayerbotAI* botAI) { return new Aq40TwinSwapPrepTrigger(botAI); }
