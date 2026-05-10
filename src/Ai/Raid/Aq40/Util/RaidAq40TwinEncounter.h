@@ -219,6 +219,7 @@ void ResetAllStableOwnership(TwinEncounterState& state, bool keepAssignments = t
 bool HasStableOwner(TwinEncounterState const& state, TwinBoss boss);
 bool HasCandidateOwner(TwinEncounterState const& state, TwinBoss boss);
 bool IsStableOwner(TwinEncounterState const& state, TwinBoss boss, ObjectGuid ownerGuid);
+bool IsPrimaryController(TwinEncounterState const& state, TwinBoss boss, ObjectGuid ownerGuid);
 bool CanPromoteReserveOwner(TwinEncounterState const& state, TwinBoss boss);
 bool PromoteReserveOwner(TwinEncounterState& state, TwinBoss boss, uint32 nowMs = 0);
 uint32 GetStableOwnershipAgeMs(TwinEncounterState const& state, TwinBoss boss, uint32 nowMs = 0);

@@ -315,6 +315,10 @@ float Aq40TwinMultiplier::GetValue(Action* action)
     bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
                               (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
                                Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
+    Aq40TwinEncounter::TwinRoleAssignment const* assignment =
+        Aq40TwinEncounter::GetAssignmentForMember(*state, bot->GetGUID());
+    bool const stableAnchorPhase = state->phase == Aq40TwinEncounter::TwinEncounterPhase::Stable &&
+                                   !Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
 
     std::string const actionName = action->getName();
     bool const isTwinAction = actionName.compare(0, 10, "aq40 twin ") == 0;
@@ -361,6 +365,35 @@ float Aq40TwinMultiplier::GetValue(Action* action)
 
     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
         return 0.0f;
+
+    if (assignment)
+    {
+        bool const isStableAnchorCohort = assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::SideHealer ||
+                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::RaidHealer ||
+                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::RangedDps ||
+                                          assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::Hunter;
+        bool const isTwinTankAssignment = assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::MeleeTank ||
+                                          Aq40TwinEncounter::ShouldUseTwinWarlockTankStrategy(bot);
+
+        if (assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::MeleeTank &&
+            !Aq40TwinEncounter::IsImmediateRepositionWindow(*state) &&
+            (dynamic_cast<TankFaceAction*>(action) || actionName == "set facing"))
+        {
+            return 0.0f;
+        }
+
+        if (isTwinTankAssignment &&
+            (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
+        {
+            return 0.0f;
+        }
+
+        if (stableAnchorPhase && isStableAnchorCohort &&
+            (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
+        {
+            return 0.0f;
+        }
+    }
 
     if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
         dynamic_cast<FleeAction*>(action))

@@ -1288,6 +1288,25 @@ bool IsStableOwner(TwinEncounterState const& state, TwinBoss boss, ObjectGuid ow
     return !ownerGuid.IsEmpty() && GetOwnership(state, boss).stableOwner == ownerGuid;
 }
 
+bool IsPrimaryController(TwinEncounterState const& state, TwinBoss boss, ObjectGuid ownerGuid)
+{
+    if (ownerGuid.IsEmpty())
+        return false;
+
+    TwinBossRecoveryState const& recovery = GetRecoveryState(state, boss);
+    if (!recovery.pickupOwner.IsEmpty())
+        return recovery.pickupOwner == ownerGuid;
+
+    TwinStableOwnership const& ownership = GetOwnership(state, boss);
+    if (!ownership.stableOwner.IsEmpty())
+        return ownership.stableOwner == ownerGuid;
+
+    if (!ownership.candidateOwner.IsEmpty())
+        return ownership.candidateOwner == ownerGuid;
+
+    return ownership.expectedOwner == ownerGuid;
+}
+
 bool CanPromoteReserveOwner(TwinEncounterState const& state, TwinBoss boss)
 {
     TwinStableOwnership const& ownership = GetOwnership(state, boss);

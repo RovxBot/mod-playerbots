@@ -507,8 +507,12 @@ bool Aq40TwinArcaneBurstRiskTrigger::IsActive()
     if (!Aq40TwinActiveTrigger(botAI).IsActive())
         return false;
 
-    if (Aq40TwinEncounter::IsTwinDesignatedWarlockTank(bot))
+    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
+    if (state && Aq40TwinEncounter::IsTwinDesignatedWarlockTank(bot) &&
+        Aq40TwinEncounter::IsPrimaryController(*state, Aq40TwinEncounter::TwinBoss::Veklor, bot->GetGUID()))
+    {
         return false;
+    }
 
     GuidVector const encounterUnits = Aq40BossHelper::GetEncounterUnits(botAI, AI_VALUE(GuidVector, "attackers"));
     Unit* veklor = FindTwinUnitByEntry(botAI, encounterUnits, Aq40SpellIds::TwinVeklorNpcEntry);
@@ -519,7 +523,6 @@ bool Aq40TwinArcaneBurstRiskTrigger::IsActive()
     if (distance <= 18.0f)
         return true;
 
-    Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
     return state && distance <= 24.0f && Aq40TwinEncounter::IsScriptedEventActive(
         *state, Aq40TwinEncounter::TwinScriptedEvent::ArcaneBurst, 2500);
 }
