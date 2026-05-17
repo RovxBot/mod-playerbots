@@ -202,6 +202,8 @@ bool IsTwinEncounterParticipant(Player const* bot, bool allowExtendedRoom = true
 TwinEncounterGeometry const& GetGeometry();
 TwinRoleAssignment const* GetAssignmentForMember(TwinEncounterState const& state, ObjectGuid memberGuid);
 TwinRoleAssignment const* GetAssignmentForMember(Player const* bot);
+bool HasTwinAssignmentForMember(TwinEncounterState const& state, Player const* bot);
+bool IsTwinAssignedParticipant(TwinEncounterState const& state, Player const* bot, bool allowExtendedRoom = true);
 bool IsAssignedToCohort(TwinEncounterState const& state, ObjectGuid memberGuid, TwinRoleCohort cohort);
 bool HasDeterministicAssignments(TwinEncounterState const& state);
 std::string const& GetUnsupportedReason(TwinEncounterState const& state);

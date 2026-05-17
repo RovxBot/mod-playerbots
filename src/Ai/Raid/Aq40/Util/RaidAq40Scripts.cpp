@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "ObjectAccessor.h"
+#include "Map.h"
 #include "Playerbots.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
@@ -114,6 +115,82 @@ std::vector<Player*> CollectTwinBots(Unit* source)
 	}
 
 	return bots;
+}
+
+Player* FindTwinInstanceMember(Player* contextBot, ObjectGuid guid)
+{
+	if (!contextBot || guid.IsEmpty() || !contextBot->GetMap())
+		return nullptr;
+
+	Map::PlayerList const& players = contextBot->GetMap()->GetPlayers();
+	for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+	{
+		Player* member = itr->GetSource();
+		if (member && member->GetGUID() == guid)
+			return member;
+	}
+
+	return nullptr;
+}
+
+uint32 GetTwinInitialEngagementElapsedMs(Aq40TwinEncounter::TwinEncounterState const& state, uint32 nowMs)
+{
+	if (state.modeEnteredAtMs == 0)
+		return 0;
+
+	uint32 const now = nowMs ? nowMs : getMSTime();
+	return getMSTimeDiff(state.modeEnteredAtMs, now);
+}
+
+void AppendTwinInitialEngagementBossFields(std::ostringstream& fields, Player* logBot,
+										   Aq40TwinEncounter::TwinEncounterState const& state,
+										   Aq40TwinEncounter::TwinBoss boss, char const* prefix, uint32 nowMs)
+{
+	Aq40TwinEncounter::TwinStableOwnership const& ownership = Aq40TwinEncounter::GetOwnership(state, boss);
+	fields << " " << prefix << "_expected_owner="
+		   << Aq40Helpers::GetAq40LogUnit(FindTwinInstanceMember(logBot, ownership.expectedOwner))
+		   << " " << prefix << "_pickup_owner="
+		   << Aq40Helpers::GetAq40LogUnit(
+				  FindTwinInstanceMember(logBot, Aq40TwinEncounter::GetPickupOwner(state, boss)))
+		   << " " << prefix << "_pickup=" << (Aq40TwinEncounter::IsPickupEstablished(state, boss) ? 1 : 0)
+		   << " " << prefix << "_confirm_age_ms="
+		   << Aq40TwinEncounter::GetTimeSinceOwnershipConfirmationMs(state, boss, nowMs)
+		   << " " << prefix << "_pickup_age_ms="
+		   << Aq40TwinEncounter::GetPickupEstablishedAgeMs(state, boss, nowMs);
+}
+
+void LogTwinInitialEngagementPickupStatus(Player* logBot, Aq40TwinEncounter::TwinEncounterState const& state,
+										  Aq40TwinEncounter::TwinBoss confirmedBoss, Player* confirmedOwner,
+										  Unit* source, uint32 nowMs)
+{
+	if (!logBot)
+		return;
+
+	bool const veklorPickup = Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veklor);
+	bool const veknilashPickup = Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veknilash);
+	bool const dualPickupEstablished = veklorPickup && veknilashPickup;
+
+	std::ostringstream fields;
+	fields << "boss=twin phase=" << Aq40TwinEncounter::ToString(state.phase)
+		   << " mode=" << Aq40TwinEncounter::ToString(state.mode)
+		   << " engagement_elapsed_ms=" << GetTwinInitialEngagementElapsedMs(state, nowMs)
+		   << " confirmed_boss=" << Aq40TwinEncounter::ToString(confirmedBoss)
+		   << " confirmed_owner=" << Aq40Helpers::GetAq40LogUnit(confirmedOwner)
+		   << " source=" << Aq40Helpers::GetAq40LogUnit(source)
+		   << " pickup_status=" << (dualPickupEstablished ? "dual_pickup_established" : "single_side_pending")
+		   << " approach=" << state.approachMemberCount
+		   << " staged=" << state.stagedMemberCount
+		   << " assigned=" << state.assignments.size();
+	AppendTwinInitialEngagementBossFields(fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veklor, "veklor",
+		nowMs);
+	AppendTwinInitialEngagementBossFields(fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veknilash,
+		"veknilash", nowMs);
+
+	std::string stateKey = dualPickupEstablished
+		? std::string("twin:initial_engagement:dual_pickup_established")
+		: std::string("twin:initial_engagement:single_side_pending:") +
+			  Aq40TwinEncounter::ToString(confirmedBoss);
+	Aq40Helpers::LogAq40Info(logBot, "twin_validation", stateKey, fields.str(), 1000);
 }
 
 bool UpdateHazardTimestamp(uint32& hazardAtMs, uint32 nowMs, uint32 debounceMs = 0)
@@ -262,6 +339,7 @@ void ConfirmBossOwner(Aq40TwinEncounter::TwinEncounterState& state, Spell* spell
 		std::string(Aq40TwinEncounter::ToString(boss)) + ":" + std::to_string(ownerGuid.GetCounter()) + ":" +
 			Aq40TwinEncounter::ToString(state.phase),
 		fields.str(), 1000);
+	LogTwinInitialEngagementPickupStatus(logBot, state, boss, owner, caster, nowMs);
 }
 
 void RequestInterruptForTwinBots(std::vector<Player*> const& twinBots, Unit* source, Player* excludedBot = nullptr,

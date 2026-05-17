@@ -1161,6 +1161,16 @@ TwinRoleAssignment const* GetAssignmentForMember(Player const* bot)
     return state ? GetAssignmentForMember(*state, bot->GetGUID()) : nullptr;
 }
 
+bool HasTwinAssignmentForMember(TwinEncounterState const& state, Player const* bot)
+{
+    return bot && GetAssignmentForMember(state, bot->GetGUID()) != nullptr;
+}
+
+bool IsTwinAssignedParticipant(TwinEncounterState const& state, Player const* bot, bool allowExtendedRoom)
+{
+    return HasTwinAssignmentForMember(state, bot) && IsTwinEncounterParticipant(bot, allowExtendedRoom);
+}
+
 bool IsAssignedToCohort(TwinEncounterState const& state, ObjectGuid memberGuid, TwinRoleCohort cohort)
 {
     TwinRoleAssignment const* assignment = GetAssignmentForMember(state, memberGuid);
@@ -1180,8 +1190,7 @@ std::string const& GetUnsupportedReason(TwinEncounterState const& state)
 bool IsTwinApproachWindow(TwinEncounterState const& state, Player const* bot)
 {
     return bot && HasDeterministicAssignments(state) && state.phase == TwinEncounterPhase::PrePull &&
-           state.mode == TwinStrategyMode::Inactive && IsTwinEncounterParticipant(bot) &&
-           GetAssignmentForMember(state, bot->GetGUID()) != nullptr;
+           state.mode == TwinStrategyMode::Inactive && IsTwinAssignedParticipant(state, bot);
 }
 
 bool IsTwinApproachWindow(Player const* bot)
@@ -1196,7 +1205,7 @@ bool IsTwinPrePullReady(Player const* bot)
     if (!state || !HasDeterministicAssignments(*state) || state->phase != TwinEncounterPhase::PrePull)
         return false;
 
-    bool const isStrictReadyParticipant = IsTwinEncounterParticipant(bot, false);
+    bool const isStrictReadyParticipant = IsTwinAssignedParticipant(*state, bot, false);
     bool const isReady = state->mode == TwinStrategyMode::StandardCompReady && isStrictReadyParticipant;
     if (!isReady)
     {
@@ -1242,7 +1251,7 @@ bool ShouldUseTwinWarlockTankStrategy(Player const* bot)
     if (!state || IsTerminalPhase(state->phase) || !IsTwinDesignatedWarlockTank(bot))
         return false;
 
-    return IsTwinPrePullReady(bot) || (IsActivePhase(state->phase) && IsTwinEncounterParticipant(bot));
+    return IsTwinPrePullReady(bot) || (IsActivePhase(state->phase) && IsTwinAssignedParticipant(*state, bot));
 }
 
 bool SyncTwinWarlockTankStrategy(Player* bot)

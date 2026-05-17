@@ -55,6 +55,12 @@ bool IsAq40TrashMovementCase(PlayerbotAI* botAI, Player* bot, GuidVector const& 
 
 // IsSarturaMob / IsSarturaSpinning now live in Aq40BossHelper.
 
+bool IsTwinRegistrationCandidate(Player const* bot)
+{
+    return bot && bot->IsAlive() && bot->IsInWorld() && Aq40BossHelper::IsInAq40(bot) &&
+           (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) || Aq40TwinEncounter::IsTwinEncounterParticipant(bot));
+}
+
 void LogTwinRegistrationDecision(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state,
                                  bool registrationActive)
 {
@@ -88,21 +94,28 @@ void LogTwinRegistrationDecision(Player* bot, Aq40TwinEncounter::TwinEncounterSt
 
 bool IsTwinRegistrationWindow(Player* bot)
 {
+    if (!IsTwinRegistrationCandidate(bot))
+        return false;
+
     Aq40TwinEncounter::TwinEncounterState const* state = Aq40TwinEncounter::GetEncounterState(bot);
     if (!state)
         return false;
 
+    bool const assignedParticipant = Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot);
+    bool const strictAssignedParticipant = Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot, false);
+    bool const hasLockedPickupAnchor = Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
     bool const approachTwin = Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
-    bool const prepullReady = Aq40TwinEncounter::IsTwinPrePullReady(bot);
-    bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
-                            !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
-                            Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
+    bool const prepullReady = Aq40TwinEncounter::HasDeterministicAssignments(*state) &&
+                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull &&
+                              state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+                              strictAssignedParticipant;
+    bool const activeTwin = assignedParticipant && Aq40TwinEncounter::IsActivePhase(state->phase) &&
+                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
     bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
-                              (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
-                               (Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state) &&
-                                Aq40TwinEncounter::IsTwinEncounterParticipant(bot)));
+                              (hasLockedPickupAnchor ||
+                               (assignedParticipant && Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state)));
     bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
-                              Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
+                              (hasLockedPickupAnchor || assignedParticipant);
     bool const registrationActive = approachTwin || prepullReady || activeTwin || postSwapHold || terminalTwin;
     LogTwinRegistrationDecision(bot, *state, registrationActive);
     return registrationActive;
@@ -446,24 +459,32 @@ float Aq40TwinMultiplier::GetValue(Action* action)
     if (!state)
         return 1.0f;
 
-    bool const approachTwin = Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
-    bool const prepullReady = state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
-                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull;
-    bool const activeTwin = Aq40TwinEncounter::IsActivePhase(state->phase) &&
-                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
-    bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
-                              Aq40TwinEncounter::IsTwinEncounterParticipant(bot);
-    bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
-                              (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
-                               Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
     Aq40TwinEncounter::TwinRoleAssignment const* assignment =
         Aq40TwinEncounter::GetAssignmentForMember(*state, bot->GetGUID());
+    bool const hasLockedPickupAnchor = Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
+    if (!assignment && !hasLockedPickupAnchor)
+        return 1.0f;
+
+    bool const assignedParticipant = Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot);
+    bool const strictAssignedParticipant = Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot, false);
+    bool const approachTwin = Aq40TwinEncounter::IsTwinApproachWindow(*state, bot);
+    bool const prepullReady = Aq40TwinEncounter::HasDeterministicAssignments(*state) &&
+                              state->mode == Aq40TwinEncounter::TwinStrategyMode::StandardCompReady &&
+                              state->phase == Aq40TwinEncounter::TwinEncounterPhase::PrePull &&
+                              strictAssignedParticipant;
+    bool const activeTwin = assignedParticipant && Aq40TwinEncounter::IsActivePhase(state->phase) &&
+                            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
+    bool const terminalTwin = Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              (hasLockedPickupAnchor || assignedParticipant);
+    bool const postSwapHold = !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
+                              (hasLockedPickupAnchor ||
+                               (assignedParticipant && Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state)));
     bool const nonDegradedTwin = state->phase != Aq40TwinEncounter::TwinEncounterPhase::Degraded;
     bool const activeNonDegradedTwin = activeTwin && nonDegradedTwin;
     bool const immediateRepositionWindow = Aq40TwinEncounter::IsImmediateRepositionWindow(*state);
     bool const authoritativeMovementWindow =
         activeNonDegradedTwin &&
-        (immediateRepositionWindow || Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot));
+        (immediateRepositionWindow || hasLockedPickupAnchor);
     bool const unsafePickupWindow = nonDegradedTwin && IsTwinUnsafePickupWindow(*state, bot);
     bool const isPrimaryVeklorController = assignment &&
                                            assignment->cohort == Aq40TwinEncounter::TwinRoleCohort::WarlockTank &&

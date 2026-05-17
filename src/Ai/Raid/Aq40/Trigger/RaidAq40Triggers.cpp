@@ -156,6 +156,12 @@ bool IsTwinPrimaryTankController(Player* bot, Aq40TwinEncounter::TwinEncounterSt
 
     return false;
 }
+
+bool IsTwinAssignedOrLockedParticipant(Player* bot, Aq40TwinEncounter::TwinEncounterState const& state)
+{
+    return Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) ||
+           Aq40TwinEncounter::IsTwinAssignedParticipant(state, bot);
+}
 }    // namespace
 
 bool Aq40BotIsNotInCombatTrigger::IsActive()
@@ -523,13 +529,14 @@ bool Aq40TwinApproachTrigger::IsActive()
 bool Aq40TwinDualPullTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    return state && state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow;
+    return state && state->phase == Aq40TwinEncounter::TwinEncounterPhase::DualPullWindow &&
+           Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot);
 }
 
 bool Aq40TwinSwapPrepTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    return state && Aq40TwinEncounter::IsTwinEncounterParticipant(bot) &&
+    return state && Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot) &&
            Aq40TwinEncounter::IsActivePhase(state->phase) && !Aq40TwinEncounter::IsTerminalPhase(state->phase) &&
            Aq40TwinEncounter::IsSwapPrepActive(*state);
 }
@@ -537,7 +544,7 @@ bool Aq40TwinSwapPrepTrigger::IsActive()
 bool Aq40TwinActiveTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    return state && Aq40TwinEncounter::IsTwinEncounterParticipant(bot) &&
+    return state && Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot) &&
            Aq40TwinEncounter::IsActivePhase(state->phase) &&
            !Aq40TwinEncounter::IsTerminalPhase(state->phase);
 }
@@ -601,7 +608,8 @@ bool Aq40TwinArcaneBurstRiskTrigger::IsActive()
 bool Aq40TwinSplitRiskTrigger::IsActive()
 {
     Aq40TwinEncounter::TwinEncounterState const* state = GetTwinEncounterState(bot);
-    if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase))
+    if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase) ||
+        !IsTwinAssignedOrLockedParticipant(bot, *state))
         return false;
 
     if (state->phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
@@ -621,10 +629,15 @@ bool Aq40TwinPostSwapHoldTrigger::IsActive()
     if (!state || Aq40TwinEncounter::IsTerminalPhase(state->phase))
         return false;
 
+    bool const hasLockedPickupAnchor = Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot);
+    bool const assignedParticipant = Aq40TwinEncounter::IsTwinAssignedParticipant(*state, bot);
+    if (!hasLockedPickupAnchor && !assignedParticipant)
+        return false;
+
     bool const postSwapPhase = state->phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
                                state->phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery;
-    return (postSwapPhase || Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state)) &&
-           (Aq40TwinEncounter::HasActiveLockedPickupAnchor(bot) || Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state));
+    bool const threatHoldWindow = assignedParticipant && Aq40TwinEncounter::IsAnyThreatHoldWindowActive(*state);
+    return (postSwapPhase || threatHoldWindow) && (hasLockedPickupAnchor || threatHoldWindow);
 }
 
 bool Aq40OuroActiveTrigger::IsActive()
