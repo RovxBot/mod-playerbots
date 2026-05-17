@@ -142,6 +142,44 @@ uint32 GetTwinInitialEngagementElapsedMs(Aq40TwinEncounter::TwinEncounterState c
 	return getMSTimeDiff(state.modeEnteredAtMs, now);
 }
 
+uint32 GetTwinTeleportElapsedMs(Aq40TwinEncounter::TwinEncounterState const& state, uint32 nowMs)
+{
+	if (state.lastTeleportAtMs == 0)
+		return 0;
+
+	uint32 const now = nowMs ? nowMs : getMSTime();
+	return getMSTimeDiff(state.lastTeleportAtMs, now);
+}
+
+uint32 GetTwinSwapPrepElapsedMs(Aq40TwinEncounter::TwinEncounterState const& state, uint32 nowMs)
+{
+	if (state.swapPrepStartAtMs == 0)
+		return 0;
+
+	uint32 const now = nowMs ? nowMs : getMSTime();
+	return getMSTimeDiff(state.swapPrepStartAtMs, now);
+}
+
+ObjectGuid GetTwinTelemetryControllerGuid(Aq40TwinEncounter::TwinEncounterState const& state,
+									  Aq40TwinEncounter::TwinBoss boss)
+{
+	Aq40TwinEncounter::TwinStableOwnership const& ownership = Aq40TwinEncounter::GetOwnership(state, boss);
+	if (!ownership.stableOwner.IsEmpty())
+		return ownership.stableOwner;
+	if (!ownership.candidateOwner.IsEmpty())
+		return ownership.candidateOwner;
+
+	return ownership.expectedOwner;
+}
+
+bool IsTwinPostTeleportPickupTelemetryWindow(Aq40TwinEncounter::TwinEncounterState const& state, uint32 nowMs)
+{
+	return state.lastTeleportAtMs &&
+		   (state.phase == Aq40TwinEncounter::TwinEncounterPhase::TeleportWindow ||
+			state.phase == Aq40TwinEncounter::TwinEncounterPhase::PickupRecovery ||
+			Aq40TwinEncounter::IsAnyThreatHoldWindowActive(state, nowMs));
+}
+
 void AppendTwinInitialEngagementBossFields(std::ostringstream& fields, Player* logBot,
 										   Aq40TwinEncounter::TwinEncounterState const& state,
 										   Aq40TwinEncounter::TwinBoss boss, char const* prefix, uint32 nowMs)
@@ -149,6 +187,15 @@ void AppendTwinInitialEngagementBossFields(std::ostringstream& fields, Player* l
 	Aq40TwinEncounter::TwinStableOwnership const& ownership = Aq40TwinEncounter::GetOwnership(state, boss);
 	fields << " " << prefix << "_expected_owner="
 		   << Aq40Helpers::GetAq40LogUnit(FindTwinInstanceMember(logBot, ownership.expectedOwner))
+		   << " " << prefix << "_reserve_owner="
+		   << Aq40Helpers::GetAq40LogUnit(FindTwinInstanceMember(logBot, ownership.reserveOwner))
+		   << " " << prefix << "_controller="
+		   << Aq40Helpers::GetAq40LogUnit(
+				  FindTwinInstanceMember(logBot, GetTwinTelemetryControllerGuid(state, boss)))
+		   << " " << prefix << "_candidate_owner="
+		   << Aq40Helpers::GetAq40LogUnit(FindTwinInstanceMember(logBot, ownership.candidateOwner))
+		   << " " << prefix << "_stable_owner="
+		   << Aq40Helpers::GetAq40LogUnit(FindTwinInstanceMember(logBot, ownership.stableOwner))
 		   << " " << prefix << "_pickup_owner="
 		   << Aq40Helpers::GetAq40LogUnit(
 				  FindTwinInstanceMember(logBot, Aq40TwinEncounter::GetPickupOwner(state, boss)))
@@ -156,7 +203,9 @@ void AppendTwinInitialEngagementBossFields(std::ostringstream& fields, Player* l
 		   << " " << prefix << "_confirm_age_ms="
 		   << Aq40TwinEncounter::GetTimeSinceOwnershipConfirmationMs(state, boss, nowMs)
 		   << " " << prefix << "_pickup_age_ms="
-		   << Aq40TwinEncounter::GetPickupEstablishedAgeMs(state, boss, nowMs);
+		   << Aq40TwinEncounter::GetPickupEstablishedAgeMs(state, boss, nowMs)
+		   << " " << prefix << "_threat_hold_remaining_ms="
+		   << Aq40TwinEncounter::GetThreatHoldRemainingMs(state, boss, nowMs);
 }
 
 void LogTwinInitialEngagementPickupStatus(Player* logBot, Aq40TwinEncounter::TwinEncounterState const& state,
@@ -169,28 +218,68 @@ void LogTwinInitialEngagementPickupStatus(Player* logBot, Aq40TwinEncounter::Twi
 	bool const veklorPickup = Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veklor);
 	bool const veknilashPickup = Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veknilash);
 	bool const dualPickupEstablished = veklorPickup && veknilashPickup;
+	bool const postTeleportWindow = IsTwinPostTeleportPickupTelemetryWindow(state, nowMs);
+	uint32 const teleportElapsedMs = GetTwinTeleportElapsedMs(state, nowMs);
+	uint32 const swapPrepElapsedMs = GetTwinSwapPrepElapsedMs(state, nowMs);
+	bool const singleSidePendingOverrun = postTeleportWindow && !dualPickupEstablished && teleportElapsedMs > 1000;
+	bool const veklorPickupEstablishedPostTeleport =
+		postTeleportWindow && confirmedBoss == Aq40TwinEncounter::TwinBoss::Veklor &&
+		Aq40TwinEncounter::IsPickupEstablished(state, Aq40TwinEncounter::TwinBoss::Veklor);
 
 	std::ostringstream fields;
 	fields << "boss=twin phase=" << Aq40TwinEncounter::ToString(state.phase)
 		   << " mode=" << Aq40TwinEncounter::ToString(state.mode)
 		   << " engagement_elapsed_ms=" << GetTwinInitialEngagementElapsedMs(state, nowMs)
+		   << " phase_elapsed_ms=" << Aq40TwinEncounter::GetPhaseElapsedMs(state, nowMs)
+		   << " teleport_elapsed_ms=" << teleportElapsedMs
+		   << " swap_prep_elapsed_ms=" << swapPrepElapsedMs
 		   << " confirmed_boss=" << Aq40TwinEncounter::ToString(confirmedBoss)
 		   << " confirmed_owner=" << Aq40Helpers::GetAq40LogUnit(confirmedOwner)
 		   << " source=" << Aq40Helpers::GetAq40LogUnit(source)
-		   << " pickup_status=" << (dualPickupEstablished ? "dual_pickup_established" : "single_side_pending")
+		   << " pickup_status="
+		   << (dualPickupEstablished ? "dual_pickup_established"
+				 : (singleSidePendingOverrun ? "single_side_pending_overrun" : "single_side_pending"))
+		   << " post_teleport_window=" << (postTeleportWindow ? 1 : 0)
 		   << " approach=" << state.approachMemberCount
 		   << " staged=" << state.stagedMemberCount
+		   << " center_committed=" << state.centerCommittedMemberCount
+		   << " strict_ready=" << state.strictReadyMemberCount
 		   << " assigned=" << state.assignments.size();
 	AppendTwinInitialEngagementBossFields(fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veklor, "veklor",
 		nowMs);
 	AppendTwinInitialEngagementBossFields(fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veknilash,
 		"veknilash", nowMs);
 
-	std::string stateKey = dualPickupEstablished
-		? std::string("twin:initial_engagement:dual_pickup_established")
-		: std::string("twin:initial_engagement:single_side_pending:") +
-			  Aq40TwinEncounter::ToString(confirmedBoss);
-	Aq40Helpers::LogAq40Info(logBot, "twin_validation", stateKey, fields.str(), 1000);
+	std::string stateKey;
+	if (veklorPickupEstablishedPostTeleport)
+	{
+		stateKey = "twin:post_swap:veklor_pickup_established";
+	}
+	else if (dualPickupEstablished)
+	{
+		stateKey = postTeleportWindow ? std::string("twin:post_swap:dual_pickup_established")
+								 : std::string("twin:initial_engagement:dual_pickup_established");
+	}
+	else if (singleSidePendingOverrun)
+	{
+		stateKey = std::string("twin:post_swap:single_side_pending_overrun:") +
+			Aq40TwinEncounter::ToString(confirmedBoss);
+	}
+	else if (postTeleportWindow)
+	{
+		stateKey = std::string("twin:post_swap:single_side_pending:") +
+			Aq40TwinEncounter::ToString(confirmedBoss);
+	}
+	else
+	{
+		stateKey = std::string("twin:initial_engagement:single_side_pending:") +
+			Aq40TwinEncounter::ToString(confirmedBoss);
+	}
+
+	if (singleSidePendingOverrun)
+		Aq40Helpers::LogAq40Warn(logBot, "twin_validation", stateKey, fields.str(), 1000);
+	else
+		Aq40Helpers::LogAq40Info(logBot, "twin_validation", stateKey, fields.str(), 1000);
 }
 
 bool UpdateHazardTimestamp(uint32& hazardAtMs, uint32 nowMs, uint32 debounceMs = 0)
@@ -483,7 +572,23 @@ public:
 				std::ostringstream fields;
 				fields << "boss=twin spell=" << spellInfo->Id
 					   << " source=" << Aq40Helpers::GetAq40LogUnit(caster)
-					   << " phase=" << Aq40TwinEncounter::ToString(state.phase);
+					   << " phase=" << Aq40TwinEncounter::ToString(state.phase)
+					   << " mode=" << Aq40TwinEncounter::ToString(state.mode)
+					   << " engagement_elapsed_ms=" << GetTwinInitialEngagementElapsedMs(state, nowMs)
+					   << " phase_elapsed_ms=" << Aq40TwinEncounter::GetPhaseElapsedMs(state, nowMs)
+					   << " teleport_elapsed_ms=" << GetTwinTeleportElapsedMs(state, nowMs)
+					   << " swap_prep_elapsed_ms=" << GetTwinSwapPrepElapsedMs(state, nowMs)
+					   << " max_threat_hold_remaining_ms="
+					   << Aq40TwinEncounter::GetMaxThreatHoldRemainingMs(state, nowMs)
+					   << " approach=" << state.approachMemberCount
+					   << " staged=" << state.stagedMemberCount
+					   << " center_committed=" << state.centerCommittedMemberCount
+					   << " strict_ready=" << state.strictReadyMemberCount
+					   << " assigned=" << state.assignments.size();
+				AppendTwinInitialEngagementBossFields(
+					fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veklor, "veklor", nowMs);
+				AppendTwinInitialEngagementBossFields(
+					fields, logBot, state, Aq40TwinEncounter::TwinBoss::Veknilash, "veknilash", nowMs);
 				Aq40Helpers::LogAq40Info(logBot, "twin_script_window", "twin:teleport", fields.str(), 1000);
 				return;
 			}

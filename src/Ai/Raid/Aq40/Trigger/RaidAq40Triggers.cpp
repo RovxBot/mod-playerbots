@@ -517,7 +517,7 @@ bool Aq40HuhuranPoisonPhaseTrigger::IsActive()
 
 bool Aq40TwinPrePullReadyTrigger::IsActive()
 {
-    return !bot->IsInCombat() && Aq40TwinEncounter::IsTwinPrePullReady(bot);
+    return !bot->IsInCombat() && Aq40TwinEncounter::IsTwinPrePullStageWindow(bot);
 }
 
 bool Aq40TwinApproachTrigger::IsActive()

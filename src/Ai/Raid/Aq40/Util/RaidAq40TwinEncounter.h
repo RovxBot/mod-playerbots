@@ -41,6 +41,7 @@ enum class TwinRoleCohort : uint8
 enum class TwinStrategyMode : uint8
 {
     Inactive = 0,
+    CenterCommitted,
     StandardCompReady,
     Combat,
     Degraded,
@@ -180,6 +181,8 @@ struct TwinEncounterState
     uint32 phaseEnteredAtMs = 0;
     uint16 approachMemberCount = 0;
     uint16 stagedMemberCount = 0;
+    uint16 centerCommittedMemberCount = 0;
+    uint16 strictReadyMemberCount = 0;
     std::array<TwinStableOwnership, 2> ownership;
     TwinRecoveryState recovery;
     TwinScriptedHazardWindows scriptedHazards;
@@ -209,6 +212,10 @@ bool HasDeterministicAssignments(TwinEncounterState const& state);
 std::string const& GetUnsupportedReason(TwinEncounterState const& state);
 bool IsTwinApproachWindow(TwinEncounterState const& state, Player const* bot);
 bool IsTwinApproachWindow(Player const* bot);
+bool IsTwinCenterCommitted(TwinEncounterState const& state);
+bool IsTwinCenterCommitted(Player const* bot);
+bool IsTwinPrePullStageWindow(TwinEncounterState const& state, Player const* bot);
+bool IsTwinPrePullStageWindow(Player const* bot);
 bool IsTwinPrePullReady(Player const* bot);
 bool IsTwinDesignatedWarlockTank(Player const* bot);
 bool MarkTwinLocalCleanupState(Player* bot);

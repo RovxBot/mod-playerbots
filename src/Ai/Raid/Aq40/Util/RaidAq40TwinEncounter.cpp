@@ -47,6 +47,7 @@ float constexpr kSideHealerLateralDistance = 8.0f;
 float constexpr kTwinRoomReadyRadius = 180.0f;
 float constexpr kTwinRoomExtendedRadius = 220.0f;
 float constexpr kTwinRoomApproachRadius = kTwinRoomExtendedRadius;
+float constexpr kTwinCenterCommitRadius = 32.0f;
 uint32 constexpr kTwinTeleportCadenceEarliestMs = 30000;
 uint32 constexpr kTwinTeleportCadenceLatestMs = 35000;
 uint32 constexpr kTwinSwapPrepLeadMs = 5000;
@@ -525,6 +526,8 @@ void ClearPrePullAssignments(TwinEncounterState& state, uint32 nowMs, bool clear
         return;
 
     state.assignments.clear();
+    state.centerCommittedMemberCount = 0;
+    state.strictReadyMemberCount = 0;
     state.ownership[ToIndex(TwinBoss::Veklor)] = TwinStableOwnership();
     state.ownership[ToIndex(TwinBoss::Veknilash)] = TwinStableOwnership();
     state.recovery = TwinRecoveryState();
@@ -561,6 +564,24 @@ Player* FindTwinStagedMember(std::vector<Player*> const& stagedMembers, ObjectGu
     });
 
     return itr != stagedMembers.end() ? *itr : nullptr;
+}
+
+size_t CountAssignedMembersNearTwinCenter(std::vector<Player*> const& members,
+                                          std::vector<TwinRoleAssignment> const& assignments)
+{
+    Position const& roomCenter = GetGeometry().roomCenter.position;
+    size_t committedCount = 0u;
+    for (TwinRoleAssignment const& assignment : assignments)
+    {
+        Player* member = FindTwinStagedMember(members, assignment.memberGuid);
+        if (!member)
+            continue;
+
+        if (member->GetExactDist2d(roomCenter.GetPositionX(), roomCenter.GetPositionY()) <= kTwinCenterCommitRadius)
+            ++committedCount;
+    }
+
+    return committedCount;
 }
 
 std::string BuildTwinShadowResistanceUnsupportedReason(std::vector<Player*> const& stagedMembers,
@@ -613,11 +634,6 @@ void LogTwinMemberScan(Player* logBot, size_t approachCount, size_t stagedCount)
         "twin:member_scan:approach_" + std::to_string(approachCount) +
             "_staged_" + std::to_string(stagedCount),
         fields.str(), 1000);
-}
-
-bool AreTwinAssignmentsFullyStaged(TwinAssignmentBuildResult const& buildResult)
-{
-    return !buildResult.assignments.empty() && buildResult.stagedCount >= buildResult.assignments.size();
 }
 
 TwinAssignmentBuildResult BuildTwinAssignments(Player* bot, std::vector<Player*> const& approachMembers,
@@ -810,6 +826,7 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
     uint32 const now = ResolveNow(0);
     size_t const previousApproachCount = state.approachMemberCount;
     size_t const previousStagedCount = state.stagedMemberCount;
+    size_t const previousCenterCommittedCount = state.centerCommittedMemberCount;
     std::vector<Player*> const approachMembers = CollectTwinApproachMembers(bot);
     std::vector<Player*> const stagedMembers = CollectTwinStagedMembers(bot);
     state.approachMemberCount = static_cast<uint16>(approachMembers.size());
@@ -822,6 +839,7 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
         LogTwinMemberScan(logBot, approachMembers.size(), stagedMembers.size());
 
     bool const wasReady = IsReadyPrePullState(state);
+    bool const wasCenterCommitted = IsTwinCenterCommitted(state);
     bool const preserveReadyState = wasReady && HasAssignedMemberInCombat(bot, state);
 
     if (preserveReadyState)
@@ -832,7 +850,9 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
             fields << "boss=twin state=retain_ready reason=first_contact_pending"
                    << " assignments=" << state.assignments.size()
                    << " approach=" << state.approachMemberCount
-                   << " staged=" << state.stagedMemberCount;
+                   << " staged=" << state.stagedMemberCount
+                   << " center_committed=" << state.centerCommittedMemberCount
+                   << " strict_ready=" << state.strictReadyMemberCount;
             Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:retain_ready:first_contact",
                                      fields.str(), 5000);
         }
@@ -863,8 +883,6 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
 
     bool const assignmentsChanged = !AreAssignmentsEqual(state.assignments, buildResult.assignments);
     bool const reasonChanged = state.unsupportedReason != buildResult.unsupportedReason;
-    bool const fullyStaged = AreTwinAssignmentsFullyStaged(buildResult);
-    bool const readyStateChanged = wasReady != fullyStaged;
 
     if (!buildResult.unsupportedReason.empty())
     {
@@ -884,44 +902,52 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
         return;
     }
 
+    size_t const centerCommittedCount = CountAssignedMembersNearTwinCenter(approachMembers, buildResult.assignments);
+    bool const centerCommitted = !buildResult.assignments.empty() &&
+                                 centerCommittedCount >= buildResult.assignments.size();
+    bool const centerCommitChanged = previousCenterCommittedCount != centerCommittedCount;
+    bool const keepStrictReady = centerCommitted && state.mode == TwinStrategyMode::StandardCompReady &&
+                                 !assignmentsChanged && !reasonChanged && !countsChanged && !centerCommitChanged;
+
     state.assignments = buildResult.assignments;
     state.unsupportedReason.clear();
+    state.centerCommittedMemberCount = static_cast<uint16>(centerCommittedCount);
+    if (!keepStrictReady)
+        state.strictReadyMemberCount = 0;
     ConfigurePrePullOwnership(state, buildResult);
     SetPhase(state, TwinEncounterPhase::PrePull, now);
-    SetMode(state, fullyStaged ? TwinStrategyMode::StandardCompReady : TwinStrategyMode::Inactive, now);
-
-    if (fullyStaged)
+    if (centerCommitted)
     {
-        if ((!wasReady || assignmentsChanged || reasonChanged || countsChanged) && logBot)
+        SetMode(state, keepStrictReady ? TwinStrategyMode::StandardCompReady : TwinStrategyMode::CenterCommitted, now);
+
+        if (!keepStrictReady && (assignmentsChanged || reasonChanged || countsChanged || centerCommitChanged ||
+                                 wasReady || !wasCenterCommitted) && logBot)
         {
             std::ostringstream fields;
-            fields << "boss=twin state=ready"
+            fields << "boss=twin state=center_committed"
                    << " approach=" << buildResult.approachCount
                    << " staged=" << buildResult.stagedCount
-                   << " warlock_side0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.warlockTankBySide[0]))
-                   << " warlock_side1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.warlockTankBySide[1]))
-                   << " melee_side0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.meleeTankBySide[0]))
-                   << " melee_side1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.meleeTankBySide[1]))
-                   << " side_healer0=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.sideHealerBySide[0]))
-                   << " side_healer1=" << Aq40Helpers::GetAq40LogUnit(FindTwinStagedMember(approachMembers, buildResult.sideHealerBySide[1]))
-                   << " raid_healers=" << buildResult.raidHealerCount
-                   << " ranged=" << buildResult.rangedCount
-                   << " hunters=" << buildResult.hunterCount
-                   << " melee=" << buildResult.meleeCount;
-            Aq40Helpers::LogAq40Info(logBot, "twin_assignments", "twin:ready", fields.str(), 1000);
+                   << " center_committed=" << centerCommittedCount
+                   << " assigned=" << buildResult.assignments.size()
+                   << " wait=strict_ready";
+            Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:center_commit", fields.str(), 1000);
         }
 
         return;
     }
 
-    if ((assignmentsChanged || reasonChanged || countsChanged || readyStateChanged) && logBot)
+    SetMode(state, TwinStrategyMode::Inactive, now);
+
+    if ((assignmentsChanged || reasonChanged || countsChanged || centerCommitChanged || wasReady ||
+         wasCenterCommitted) && logBot)
     {
         std::ostringstream fields;
         fields << "boss=twin state=approach_pending"
                << " approach=" << buildResult.approachCount
                << " staged=" << buildResult.stagedCount
+               << " center_committed=" << centerCommittedCount
                << " assigned=" << buildResult.assignments.size()
-               << " wait=distance";
+               << " wait=center_commit";
         Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:approach_pending", fields.str(), 1000);
     }
 }
@@ -1199,6 +1225,30 @@ bool IsTwinApproachWindow(Player const* bot)
     return state && IsTwinApproachWindow(*state, bot);
 }
 
+bool IsTwinCenterCommitted(TwinEncounterState const& state)
+{
+    return HasDeterministicAssignments(state) && state.phase == TwinEncounterPhase::PrePull &&
+           (state.mode == TwinStrategyMode::CenterCommitted ||
+            state.mode == TwinStrategyMode::StandardCompReady);
+}
+
+bool IsTwinCenterCommitted(Player const* bot)
+{
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state && IsTwinCenterCommitted(*state);
+}
+
+bool IsTwinPrePullStageWindow(TwinEncounterState const& state, Player const* bot)
+{
+    return bot && IsTwinCenterCommitted(state) && IsTwinAssignedParticipant(state, bot, false);
+}
+
+bool IsTwinPrePullStageWindow(Player const* bot)
+{
+    TwinEncounterState const* state = GetEncounterState(bot);
+    return state && IsTwinPrePullStageWindow(*state, bot);
+}
+
 bool IsTwinPrePullReady(Player const* bot)
 {
     TwinEncounterState const* state = GetEncounterState(bot);
@@ -1212,22 +1262,27 @@ bool IsTwinPrePullReady(Player const* bot)
         TwinRoleAssignment const* assignment = GetAssignmentForMember(*state, bot->GetGUID());
         if (assignment)
         {
-            bool const stagedRaidPending = isStrictReadyParticipant &&
-                                           state->mode != TwinStrategyMode::StandardCompReady;
+            char const* waitReason = "distance";
+            if (isStrictReadyParticipant)
+            {
+                waitReason = IsTwinCenterCommitted(*state) ? "strict_ready_pending" : "center_commit_pending";
+            }
+
             std::ostringstream fields;
             fields << "boss=twin prepull=not_ready"
                    << " mode=" << ToString(state->mode)
-                   << " wait=" << (stagedRaidPending ? "staged_raid_pending" : "distance")
+                   << " wait=" << waitReason
                    << " cohort=" << ToString(assignment->cohort)
                    << " side=" << ToString(assignment->stableSide)
                    << " slot=" << static_cast<uint32>(assignment->slotIndex)
                    << " approach=" << state->approachMemberCount
                    << " staged=" << state->stagedMemberCount
+                   << " center_committed=" << state->centerCommittedMemberCount
+                   << " strict_ready=" << state->strictReadyMemberCount
                    << " assigned=" << state->assignments.size()
                    << " unsupported_reason=" << (state->unsupportedReason.empty() ? "none" : state->unsupportedReason);
             Aq40Helpers::LogAq40Info(const_cast<Player*>(bot), "twin_prepull",
-                "twin:prepull:not_ready:" +
-                    std::string(stagedRaidPending ? "staged_raid_pending" : "distance"),
+                "twin:prepull:not_ready:" + std::string(waitReason),
                 fields.str(), 2000);
         }
     }
@@ -1835,6 +1890,9 @@ bool IsPrimaryController(TwinEncounterState const& state, TwinBoss boss, ObjectG
     if (!ownership.candidateOwner.IsEmpty())
         return ownership.candidateOwner == ownerGuid;
 
+    if (IsSwapPrepActive(state))
+        return false;
+
     return ownership.expectedOwner == ownerGuid;
 }
 
@@ -2027,6 +2085,9 @@ void EnterTeleportWindow(TwinEncounterState& state, uint32 threatHoldDurationMs,
         ResetStableOwnership(state, boss, true);
         ArmThreatHoldWindow(state, boss, threatHoldDurationMs, now);
         ClearPickupEstablished(state, boss, now);
+
+        TwinStableOwnership& ownership = GetOwnership(state, boss);
+        ownership.candidateOwner = ownership.expectedOwner;
     }
 }
 
@@ -2401,6 +2462,7 @@ char const* ToString(TwinStrategyMode mode)
     switch (mode)
     {
         case TwinStrategyMode::Inactive: return "inactive";
+        case TwinStrategyMode::CenterCommitted: return "center_committed";
         case TwinStrategyMode::StandardCompReady: return "standard_comp_ready";
         case TwinStrategyMode::Combat: return "combat";
         case TwinStrategyMode::Degraded: return "degraded";
