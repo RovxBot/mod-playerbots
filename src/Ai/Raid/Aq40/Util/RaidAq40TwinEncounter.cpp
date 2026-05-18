@@ -929,6 +929,7 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
                    << " staged=" << buildResult.stagedCount
                    << " center_committed=" << centerCommittedCount
                    << " assigned=" << buildResult.assignments.size()
+                   << " handoff=side_owned_stage"
                    << " wait=strict_ready";
             Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:center_commit", fields.str(), 1000);
         }
@@ -947,6 +948,8 @@ void RefreshPrePullAssignments(Player* bot, TwinEncounterState& state)
                << " staged=" << buildResult.stagedCount
                << " center_committed=" << centerCommittedCount
                << " assigned=" << buildResult.assignments.size()
+               << " authority=cleanup_only"
+               << " movement=player_controlled"
                << " wait=center_commit";
         Aq40Helpers::LogAq40Info(logBot, "twin_prepull", "twin:approach_pending", fields.str(), 1000);
     }

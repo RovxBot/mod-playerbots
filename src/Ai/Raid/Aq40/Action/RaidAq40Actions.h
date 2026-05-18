@@ -293,6 +293,7 @@ class Aq40TwinApproachStageAction : public MovementAction
 {
 public:
     Aq40TwinApproachStageAction(PlayerbotAI* botAI) : MovementAction(botAI, "aq40 twin approach stage") {}
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
