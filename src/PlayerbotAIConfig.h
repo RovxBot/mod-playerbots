@@ -127,6 +127,8 @@ public:
     std::string randomBotMapsAsString;
     float probTeleToBankers;
     bool enableWeightTeleToCityBankers;
+    bool enableRandomBotGuildBankDeposits;
+    uint32 randomBotGuildBankDepositCooldown;
     int weightTeleToStormwind;
     int weightTeleToIronforge;
     int weightTeleToDarnassus;

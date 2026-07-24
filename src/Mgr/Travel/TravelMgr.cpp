@@ -4556,6 +4556,58 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
     return fallbackLocations;
 }
 
+std::vector<WorldLocation> TravelMgr::GetCityGuildBankLocations(Player* bot)
+{
+    if (!bot)
+        return {};
+
+    std::vector<WorldLocation> fallbackLocations;
+    std::vector<uint32> validGuildBankCities;
+    TeamId botTeamId = bot->GetTeamId();
+    std::unordered_set<uint32> levelAppropriateCities;
+
+    for (BankerLocation const& bankerLocation : bankerLocsPerLevelCache[bot->GetLevel()])
+    {
+        Capital const* capital = FindCapitalByBanker(bankerLocation.entry);
+        if (capital && (capital->team == botTeamId || capital->team == TEAM_NEUTRAL))
+            levelAppropriateCities.insert(capital->zoneId);
+    }
+
+    for (auto const& [zoneId, locations] : guildBankLocsByCity)
+    {
+        Capital const* capital = FindCapitalByZone(zoneId);
+        if (!capital || locations.empty() || levelAppropriateCities.find(zoneId) == levelAppropriateCities.end())
+            continue;
+
+        fallbackLocations.insert(fallbackLocations.end(), locations.begin(), locations.end());
+        validGuildBankCities.push_back(zoneId);
+    }
+
+    if (!sPlayerbotAIConfig.enableWeightTeleToCityBankers || validGuildBankCities.empty())
+        return fallbackLocations;
+
+    std::vector<uint32> weightedCities;
+    for (uint32 zoneId : validGuildBankCities)
+    {
+        int weight = GetCityWeight(zoneId);
+        if (weight <= 0)
+            continue;
+
+        for (int i = 0; i < weight; ++i)
+            weightedCities.push_back(zoneId);
+    }
+
+    if (weightedCities.empty())
+        return fallbackLocations;
+
+    uint32 selectedCity = weightedCities[urand(0, weightedCities.size() - 1)];
+    auto const locations = guildBankLocsByCity.find(selectedCity);
+    if (locations == guildBankLocsByCity.end() || locations->second.empty())
+        return fallbackLocations;
+
+    return {locations->second[urand(0, locations->second.size() - 1)]};
+}
+
 void TravelMgr::PrepareZone2LevelBracket()
 {
     // Classic WoW - starter zones
@@ -4642,6 +4694,9 @@ void TravelMgr::PrepareDestinationCache()
     uint32 flightMastersCount = 0;
     uint32 innkeepersCount = 0;
     uint32 bankerCount = 0;
+    uint32 guildBankCount = 0;
+
+    guildBankLocsByCity.clear();
 
     LOG_INFO("playerbots", "Preparing destination caches for {} levels...", maxLevel);
     // Temporary map to group creatures by entry and area
@@ -4809,6 +4864,44 @@ void TravelMgr::PrepareDestinationCache()
         }
     }
 
+    constexpr float guildBankInteractionOffset = 6.0f;
+    for (auto const& gameObjectDataPair : sObjectMgr->GetAllGOData())
+    {
+        GameObjectData const& gameObjectData = gameObjectDataPair.second;
+        GameObjectTemplate const* gameObjectTemplate = sObjectMgr->GetGameObjectTemplate(gameObjectData.id);
+        if (!gameObjectTemplate || gameObjectTemplate->type != GAMEOBJECT_TYPE_GUILD_BANK ||
+            !(gameObjectData.phaseMask & PHASEMASK_NORMAL))
+            continue;
+
+        uint16 mapId = gameObjectData.mapid;
+        if (std::find(sPlayerbotAIConfig.randomBotMaps.begin(), sPlayerbotAIConfig.randomBotMaps.end(), mapId) ==
+            sPlayerbotAIConfig.randomBotMaps.end())
+            continue;
+
+        Map* map = sMapMgr->FindMap(mapId, 0);
+        if (!map)
+            continue;
+
+        float x = gameObjectData.posX;
+        float y = gameObjectData.posY;
+        float z = gameObjectData.posZ;
+        float orient = gameObjectData.orientation;
+
+        AreaTableEntry const* area = sAreaTableStore.LookupEntry(map->GetAreaId(PHASEMASK_NORMAL, x, y, z));
+        if (!area)
+            continue;
+
+        uint32 zoneId = area->zone ? area->zone : area->ID;
+        if (!FindCapitalByZone(zoneId))
+            continue;
+
+        // Do not target the object center: it may be inside its collision model. The same six-yard, front-facing
+        // offset used for banker travel keeps the bot within the guild-bank interaction range while on walkable ground.
+        guildBankLocsByCity[zoneId].emplace_back(mapId, x + cos(orient) * guildBankInteractionOffset,
+                                                 y + sin(orient) * guildBankInteractionOffset, z + 0.5f, orient + M_PI);
+        ++guildBankCount;
+    }
+
     // Process temporary caches
     for (auto const& [gridTuple, creatureDataList] : tempLocsCache)
     {
@@ -4871,5 +4964,8 @@ void TravelMgr::PrepareDestinationCache()
             break;
         }
     }
-    LOG_INFO("playerbots", ">> {} flight masters and {} innkeepers and {} banker locations for level collected.", flightMastersCount, innkeepersCount, bankerCount);
+    LOG_INFO("playerbots",
+             ">> {} flight masters and {} innkeepers and {} banker locations and {} guild bank locations for level "
+             "collected.",
+             flightMastersCount, innkeepersCount, bankerCount, guildBankCount);
 }

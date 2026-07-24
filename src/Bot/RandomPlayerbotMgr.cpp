@@ -16,6 +16,8 @@
 #include <random>
 
 #include "AiFactory.h"
+#include "AiObjectContext.h"
+#include "Action.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
 #include "ChannelMgr.h"
@@ -30,6 +32,7 @@
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "ObjectGuid.h"
+#include "ObjectAccessor.h"
 #include "PerfMonitor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -50,6 +53,23 @@
 #include "GridNotifiers.h"
 #include "CellImpl.h"
 #include "GridNotifiersImpl.h"
+
+namespace
+{
+constexpr char GUILD_BANK_DEPOSIT_PENDING_EVENT[] = "guild_bank_deposit_pending";
+constexpr char GUILD_BANK_DEPOSIT_COOLDOWN_EVENT[] = "guild_bank_deposit_cooldown";
+constexpr uint32 GUILD_BANK_DEPOSIT_PENDING_TIMEOUT = MINUTE;
+constexpr uint32 GUILD_BANK_DEPOSIT_DISPATCH_DELAY_MS = 5 * IN_MILLISECONDS;
+
+bool CanDepositGuildMaterials(PlayerbotAI* botAI)
+{
+    if (!botAI || !botAI->GetAiObjectContext())
+        return false;
+
+    Action* action = botAI->GetAiObjectContext()->GetAction("deposit guild materials");
+    return action && action->isPossible();
+}
+}  // namespace
 
 struct GuidClassRaceInfo
 {
@@ -1333,6 +1353,80 @@ void RandomPlayerbotMgr::ScheduleChangeStrategy(uint32 bot, uint32 time)
     SetEventValue(bot, "change_strategy", 1, time);
 }
 
+void RandomPlayerbotMgr::ScheduleGuildBankDeposit(Player* bot)
+{
+    if (!bot || !sPlayerbotAIConfig.enableRandomBotGuildBankDeposits)
+        return;
+
+    uint32 botId = bot->GetGUID().GetCounter();
+    SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 1, GUILD_BANK_DEPOSIT_PENDING_TIMEOUT);
+
+    ScheduleGuildBankDepositAttempt(bot);
+}
+
+void RandomPlayerbotMgr::ScheduleGuildBankDepositAttempt(Player* bot)
+{
+    if (!bot || !GetEventValue(bot->GetGUID().GetCounter(), GUILD_BANK_DEPOSIT_PENDING_EVENT))
+        return;
+
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+    {
+        ObjectGuid const guid = bot->GetGUID();
+        botAI->AddTimedEvent(
+            [guid]()
+            {
+                if (Player* pendingBot = ObjectAccessor::FindPlayer(guid))
+                {
+                    sRandomPlayerbotMgr.ProcessPendingGuildBankDeposit(pendingBot);
+                    sRandomPlayerbotMgr.ScheduleGuildBankDepositAttempt(pendingBot);
+                }
+            },
+            GUILD_BANK_DEPOSIT_DISPATCH_DELAY_MS);
+    }
+}
+
+bool RandomPlayerbotMgr::ProcessPendingGuildBankDeposit(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    uint32 botId = bot->GetGUID().GetCounter();
+    if (!GetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT))
+        return false;
+
+    // The callback normally runs after the teleport acknowledgement. Keep the short-lived pending event intact while
+    // the server is still relocating the bot; the timed callback retries independently of the random-bot update rate.
+    if (!bot->IsInWorld() || bot->IsBeingTeleported())
+        return true;
+
+    if (!sPlayerbotAIConfig.enableRandomBotGuildBankDeposits || !bot->GetGuildId() || bot->isDead() ||
+        bot->IsInCombat())
+    {
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+        return true;
+    }
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || !CanDepositGuildMaterials(botAI))
+    {
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+        return true;
+    }
+
+    if (botAI->DoSpecificAction("deposit guild materials", Event(), true))
+    {
+        if (sPlayerbotAIConfig.randomBotGuildBankDepositCooldown)
+        {
+            SetEventValue(botId, GUILD_BANK_DEPOSIT_COOLDOWN_EVENT, 1,
+                          sPlayerbotAIConfig.randomBotGuildBankDepositCooldown);
+        }
+
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+    }
+
+    return true;
+}
+
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
 {
     ObjectGuid botGUID = ObjectGuid::Create<HighGuid::Player>(bot);
@@ -1456,7 +1550,10 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
     if (bot->InBattlegroundQueue())
         return false;
 
-     uint32 botId = bot->GetGUID().GetCounter();
+    uint32 botId = bot->GetGUID().GetCounter();
+
+    if (ProcessPendingGuildBankDeposit(bot))
+        return true;
 
     // if death revive
     if (bot->isDead())
@@ -1575,27 +1672,27 @@ void RandomPlayerbotMgr::Revive(Player* player)
     RandomTeleportGrindForLevel(player);
 }
 
-void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
+bool RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
 {
     // ignore when alrdy teleported or not in the world yet.
     if (bot->IsBeingTeleported() || !bot->IsInWorld())
-        return;
+        return false;
 
     // no teleport / movement update when rooted.
     if (bot->IsRooted())
-        return;
+        return false;
 
     // ignore when in queue for battle grounds.
     if (bot->InBattlegroundQueue())
-        return;
+        return false;
 
     // ignore when in battle grounds or arena.
     if (bot->InBattleground() || bot->InArena())
-        return;
+        return false;
 
     // ignore when in group (e.g. world, dungeons, raids) and leader is not a player.
     if (bot->GetGroup() && !bot->GetGroup()->IsLeader(bot->GetGUID()))
-        return;
+        return false;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (botAI)
@@ -1603,8 +1700,11 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
         // ignore when in when taxi with boat/zeppelin and has players nearby
         if (bot->HasUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT) && bot->HasUnitState(UNIT_STATE_IGNORE_PATHFINDING) &&
             botAI->HasPlayerNearby())
-            return;
+            return false;
     }
+
+    if (!botAI)
+        return false;
 
     // if (sPlayerbotAIConfig.randomBotRpgChance < 0)
     //     return;
@@ -1612,7 +1712,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
     if (locs.empty())
     {
         LOG_DEBUG("playerbots", "Cannot teleport bot {} - no locations available", bot->GetName().c_str());
-        return;
+        return false;
     }
 
     std::vector<WorldPosition> tlocs;
@@ -1631,7 +1731,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
     if (tlocs.empty())
     {
         LOG_DEBUG("playerbots", "Cannot teleport bot {} - all locations removed by filter", bot->GetName().c_str());
-        return;
+        return false;
     }
 
     PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_RNDBOT, "RandomTeleportByLocations");
@@ -1687,11 +1787,6 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
                   zone->area_name[locale], area->ID, area->area_name[locale], zone->area_level, area->area_level, x, y,
                   z, i + 1, tlocs.size());
 
-        if (hearth)
-        {
-            bot->SetHomebind(loc, zone->ID);
-        }
-
         // Prevent blink to be detected by visible real players
         if (botAI->HasPlayerNearby(150.0f))
         {
@@ -1699,17 +1794,20 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
         }
 
         bot->GetMotionMaster()->Clear();
-        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-        if (botAI)
-            botAI->Reset(true);
+        botAI->Reset(true);
         bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
-        bot->TeleportTo(loc.GetMapId(), x, y, z, 0);
+        if (!bot->TeleportTo(loc.GetMapId(), x, y, z, 0))
+            continue;
+
+        if (hearth)
+            bot->SetHomebind(loc, zone->ID);
+
         bot->SendMovementFlagUpdate();
 
         if (pmo)
             pmo->finish();
 
-        return;
+        return true;
     }
 
     if (pmo)
@@ -1717,6 +1815,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
 
     // LOG_ERROR("playerbots", "Cannot teleport bot {} - no locations available ({} locations)", bot->GetName().c_str(),
     //           tlocs.size());
+    return false;
 }
 
 void RandomPlayerbotMgr::PrepareAddclassCache()
@@ -1772,6 +1871,23 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
 
     if (bot->GetLevel() >= 10 && urand(0, 100) < sPlayerbotAIConfig.probTeleToBankers * 100)
     {
+        uint32 botId = bot->GetGUID().GetCounter();
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+        bool canDeposit = sPlayerbotAIConfig.enableRandomBotGuildBankDeposits && bot->GetGuildId() &&
+                          (!sPlayerbotAIConfig.randomBotGuildBankDepositCooldown ||
+                           !GetEventValue(botId, GUILD_BANK_DEPOSIT_COOLDOWN_EVENT)) &&
+                          CanDepositGuildMaterials(botAI);
+
+        if (canDeposit)
+        {
+            std::vector<WorldLocation> guildBankLocs = sTravelMgr.GetCityGuildBankLocations(bot);
+            if (!guildBankLocs.empty() && RandomTeleport(bot, guildBankLocs, true))
+            {
+                ScheduleGuildBankDeposit(bot);
+                return;
+            }
+        }
+
         std::vector<WorldLocation> locs = sTravelMgr.GetCityLocations(bot);
         if (!locs.empty())
         {

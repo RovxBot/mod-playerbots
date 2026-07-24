@@ -174,6 +174,10 @@ bool PlayerbotAIConfig::Initialize()
     LoadList<std::vector<uint32>>(randomBotMapsAsString, randomBotMaps);
     probTeleToBankers = sConfigMgr->GetOption<float>("AiPlayerbot.ProbTeleToBankers", 0.25f);
     enableWeightTeleToCityBankers = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableWeightTeleToCityBankers", false);
+    enableRandomBotGuildBankDeposits =
+        sConfigMgr->GetOption<bool>("AiPlayerbot.EnableRandomBotGuildBankDeposits", true);
+    randomBotGuildBankDepositCooldown =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.RandomBotGuildBankDepositCooldown", 4 * HOUR);
     weightTeleToStormwind = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToStormwindWeight", 2);
     weightTeleToIronforge = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToIronforgeWeight", 1);
     weightTeleToDarnassus = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToDarnassusWeight", 1);
