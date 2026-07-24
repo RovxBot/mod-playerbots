@@ -25,6 +25,7 @@
 #include "ChooseTravelTargetAction.h"
 #include "CombatActions.h"
 #include "DelayAction.h"
+#include "DepositGuildMaterialsAction.h"
 #include "DestroyItemAction.h"
 #include "EmoteAction.h"
 #include "FollowActions.h"
@@ -161,6 +162,7 @@ public:
         creators["outfit"] = &ActionContext::outfit;
         creators["random bot update"] = &ActionContext::random_bot_update;
         creators["delay"] = &ActionContext::delay;
+        creators["deposit guild materials"] = &ActionContext::deposit_guild_materials;
         creators["greet"] = &ActionContext::greet;
         creators["check values"] = &ActionContext::check_values;
         creators["ra"] = &ActionContext::ra;
@@ -372,6 +374,7 @@ private:
     static Action* outfit(PlayerbotAI* botAI) { return new OutfitAction(botAI); }
     static Action* random_bot_update(PlayerbotAI* botAI) { return new RandomBotUpdateAction(botAI); }
     static Action* delay(PlayerbotAI* botAI) { return new DelayAction(botAI); }
+    static Action* deposit_guild_materials(PlayerbotAI* botAI) { return new DepositGuildMaterialsAction(botAI); }
 
     static Action* apply_poison(PlayerbotAI* botAI) { return new ImbueWithPoisonAction(botAI); }
     static Action* apply_oil(PlayerbotAI* botAI) { return new ImbueWithOilAction(botAI); }

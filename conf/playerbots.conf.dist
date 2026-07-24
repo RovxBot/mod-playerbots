@@ -1224,6 +1224,16 @@ AiPlayerbot.RandomBotMaps = 0,1,530,571
 # Default: 0.25
 AiPlayerbot.ProbTeleToBankers = 0.25
 
+# Let guilded randombots use their normal city-banker visits to deposit surplus crafting materials into their guild bank.
+# The bot must have a depositable material, a guild-bank tab, and permission to deposit into it.
+# Default: 1 (enabled)
+AiPlayerbot.EnableRandomBotGuildBankDeposits = 1
+
+# Minimum seconds between successful automatic guild-bank material deposits per randombot.
+# Set to 0 to allow a deposit on every eligible city visit.
+# Default: 14400 (4 hours)
+AiPlayerbot.RandomBotGuildBankDepositCooldown = 14400
+
 # Control probability weights for bots teleporting to Capital city bankers
 # Sum of weights need not be 100. Set to 0 to disable teleporting to the city.
 AiPlayerbot.EnableWeightTeleToCityBankers = 1
