@@ -82,7 +82,7 @@ bool DepositGuildMaterialsAction::IsDepositCandidate(Item* item)
     return usage == ITEM_USAGE_NONE || usage == ITEM_USAGE_AH || usage == ITEM_USAGE_VENDOR;
 }
 
-bool DepositGuildMaterialsAction::IsQuestItem(ItemTemplate const* proto) const
+bool DepositGuildMaterialsAction::IsQuestItem(ItemTemplate const* proto)
 {
     auto isRequiredForActiveQuest = [proto](Player* player)
     {
