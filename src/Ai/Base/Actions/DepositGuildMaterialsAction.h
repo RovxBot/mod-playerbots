@@ -23,7 +23,7 @@ public:
 private:
     bool HasDepositCandidate();
     bool IsDepositCandidate(Item* item);
-    bool IsQuestItem(ItemTemplate const* proto) const;
+    bool IsQuestItem(ItemTemplate const* proto);
 };
 
 #endif
