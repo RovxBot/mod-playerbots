@@ -9,5 +9,6 @@
 
 #include "ACTriggerContext.h"
 #include "UBTriggerContext.h"
+#include "SethTriggerContext.h"
 
 #endif
