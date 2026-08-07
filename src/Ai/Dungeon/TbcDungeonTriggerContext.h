@@ -8,9 +8,6 @@
 #define PLAYERBOTS_TBCDUNGEONTRIGGERCONTEXT_H
 
 #include "ACTriggerContext.h"
-#include "UBTriggerContext.h"
-#include "SethTriggerContext.h"
 #include "MechTriggerContext.h"
-#include "HFRTriggerContext.h"
 
 #endif
