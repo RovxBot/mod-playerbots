@@ -7,27 +7,27 @@
 #ifndef PLAYERBOTS_RAIDSTRATEGYCONTEXT_H
 #define PLAYERBOTS_RAIDSTRATEGYCONTEXT_H
 
-#include "Strategy.h"
 #include "Aq20Strategy.h"
-#include "MCStrategy.h"
+#include "BTStrategy.h"
 #include "BWLStrategy.h"
-#include "KaraStrategy.h"
+#include "EoEStrategy.h"
 #include "GruulStrategy.h"
+#include "HyjalStrategy.h"
+#include "ICCStrategy.h"
+#include "KaraStrategy.h"
+#include "MCStrategy.h"
 #include "MagStrategy.h"
 #include "NaxxStrategy.h"
-#include "SSCStrategy.h"
-#include "TKStrategy.h"
-#include "HyjalStrategy.h"
-#include "BTStrategy.h"
-#include "ZAStrategy.h"
-#include "SWPStrategy.h"
 #include "OSStrategy.h"
-#include "EoEStrategy.h"
-#include "VoAStrategy.h"
-#include "UldStrategy.h"
 #include "OnyStrategy.h"
-#include "ICCStrategy.h"
 #include "RSStrategy.h"
+#include "SSCStrategy.h"
+#include "SWPStrategy.h"
+#include "Strategy.h"
+#include "TKStrategy.h"
+#include "UldStrategy.h"
+#include "VoAStrategy.h"
+#include "ZAStrategy.h"
 
 class RaidStrategyContext : public NamedObjectContext<Strategy>
 {
@@ -46,7 +46,7 @@ public:
         creators["hyjal"] = &RaidStrategyContext::hyjal;
         creators["blacktemple"] = &RaidStrategyContext::blacktemple;
         creators["zulaman"] = &RaidStrategyContext::zulaman;
-        creators["sunwell"] = &RaidStrategyContext::sunwell;
+        creators["sunwellplateau"] = &RaidStrategyContext::sunwellplateau;
         creators["wotlk-os"] = &RaidStrategyContext::wotlk_os;
         creators["wotlk-eoe"] = &RaidStrategyContext::wotlk_eoe;
         creators["voa"] = &RaidStrategyContext::voa;
@@ -69,13 +69,13 @@ private:
     static Strategy* hyjal(PlayerbotAI* botAI) { return new RaidHyjalSummitStrategy(botAI); }
     static Strategy* blacktemple(PlayerbotAI* botAI) { return new RaidBlackTempleStrategy(botAI); }
     static Strategy* zulaman(PlayerbotAI* botAI) { return new RaidZulAmanStrategy(botAI); }
+    static Strategy* sunwellplateau(PlayerbotAI* botAI) { return new RaidSunwellPlateauStrategy(botAI); }
     static Strategy* wotlk_os(PlayerbotAI* botAI) { return new RaidOsStrategy(botAI); }
     static Strategy* wotlk_eoe(PlayerbotAI* botAI) { return new RaidEoEStrategy(botAI); }
     static Strategy* voa(PlayerbotAI* botAI) { return new RaidVoAStrategy(botAI); }
     static Strategy* onyxia(PlayerbotAI* botAI) { return new RaidOnyxiaStrategy(botAI); }
     static Strategy* ulduar(PlayerbotAI* botAI) { return new RaidUlduarStrategy(botAI); }
     static Strategy* icc(PlayerbotAI* botAI) { return new RaidIccStrategy(botAI); }
-    static Strategy* sunwell(PlayerbotAI* botAI) { return new RaidSunwellStrategy(botAI); }
     static Strategy* rs(PlayerbotAI* botAI) { return new RaidRsStrategy(botAI); }
 };
 

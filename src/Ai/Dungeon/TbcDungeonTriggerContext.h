@@ -9,6 +9,7 @@
 
 #include "ACTriggerContext.h"
 #include "HFRTriggerContext.h"
+#include "SethTriggerContext.h"
 #include "MechTriggerContext.h"
 
 #endif

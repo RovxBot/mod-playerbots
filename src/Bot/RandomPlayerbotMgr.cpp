@@ -5,21 +5,13 @@
  */
 
 #include "RandomPlayerbotMgr.h"
-
-#include <WorldSessionMgr.h>
-
-#include <algorithm>
-#include <boost/thread/thread.hpp>
-#include <cstdlib>
-#include <ctime>
-#include <iomanip>
-#include <random>
-
 #include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "Action.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
+#include "Cell.h"
+#include "CellImpl.h"
 #include "ChannelMgr.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
@@ -27,6 +19,7 @@
 #include "Define.h"
 #include "FleeManager.h"
 #include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "LFGMgr.h"
 #include "MapMgr.h"
 #include "NewRpgInfo.h"
@@ -49,10 +42,13 @@
 #include "TravelMgr.h"
 #include "Unit.h"
 #include "World.h"
-#include "Cell.h"
-#include "GridNotifiers.h"
-#include "CellImpl.h"
-#include "GridNotifiersImpl.h"
+#include "WorldSessionMgr.h"
+#include <algorithm>
+#include <boost/thread/thread.hpp>
+#include <cstdlib>
+#include <ctime>
+#include <iomanip>
+#include <random>
 
 namespace
 {

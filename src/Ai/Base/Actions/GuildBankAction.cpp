@@ -5,10 +5,8 @@
  */
 
 #include "GuildBankAction.h"
-
 #include "AiObjectContext.h"
-#include "GameObject.h"
-#include "Guild.h"
+#include "GuildMgr.h"
 #include "PlayerbotAI.h"
 
 bool GuildBankAction::Execute(Event event)
@@ -36,11 +34,8 @@ GameObject* GuildBankAction::GetNearbyGuildBank() const
     for (ObjectGuid const& guid : gos)
     {
         GameObject* go = botAI->GetGameObject(guid);
-        if (!go)
-            continue;
-
-        if (GameObject* bank = bot->GetGameObjectIfCanInteractWith(go->GetGUID(), GAMEOBJECT_TYPE_GUILD_BANK))
-            return bank;
+        if (go && bot->GetGameObjectIfCanInteractWith(go->GetGUID(), GAMEOBJECT_TYPE_GUILD_BANK))
+            return go;
     }
 
     return nullptr;
@@ -48,7 +43,7 @@ GameObject* GuildBankAction::GetNearbyGuildBank() const
 
 bool GuildBankAction::CanDepositToFirstTab() const
 {
-    Guild* guild = bot->GetGuild();
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
     return guild && guild->MemberHasTabRights(bot->GetGUID(), 0, GUILD_BANK_RIGHT_DEPOSIT_ITEM);
 }
 
@@ -82,20 +77,17 @@ bool GuildBankAction::MoveFromCharToBank(Item* item, GameObject* bank, bool repo
 
     std::ostringstream out;
 
-    Guild* guild = bot->GetGuild();
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
     // guild->SwapItems(bot, 0, playerSlot, 0, INVENTORY_SLOT_BAG_0, 0);
 
     // check source pos rights (item moved to bank)
     if (!guild || !guild->MemberHasTabRights(bot->GetGUID(), 0, GUILD_BANK_RIGHT_DEPOSIT_ITEM))
-    {
         out << "I can't put " << itemText
             << " to guild bank. I have no rights to put items in the first guild bank tab";
-        if (report)
-            botAI->TellMaster(out);
-        return false;
+    else
+    {
+        guild->SwapItemsWithInventory(bot, false, 0, 255, playerBag, playerSlot, 0);
     }
-
-    guild->SwapItemsWithInventory(bot, false, 0, NULL_SLOT, playerBag, playerSlot, 0);
 
     Item* sourceItem = bot->GetItemByPos(playerBag, playerSlot);
     bool const moved = !sourceItem || sourceItem->GetGUID() != itemGuid;
