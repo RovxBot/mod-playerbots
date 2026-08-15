@@ -16,14 +16,14 @@ using namespace SethData;
 bool TimeLostControllerMarkCharmingTotemWithSkullAction::Execute(Event /*event*/)
 {
     constexpr float searchRadius = 40.0f;
-    Unit* totem = bot->FindNearestCreature(Id(SethNpcs::NPC_CHARMING_TOTEM), searchRadius, true);
+    Unit* totem = bot->FindNearestCreature(SethId(SethNpcs::NPC_CHARMING_TOTEM), searchRadius, true);
     return totem && MarkTargetWithSkull(bot, totem);
 }
 
 bool SethekkProphetSetTremorTotemAction::Execute(Event /*event*/)
 {
-    return botAI->CanCastSpell(Id(SethSpells::SPELL_TREMOR_TOTEM), bot) &&
-        botAI->CastSpell(Id(SethSpells::SPELL_TREMOR_TOTEM), bot);
+    return botAI->CanCastSpell(SethId(SethSpells::SPELL_TREMOR_TOTEM), bot) &&
+        botAI->CastSpell(SethId(SethSpells::SPELL_TREMOR_TOTEM), bot);
 }
 
 bool DarkweaverSythMarkElementalsWithSkullAction::Execute(Event /*event*/)
@@ -50,7 +50,7 @@ bool AnzuAlternateMarksOnBossAction::Execute(Event /*event*/)
     if (!anzu)
         return false;
 
-    if (anzu->HasAura(Id(SethSpells::SPELL_BANISH_ANZU)))
+    if (anzu->HasAura(SethId(SethSpells::SPELL_BANISH_ANZU)))
         return MarkTargetWithMoon(bot, anzu);
 
     return MarkTargetWithSkull(bot, anzu);
@@ -63,9 +63,9 @@ bool AnzuCastHealOverTimeSpellOnBirdSpiritAction::Execute(Event /*event*/)
     Creature* targetSpirit = nullptr;
 
     static constexpr std::array spiritEntries = {
-        Id(SethNpcs::NPC_FALCON_SPIRIT),
-        Id(SethNpcs::NPC_HAWK_SPIRIT),
-        Id(SethNpcs::NPC_EAGLE_SPIRIT),
+        SethId(SethNpcs::NPC_FALCON_SPIRIT),
+        SethId(SethNpcs::NPC_HAWK_SPIRIT),
+        SethId(SethNpcs::NPC_EAGLE_SPIRIT),
     };
 
     for (uint32 entry : spiritEntries)
@@ -82,10 +82,10 @@ bool AnzuCastHealOverTimeSpellOnBirdSpiritAction::Execute(Event /*event*/)
     if (!targetSpirit)
         return false;
 
-    if (!botAI->CanCastSpell(Id(SethSpells::SPELL_REJUVENATION_RANK_1), targetSpirit))
+    if (!botAI->CanCastSpell(SethId(SethSpells::SPELL_REJUVENATION_RANK_1), targetSpirit))
         return false;
 
-    return botAI->CastSpell(Id(SethSpells::SPELL_REJUVENATION_RANK_1), targetSpirit);
+    return botAI->CastSpell(SethId(SethSpells::SPELL_REJUVENATION_RANK_1), targetSpirit);
 }
 
 bool TalonKingIkissTankMoveBossToPillarPositionAction::Execute(Event /*event*/)

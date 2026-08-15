@@ -24,7 +24,7 @@ namespace KaraHelpers
 {
 
 template <typename T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
-constexpr uint32 Id(T value)
+constexpr uint32 KaraId(T value)
 {
     return static_cast<uint32>(value);
 }

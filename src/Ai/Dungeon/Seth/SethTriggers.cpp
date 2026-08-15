@@ -63,7 +63,7 @@ bool TalonKingIkissRangedPrepareForArcaneExplosionTrigger::IsActive()
         return false;
 
     Unit* ikiss = AI_VALUE2(Unit*, "find target", "talon king ikiss");
-    return ikiss && !ikiss->HasAura(Id(SethSpells::SPELL_ARCANE_BUBBLE)) &&
+    return ikiss && !ikiss->HasAura(SethId(SethSpells::SPELL_ARCANE_BUBBLE)) &&
         bot->IsWithinLOSInMap(ikiss);
 }
 
@@ -71,12 +71,12 @@ bool TalonKingIkissBossCastingArcaneExplosionTrigger::IsActive()
 {
     // Arcane Bubble is put up 1s before casting Arcane Explosion
     Unit* ikiss = AI_VALUE2(Unit*, "find target", "talon king ikiss");
-    return ikiss && ikiss->HasAura(Id(SethSpells::SPELL_ARCANE_BUBBLE));
+    return ikiss && ikiss->HasAura(SethId(SethSpells::SPELL_ARCANE_BUBBLE));
 }
 
 bool TalonKingIkissBossOutOfLosTrigger::IsActive()
 {
     Unit* ikiss = AI_VALUE2(Unit*, "find target", "talon king ikiss");
-    return ikiss && !ikiss->HasAura(Id(SethSpells::SPELL_ARCANE_BUBBLE)) &&
+    return ikiss && !ikiss->HasAura(SethId(SethSpells::SPELL_ARCANE_BUBBLE)) &&
         !bot->IsWithinLOSInMap(ikiss);
 }

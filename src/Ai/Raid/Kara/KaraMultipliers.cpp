@@ -210,7 +210,7 @@ float TheCuratorDelayBloodlustAndHeroismMultiplier::GetValue(Action* action)
     }
 
     Unit* curator = AI_VALUE2(Unit*, "find target", "the curator");
-    if (curator && !curator->HasAura(Id(KaraSpells::SPELL_CURATOR_EVOCATION)))
+    if (curator && !curator->HasAura(KaraId(KaraSpells::SPELL_CURATOR_EVOCATION)))
         return 0.0f;
 
     return 1.0f;
@@ -358,7 +358,7 @@ float PrinceMalchezaarEnfeebleMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    if (!bot->HasAura(Id(KaraSpells::SPELL_ENFEEBLE)))
+    if (!bot->HasAura(KaraId(KaraSpells::SPELL_ENFEEBLE)))
         return 1.0f;
 
     // Disable movement other than escaping Shadow Nova range
