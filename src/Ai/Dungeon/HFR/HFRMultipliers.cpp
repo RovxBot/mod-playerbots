@@ -10,7 +10,7 @@
 #include "MovementActions.h"
 #include "ReachTargetActions.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 
 // Omor the Unscarred
 
@@ -30,7 +30,7 @@ float OmorTreacheryAuraFleeFromPlayersMultiplier::GetValue(Action* action)
 
 float OmorTreacheryAuraFleeFromTankMultiplier::GetValue(Action* action)
 {
-    Player* tank = GetGroupMainTank(botAI, bot);
+    Player* tank = EncounterHelpers::GetGroupMainTank(bot);
     if (!tank)
         return 1.0f;
 

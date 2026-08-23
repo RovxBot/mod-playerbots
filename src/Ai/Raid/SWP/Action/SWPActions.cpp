@@ -7,7 +7,7 @@
 #include "SWPActions.h"
 #include "CreatureAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SWPData.h"
 #include "SWPEncounter_Brut.h"
 #include "SWPEncounter_Felmyst.h"
@@ -23,7 +23,7 @@ bool SunwellPlateauResetEncounterStatesAction::Execute(Event /*event*/)
 {
     ObjectGuid const guid = bot->GetGUID();
     uint32 const instanceId = bot->GetInstanceId();
-    bool const isMechanicTracker = IsMechanicTrackerBot(bot, SWP_MAP_ID);
+    bool const isMechanicTracker = EncounterHelpers::IsMechanicTrackerBot(bot, SWP_MAP_ID);
 
     bool didSomething = false;
 

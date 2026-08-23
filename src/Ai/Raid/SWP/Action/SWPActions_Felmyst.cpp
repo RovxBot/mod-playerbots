@@ -8,7 +8,7 @@
 #include "SWPEncounter_Felmyst.h"
 #include "Playerbots.h"
 #include "PlayerbotTextMgr.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
 #include <cmath>
@@ -21,7 +21,7 @@ bool FelmystMisdirectBossToMainTankAction::Execute(Event /*event*/)
     if (!felmyst)
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
     if (!mainTank)
         return false;
 
@@ -194,7 +194,7 @@ bool FelmystAvoidDemonicVaporAction::Execute(Event /*event*/)
 {
     Player* leader = GetFelmystFlightLeader(bot);
 
-    if (leader == bot && MarkTargetWithDiamond(bot, leader))
+    if (leader == bot && EncounterHelpers::MarkTargetWithDiamond(bot, leader))
         return true;
 
     if (leader && leader->GetGUID() != _announcedFlightLeaderGuid)

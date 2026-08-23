@@ -7,7 +7,7 @@
 #include "SWPActions.h"
 #include "SWPEncounter_Brut.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include <array>
 #include <cmath>
 
@@ -19,7 +19,7 @@ bool BrutallusMisdirectBossToMainTankAction::Execute(Event /*event*/)
     if (!brutallus)
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
     if (!mainTank)
         return false;
 
@@ -44,8 +44,8 @@ bool BrutallusTanksHandleBossAction::Execute(Event event)
     if (AI_VALUE(Unit*, "current target") != brutallus)
         return Attack(brutallus);
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* assistTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
+    Player* assistTank = EncounterHelpers::GetGroupAssistTank(bot, 0);
 
     if (!mainTank || !assistTank)
         return false;
@@ -121,8 +121,8 @@ bool BrutallusPositionMeleeAction::Execute(Event /*event*/)
     if (!brutallus)
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* assistTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
+    Player* assistTank = EncounterHelpers::GetGroupAssistTank(bot, 0);
 
     uint8 meleeIndex = 0;
     if (!TryGetBrutallusAssignedPositionIndex(bot, false, meleeIndex))
@@ -246,8 +246,8 @@ bool BrutallusPositionRangedAction::Execute(Event /*event*/)
     if (!brutallus)
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* assistTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
+    Player* assistTank = EncounterHelpers::GetGroupAssistTank(bot, 0);
 
     ObjectGuid const guid = bot->GetGUID();
     uint8 rangedIndex = 0;
@@ -384,8 +384,8 @@ bool BrutallusHandleBurnAction::Execute(Event /*event*/)
         return false;
 
     ObjectGuid const guid = bot->GetGUID();
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* assistTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
+    Player* assistTank = EncounterHelpers::GetGroupAssistTank(bot, 0);
     uint8 rangedIndex = 0;
 
     if (!TryGetBrutallusAssignedPositionIndex(bot, true, rangedIndex))

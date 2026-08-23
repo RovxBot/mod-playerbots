@@ -7,7 +7,7 @@
 #include "SWPActions.h"
 #include "SWPEncounter_Twins.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include <vector>
 
 using namespace SwpHelpers;
@@ -73,17 +73,17 @@ bool EredarTwinsMisdirectBossesToTanksAction::Execute(Event /*event*/)
     if (hunterIndex == 0)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "grand warlock alythess");
-        tankTarget = GetGroupAssistTank(botAI, bot, 0);
+        tankTarget = EncounterHelpers::GetGroupAssistTank(bot, 0);
     }
     else if (hunterIndex == 1)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "lady sacrolash");
-        tankTarget = GetGroupMainTank(botAI, bot);
+        tankTarget = EncounterHelpers::GetGroupMainTank(bot);
     }
     else if (hunterIndex == 2)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "lady sacrolash");
-        tankTarget = GetGroupAssistTank(botAI, bot, 1);
+        tankTarget = EncounterHelpers::GetGroupAssistTank(bot, 1);
     }
 
     if (!tankTarget || !tankTarget->IsAlive())
@@ -353,7 +353,7 @@ bool EredarTwinsConflagratedBotMoveFromGroupAction::Execute(Event /*event*/)
     else
     {
         constexpr float safeDistance = 10.0f;
-        if (Player* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistance))
+        if (Player* nearestPlayer = EncounterHelpers::GetNearestPlayerInRadius(bot, safeDistance))
         {
             float const distanceToPlayer = bot->GetExactDist2d(nearestPlayer);
             if (distanceToPlayer >= safeDistance)

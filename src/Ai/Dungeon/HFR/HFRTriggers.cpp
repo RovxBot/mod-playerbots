@@ -7,7 +7,7 @@
 #include "HFRTriggers.h"
 #include "AiObject.h"
 #include "AiObjectContext.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 
 // Watchkeeper Gargolmar
 
@@ -43,7 +43,7 @@ bool OmorTankHasTreacheryAuraTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    Player* tank = GetGroupMainTank(botAI, bot);
+    Player* tank = EncounterHelpers::GetGroupMainTank(bot);
     if (!tank)
         return false;
 

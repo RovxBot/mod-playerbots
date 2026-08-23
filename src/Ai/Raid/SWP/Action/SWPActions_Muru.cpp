@@ -9,7 +9,7 @@
 #include "CharmInfo.h"
 #include "CreatureAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "TargetValue.h"
 #include <array>
 #include <cmath>
@@ -26,13 +26,13 @@ bool MuruMisdirectEnemiesToTanksAction::Execute(Event /*event*/)
     if (Unit* voidSentinel = AI_VALUE2(Unit*, "find target", "void sentinel"))
     {
         targetEnemy = voidSentinel;
-        if (Player* firstAssistTank = GetGroupAssistTank(botAI, bot, 0))
+        if (Player* firstAssistTank = EncounterHelpers::GetGroupAssistTank(bot, 0))
             targetTank = firstAssistTank;
     }
     else if (Unit* entropius = AI_VALUE2(Unit*, "find target", "entropius"))
     {
         targetEnemy = entropius;
-        if (Player* mainTank = GetGroupMainTank(botAI, bot))
+        if (Player* mainTank = EncounterHelpers::GetGroupMainTank(bot))
             targetTank = mainTank;
     }
 
@@ -108,7 +108,7 @@ bool MuruPositionRangedAction::Execute(Event /*event*/)
 
     constexpr float safeDistFromPlayer = 4.0f;
     constexpr uint32 minInterval = 1000;
-    if (Player* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistFromPlayer))
+    if (Player* nearestPlayer = EncounterHelpers::GetNearestPlayerInRadius(bot, safeDistFromPlayer))
         return FleePosition(nearestPlayer->GetPosition(), safeDistFromPlayer, minInterval);
 
     return false;

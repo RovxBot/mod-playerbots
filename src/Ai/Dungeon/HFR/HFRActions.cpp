@@ -6,7 +6,7 @@
 #include "Playerbots.h"
 #include "HFRTriggers.h"
 #include "HFRActions.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 
 constexpr uint32 HFR_MAP_ID = 543;
 
@@ -20,8 +20,8 @@ bool GargolmarMarkHellfireWatchersAction::Execute(Event /*event*/)
     if (!watcher)
         return false;
 
-    if (IsMechanicTrackerBot(bot, HFR_MAP_ID))
-        MarkTargetWithSkull(bot, watcher);
+    if (EncounterHelpers::IsMechanicTrackerBot(bot, HFR_MAP_ID))
+        EncounterHelpers::MarkTargetWithSkull(bot, watcher);
 
     return false;
 }
@@ -33,7 +33,7 @@ bool OmorTreacheryAuraFleeFromPlayersAction::Execute(Event /*event*/)
 {
     constexpr float safeDistance = 15.0f;
     constexpr float buffer = 3.0f;
-    if (GetNearestPlayerInRadius(bot, safeDistance))
+    if (EncounterHelpers::GetNearestPlayerInRadius(bot, safeDistance))
     {
         botAI->InterruptSpell();
         return MoveFromGroup(safeDistance + buffer);
@@ -47,7 +47,7 @@ bool OmorRangedSpreadAction::Execute(Event /*event*/)
 {
     constexpr float minDistance = 15.0f;
 
-    if (Unit* nearestPlayer = GetNearestPlayerInRadius(bot, minDistance))
+    if (Unit* nearestPlayer = EncounterHelpers::GetNearestPlayerInRadius(bot, minDistance))
         return FleePosition(nearestPlayer->GetPosition(), minDistance);
 
     return false;
@@ -60,10 +60,10 @@ bool OmorMarkFiendishHoundAction::Execute(Event /*event*/)
     if (!hound)
         return false;
 
-    if (IsMechanicTrackerBot(bot, HFR_MAP_ID))
-        MarkTargetWithSkull(bot, hound);
+    if (EncounterHelpers::IsMechanicTrackerBot(bot, HFR_MAP_ID))
+        EncounterHelpers::MarkTargetWithSkull(bot, hound);
 
-    SetRtiTarget(botAI, "skull", hound);
+    EncounterHelpers::SetRtiTarget(botAI, "skull");
 
     return false;
 }
@@ -71,7 +71,7 @@ bool OmorMarkFiendishHoundAction::Execute(Event /*event*/)
 // Nearby bots should flee 15 yards from the tank if it has Treacherous Aura or Bane of Treachery
 bool OmorTreacheryAuraFleeFromTankAction::Execute(Event /*event*/)
 {
-    Player* tank = GetGroupMainTank(botAI, bot);
+    Player* tank = EncounterHelpers::GetGroupMainTank(bot);
     if (!tank)
         return false;
 
@@ -129,8 +129,8 @@ bool VazrudenMarkBossAction::Execute(Event /*event*/)
     if (!vaz)
         return false;
 
-    if (IsMechanicTrackerBot(bot, HFR_MAP_ID))
-        MarkTargetWithSkull(bot, vaz);
+    if (EncounterHelpers::IsMechanicTrackerBot(bot, HFR_MAP_ID))
+        EncounterHelpers::MarkTargetWithSkull(bot, vaz);
 
     return false;
 }

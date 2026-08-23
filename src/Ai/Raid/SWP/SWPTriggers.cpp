@@ -6,7 +6,7 @@
 
 #include "SWPTriggers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SWPEncounter_Brut.h"
 #include "SWPEncounter_Felmyst.h"
 #include "SWPEncounter_Kalec.h"
@@ -238,7 +238,7 @@ bool FelmystPullingBossTrigger::IsActive()
     if (felmyst->IsFlying())
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
     if (mainTank && felmyst->GetVictim() != mainTank)
         return true;
 
@@ -276,7 +276,7 @@ bool FelmystBossEngagedByRangedOnGroundTrigger::IsActive()
         return false;
 
     // On initial landing, let MT get aggro before trying to line up
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
     if (mainTank && felmyst->GetVictim() != mainTank && felmyst->GetHealthPct() > 90.0f)
         return false;
 
@@ -414,7 +414,7 @@ bool FelmystPlayerIsCharmedByFogTrigger::IsActive()
 
 bool FelmystShouldHoldDpsWhileLandingTrigger::IsActive()
 {
-    return IsMechanicTrackerBot(bot, SWP_MAP_ID) && AI_VALUE2(Unit*, "find target", "felmyst");
+    return EncounterHelpers::IsMechanicTrackerBot(bot, SWP_MAP_ID) && AI_VALUE2(Unit*, "find target", "felmyst");
 }
 
 // Eredar Twins
@@ -713,7 +713,7 @@ bool MuruWarlockHasEnslavedVoidSpawnTrigger::IsActive()
 
 bool KiljaedenEncounterHasBegunTrigger::IsActive()
 {
-    return IsMechanicTrackerBot(bot, SWP_MAP_ID) &&
+    return EncounterHelpers::IsMechanicTrackerBot(bot, SWP_MAP_ID) &&
         AI_VALUE2(Unit*, "find target", "hand of the deceiver");
 }
 

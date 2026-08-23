@@ -8,7 +8,7 @@
 #include "SWPEncounter_Kalec.h"
 #include "Playerbots.h"
 #include "PlayerbotTextMgr.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "TargetValue.h"
 #include <algorithm>
 #include <map>
@@ -185,7 +185,7 @@ bool KalecgosDisperseRangedAction::Execute(Event /*event*/)
     }
 
     constexpr float safeDistFromPlayer = 6.0f;
-    if (Player* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistFromPlayer))
+    if (Player* nearestPlayer = EncounterHelpers::GetNearestPlayerInRadius(bot, safeDistFromPlayer))
     {
         constexpr uint32 minInterval = 1000;
         return FleePosition(nearestPlayer->GetPosition(), safeDistFromPlayer, minInterval);

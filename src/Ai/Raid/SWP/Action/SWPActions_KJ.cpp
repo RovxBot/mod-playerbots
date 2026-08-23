@@ -8,7 +8,7 @@
 #include "SWPEncounter_KJ.h"
 #include "Playerbots.h"
 #include "PlayerbotTextMgr.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include <map>
 #include <vector>
 
@@ -51,9 +51,9 @@ bool KiljaedenAnnounceDragonOrbUserAction::Execute(Event /*event*/)
 
 bool KiljaedenMarkAndPrioritizeHandsOfTheDeceiverAction::Execute(Event /*event*/)
 {
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* firstAssistTank = GetGroupAssistTank(botAI, bot, 0);
-    Player* secondAssistTank = GetGroupAssistTank(botAI, bot, 1);
+    Player* mainTank = EncounterHelpers::GetGroupMainTank(bot);
+    Player* firstAssistTank = EncounterHelpers::GetGroupAssistTank(bot, 0);
+    Player* secondAssistTank = EncounterHelpers::GetGroupAssistTank(bot, 1);
     if (!mainTank || !GET_PLAYERBOT_AI(mainTank) ||
         !firstAssistTank || !GET_PLAYERBOT_AI(firstAssistTank) ||
         !secondAssistTank || !GET_PLAYERBOT_AI(secondAssistTank))
@@ -75,7 +75,7 @@ bool KiljaedenMarkAndPrioritizeHandsOfTheDeceiverAction::Execute(Event /*event*/
     if (hands.empty())
         return false;
 
-    if (IsMechanicTrackerBot(bot, SWP_MAP_ID))
+    if (EncounterHelpers::IsMechanicTrackerBot(bot, SWP_MAP_ID))
     {
         Unit* focusHand = hands[0];
         for (Unit* hand : hands)
@@ -84,7 +84,7 @@ bool KiljaedenMarkAndPrioritizeHandsOfTheDeceiverAction::Execute(Event /*event*/
                 focusHand = hand;
         }
 
-        if (MarkTargetWithSkull(bot, focusHand))
+        if (EncounterHelpers::MarkTargetWithSkull(bot, focusHand))
             return true;
     }
 
