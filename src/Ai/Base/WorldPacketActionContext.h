@@ -41,6 +41,7 @@
 #include "TalkToQuestGiverAction.h"
 #include "TellCastFailedAction.h"
 #include "TellMasterAction.h"
+#include "TierTokenAction.h"
 #include "TradeStatusAction.h"
 #include "TradeStatusExtendedAction.h"
 #include "UseMeetingStoneAction.h"
@@ -75,6 +76,7 @@ public:
         creators["self resurrect"] = &WorldPacketActionContext::self_resurrect;
         creators["pet"] = &WorldPacketActionContext::pet;
         creators["equip upgrades packet action"] = &WorldPacketActionContext::equip_upgrades_packet_action;
+        creators["convert tier token"] = &WorldPacketActionContext::convert_tier_token;
 
         // quest
         creators["talk to quest giver"] = &WorldPacketActionContext::turn_in_quest;
@@ -169,6 +171,7 @@ private:
 
     static Action* loot_roll(PlayerbotAI* botAI) { return new LootRollAction(botAI); }
     static Action* master_loot_roll(PlayerbotAI* botAI) { return new MasterLootRollAction(botAI); }
+    static Action* convert_tier_token(PlayerbotAI* botAI) { return new ConvertTierTokenAction(botAI); }
     static Action* bg_join(PlayerbotAI* botAI) { return new BGJoinAction(botAI); }
     static Action* bg_leave(PlayerbotAI* botAI) { return new BGLeaveAction(botAI); }
     static Action* bg_status(PlayerbotAI* botAI) { return new BGStatusAction(botAI); }
