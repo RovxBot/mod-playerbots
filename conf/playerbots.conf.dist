@@ -284,6 +284,11 @@ AiPlayerbot.RandomBotShowCloak = 1
 # Default: 1 (enabled)
 AiPlayerbot.AutoEquipUpgradeLoot = 1
 
+# Converts awarded, non-stackable epic raid tier tokens into the class/spec-appropriate tier-set item
+# that the token purchases from a vendor. This applies only to loot awards, never traded or created tokens.
+# Default: 1 (enabled)
+AiPlayerbot.AutoConvertTierTokens = 1
+
 # Threshold for auto equipping upgrades
 # Default: 1.1 (Equip when the equipment score of the new item is 1.1 times higher than the currently equipped item)
 AiPlayerbot.EquipUpgradeThreshold = 1.1

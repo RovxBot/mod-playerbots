@@ -46,15 +46,15 @@ bool HasAnySpell(Player* player, uint32 const (&spellIds)[Size])
     return false;
 }
 
-StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
+StatsWeightCalculator::StatsWeightCalculator(Player* player, bool selectBySpec) : player_(player)
 {
-    if (PlayerbotAI::IsHeal(player))
+    if (PlayerbotAI::IsHeal(player, selectBySpec))
         type_ = CollectorType::SPELL_HEAL;
-    else if (PlayerbotAI::IsCaster(player))
+    else if (PlayerbotAI::IsCaster(player, selectBySpec))
         type_ = CollectorType::SPELL_DMG;
-    else if (PlayerbotAI::IsTank(player))
+    else if (PlayerbotAI::IsTank(player, selectBySpec))
         type_ = CollectorType::MELEE_TANK;
-    else if (PlayerbotAI::IsMelee(player))
+    else if (PlayerbotAI::IsMelee(player, selectBySpec))
         type_ = CollectorType::MELEE_DMG;
     else
         type_ = CollectorType::RANGED;

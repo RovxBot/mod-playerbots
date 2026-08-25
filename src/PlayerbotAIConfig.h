@@ -379,6 +379,7 @@ public:
     bool lootRollDisenchant;
     std::string autoPickReward;
     bool autoEquipUpgradeLoot;
+    bool autoConvertTierTokens;
     float equipUpgradeThreshold;
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
