@@ -35,7 +35,7 @@ bool OmorTreacheryAuraFleeFromPlayersAction::Execute(Event /*event*/)
     constexpr float buffer = 3.0f;
     if (EncounterHelpers::GetNearestPlayerInRadius(bot, safeDistance))
     {
-        botAI->InterruptSpell();
+        bot->CastStop();
         return MoveFromGroup(safeDistance + buffer);
     }
 
@@ -80,7 +80,7 @@ bool OmorTreacheryAuraFleeFromTankAction::Execute(Event /*event*/)
 
     if (bot->GetDistance2d(tank) < safeDistance)
     {
-        botAI->InterruptSpell();
+        bot->CastStop();
         return MoveAway(tank, safeDistance + buffer);
     }
 
