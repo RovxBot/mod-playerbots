@@ -12,6 +12,7 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
+#include "LootMgr.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
@@ -124,48 +125,17 @@ void RestoreToken(Player* bot, uint32 tokenId)
     if (Item* token = bot->StoreNewItem(dest, tokenId, true))
         bot->SendNewItem(token, 1, false, false);
 }
-}  // namespace
 
-bool ConvertTierTokenAction::Execute(Event event)
+bool ConvertTierToken(Player* bot, Item* token)
 {
-    if (!sPlayerbotAIConfig.autoConvertTierTokens || event.GetSource() != "item push result")
-        return false;
-
-    WorldPacket packet(event.getPacket());
-    packet.rpos(0);
-
-    ObjectGuid owner;
-    uint32 received;
-    uint32 created;
-    uint32 sendChatMessage;
-    uint8 bag;
-    uint32 slot;
-    uint32 tokenId;
-
-    packet >> owner;
-    packet >> received;
-    packet >> created;
-    packet >> sendChatMessage;
-    packet >> bag;
-    packet >> slot;
-    packet >> tokenId;
-
-    // Loot awards are sent with received == 0 and created == 0. Limiting conversion to this case
-    // prevents a traded, vendor-bought, crafted, or GM-created token from being consumed.
-    if (owner != bot->GetGUID() || received != 0 || created != 0 || slot == uint32(-1))
-        return false;
-
-    Item* token = bot->GetItemByPos(bag, uint8(slot));
-    if (!token || token->GetEntry() != tokenId || !IsTierToken(token->GetTemplate()))
-        return false;
-
+    uint32 const tokenId = token->GetEntry();
     uint32 rewardId = SelectTierReward(bot, tokenId);
     if (!rewardId || bot->CanTakeMoreSimilarItems(rewardId, 1) != EQUIP_ERR_OK)
         return false;
 
     // Removing the non-stackable token first frees a bag slot. CanStoreNewItem below must therefore
     // succeed unless an unexpected inventory rule rejects the selected reward.
-    bot->DestroyItem(bag, uint8(slot), true);
+    bot->DestroyItem(token->GetBagSlot(), token->GetSlot(), true);
 
     ItemPosCountVec dest;
     if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, rewardId, 1) != EQUIP_ERR_OK)
@@ -188,4 +158,60 @@ bool ConvertTierTokenAction::Execute(Event event)
     bot->SendNewItem(reward, 1, false, false);
     LOG_DEBUG("playerbots", "Converted tier token {} into reward {} for bot {}", tokenId, rewardId, bot->GetName());
     return true;
+}
+}  // namespace
+
+bool ConvertTierTokenAction::Execute(Event event)
+{
+    if (!sPlayerbotAIConfig.autoConvertTierTokens)
+        return false;
+
+    WorldPacket packet(event.getPacket());
+    packet.rpos(0);
+
+    Item* token = nullptr;
+    uint32 tokenId = 0;
+    if (event.GetSource() == "item push result")
+    {
+        ObjectGuid owner;
+        uint32 received;
+        uint32 created;
+        uint32 sendChatMessage;
+        uint8 bag;
+        uint32 slot;
+
+        packet >> owner >> received >> created >> sendChatMessage >> bag >> slot >> tokenId;
+
+        // Loot awards are sent with received == 0 and created == 0. Limiting conversion to this case
+        // prevents a traded, vendor-bought, crafted, or GM-created token from being consumed.
+        if (owner != bot->GetGUID() || received != 0 || created != 0 || slot == uint32(-1))
+            return false;
+
+        token = bot->GetItemByPos(bag, uint8(slot));
+    }
+    else if (event.GetSource() == "loot roll won")
+    {
+        ObjectGuid source;
+        uint32 lootSlot;
+        uint32 itemSuffix;
+        uint32 itemProperty;
+        ObjectGuid winner;
+        uint8 rollNumber;
+        uint8 rollType;
+
+        packet >> source >> lootSlot >> tokenId >> itemSuffix >> itemProperty >> winner >> rollNumber >> rollType;
+        if (winner != bot->GetGUID() || (rollType != ROLL_NEED && rollType != ROLL_GREED))
+            return false;
+
+        // Group-roll rewards do not send SMSG_ITEM_PUSH_RESULT. The bot AI handles this packet on its
+        // next update, after the reward has been stored, so locate the newly awarded non-stackable token.
+        token = bot->GetItemByEntry(tokenId);
+    }
+    else
+        return false;
+
+    if (!token || token->GetEntry() != tokenId || !IsTierToken(token->GetTemplate()))
+        return false;
+
+    return ConvertTierToken(bot, token);
 }
