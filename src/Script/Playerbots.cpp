@@ -571,7 +571,6 @@ void AddPlayerbotsSelfBotAfkScripts();
 void AddSC_MagtheridonBotScripts();
 void AddSC_TempestKeepBotScripts();
 void AddSC_HyjalBotScripts();
-void AddSC_SunwellPlateauBotScripts();
 void AddSC_IcecrownBotScripts();
 void AddSC_RubySanctumBotScripts();
 void AddSC_randombot_level_mgr();
@@ -593,7 +592,6 @@ void AddPlayerbotsScripts()
     AddSC_MagtheridonBotScripts();
     AddSC_TempestKeepBotScripts();
     AddSC_HyjalBotScripts();
-    AddSC_SunwellPlateauBotScripts();
     AddSC_IcecrownBotScripts();
     AddSC_RubySanctumBotScripts();
     AddSC_randombot_level_mgr();
