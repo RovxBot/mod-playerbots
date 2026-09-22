@@ -21,18 +21,30 @@ bool GuildBankAction::Execute(Event event)
         return false;
     }
 
-    GuidVector gos = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
-    for (GuidVector::iterator i = gos.begin(); i != gos.end(); ++i)
-    {
-        GameObject* go = botAI->GetGameObject(*i);
-        if (!go || !bot->GetGameObjectIfCanInteractWith(go->GetGUID(), GAMEOBJECT_TYPE_GUILD_BANK))
-            continue;
-
-        return Execute(text, go);
-    }
+    if (GameObject* bank = GetNearbyGuildBank())
+        return Execute(text, bank);
 
     botAI->TellMaster("Cannot find the guild bank nearby");
     return false;
+}
+
+GameObject* GuildBankAction::GetNearbyGuildBank() const
+{
+    GuidVector const gos = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = botAI->GetGameObject(guid);
+        if (go && bot->GetGameObjectIfCanInteractWith(go->GetGUID(), GAMEOBJECT_TYPE_GUILD_BANK))
+            return go;
+    }
+
+    return nullptr;
+}
+
+bool GuildBankAction::CanDepositToFirstTab() const
+{
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    return guild && guild->MemberHasTabRights(bot->GetGUID(), 0, GUILD_BANK_RIGHT_DEPOSIT_ITEM);
 }
 
 bool GuildBankAction::Execute(std::string const text, GameObject* bank)
@@ -53,10 +65,15 @@ bool GuildBankAction::Execute(std::string const text, GameObject* bank)
     return result;
 }
 
-bool GuildBankAction::MoveFromCharToBank(Item* item, GameObject* /*bank*/)
+bool GuildBankAction::MoveFromCharToBank(Item* item, GameObject* bank, bool report)
 {
+    if (!item || !bank || !bot->GetGameObjectIfCanInteractWith(bank->GetGUID(), GAMEOBJECT_TYPE_GUILD_BANK))
+        return false;
+
     uint32 playerSlot = item->GetSlot();
     uint32 playerBag = item->GetBagSlot();
+    ObjectGuid const itemGuid = item->GetGUID();
+    std::string const itemText = chat->FormatItem(item->GetTemplate());
 
     std::ostringstream out;
 
@@ -64,16 +81,25 @@ bool GuildBankAction::MoveFromCharToBank(Item* item, GameObject* /*bank*/)
     // guild->SwapItems(bot, 0, playerSlot, 0, INVENTORY_SLOT_BAG_0, 0);
 
     // check source pos rights (item moved to bank)
-    if (!guild->MemberHasTabRights(bot->GetGUID(), 0, GUILD_BANK_RIGHT_DEPOSIT_ITEM))
-        out << "I can't put " << chat->FormatItem(item->GetTemplate())
+    if (!guild || !guild->MemberHasTabRights(bot->GetGUID(), 0, GUILD_BANK_RIGHT_DEPOSIT_ITEM))
+        out << "I can't put " << itemText
             << " to guild bank. I have no rights to put items in the first guild bank tab";
     else
     {
-        out << chat->FormatItem(item->GetTemplate()) << " put to guild bank";
         guild->SwapItemsWithInventory(bot, false, 0, 255, playerBag, playerSlot, 0);
     }
 
-    botAI->TellMaster(out);
+    Item* sourceItem = bot->GetItemByPos(playerBag, playerSlot);
+    bool const moved = !sourceItem || sourceItem->GetGUID() != itemGuid;
+    if (report)
+    {
+        if (moved)
+            out << itemText << " put to guild bank";
+        else
+            out << "I can't put " << itemText << " to guild bank";
 
-    return true;
+        botAI->TellMaster(out);
+    }
+
+    return moved;
 }

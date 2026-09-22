@@ -34,14 +34,14 @@ std::unordered_map<uint32, time_t> attumenDpsWaitTimer;
 Unit* GetAttumenMounted(Player* bot)
 {
     constexpr float searchRadius = 50.0f;
-    return bot->FindNearestCreature(Id(KaraNpcs::NPC_ATTUMEN_THE_HUNTSMAN), searchRadius, true);
+    return bot->FindNearestCreature(KaraId(KaraNpcs::NPC_ATTUMEN_THE_HUNTSMAN), searchRadius, true);
 }
 
 // Shade of Aran
 
 bool IsAranCastingArcaneExplosion(Unit* aran)
 {
-    return aran && aran->FindCurrentSpellBySpellId(Id(KaraSpells::SPELL_ARCANE_EXPLOSION));
+    return aran && aran->FindCurrentSpellBySpellId(KaraId(KaraSpells::SPELL_ARCANE_EXPLOSION));
 }
 
 bool IsFlameWreathActive(Player* bot)
@@ -53,7 +53,7 @@ bool IsFlameWreathActive(Player* bot)
     if (!aran)
         return false;
 
-    if (aran->FindCurrentSpellBySpellId(Id(KaraSpells::SPELL_FLAME_WREATH_CAST)))
+    if (aran->FindCurrentSpellBySpellId(KaraId(KaraSpells::SPELL_FLAME_WREATH_CAST)))
         return true;
 
     Group* group = bot->GetGroup();
@@ -66,7 +66,7 @@ bool IsFlameWreathActive(Player* bot)
         if (!member || !member->IsAlive())
             continue;
 
-        if (member->HasAura(Id(KaraSpells::SPELL_FLAME_WREATH_AURA)))
+        if (member->HasAura(KaraId(KaraSpells::SPELL_FLAME_WREATH_AURA)))
             return true;
     }
 
@@ -82,7 +82,7 @@ std::unordered_map<uint32, ObjectGuid> currentBlueBlocker;
 
 bool IsBanishPhase(Unit* netherspite)
 {
-    return netherspite && netherspite->HasAura(Id(KaraSpells::SPELL_NETHERSPITE_BANISHED));
+    return netherspite && netherspite->HasAura(KaraId(KaraSpells::SPELL_NETHERSPITE_BANISHED));
 }
 
 // Red beam blockers: tank bots, no Nether Exhaustion Red
@@ -103,7 +103,7 @@ std::vector<Player*> GetRedBlockers(Player* bot)
             continue;
         }
 
-        if (!member->HasAura(Id(KaraSpells::SPELL_NETHER_EXHAUSTION_RED)))
+        if (!member->HasAura(KaraId(KaraSpells::SPELL_NETHER_EXHAUSTION_RED)))
             redBlockers.push_back(member);
     }
 
@@ -132,10 +132,10 @@ std::vector<Player*> GetBlueBlockers(Player* bot)
             continue;
         }
 
-        if (member->HasAura(Id(KaraSpells::SPELL_NETHER_EXHAUSTION_BLUE)))
+        if (member->HasAura(KaraId(KaraSpells::SPELL_NETHER_EXHAUSTION_BLUE)))
             continue;
 
-        Aura* blueBuff = member->GetAura(Id(KaraSpells::SPELL_BLUE_BEAM_DEBUFF));
+        Aura* blueBuff = member->GetAura(KaraId(KaraSpells::SPELL_BLUE_BEAM_DEBUFF));
         if (!blueBuff || blueBuff->GetStackAmount() < 25)
             blueBlockers.push_back(member);
     }
@@ -166,7 +166,7 @@ std::vector<Player*> GetGreenBlockers(Player* bot)
             continue;
         }
 
-        if (!member->HasAura(Id(KaraSpells::SPELL_NETHER_EXHAUSTION_GREEN)))
+        if (!member->HasAura(KaraId(KaraSpells::SPELL_NETHER_EXHAUSTION_GREEN)))
             greenBlockers.push_back(member);
     }
 
@@ -179,10 +179,10 @@ std::vector<Player*> GetGreenBlockers(Player* bot)
         if (!GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsHeal(member))
             continue;
 
-        if (member->HasAura(Id(KaraSpells::SPELL_NETHER_EXHAUSTION_GREEN)))
+        if (member->HasAura(KaraId(KaraSpells::SPELL_NETHER_EXHAUSTION_GREEN)))
             continue;
 
-        Aura* greenBuff = member->GetAura(Id(KaraSpells::SPELL_GREEN_BEAM_DEBUFF));
+        Aura* greenBuff = member->GetAura(KaraId(KaraSpells::SPELL_GREEN_BEAM_DEBUFF));
         if (!greenBuff || greenBuff->GetStackAmount() < 25)
         {
             greenBlockers.push_back(member);
@@ -271,7 +271,7 @@ std::vector<Unit*> GetAllVoidZones(Player* bot)
     std::list<Creature*> creatureList;
     constexpr float searchRadius = 30.0f;
 
-    bot->GetCreatureListWithEntryInGrid(creatureList, Id(KaraNpcs::NPC_VOID_ZONE), searchRadius);
+    bot->GetCreatureListWithEntryInGrid(creatureList, KaraId(KaraNpcs::NPC_VOID_ZONE), searchRadius);
 
     for (Creature* creature : creatureList)
     {
@@ -338,7 +338,7 @@ std::vector<Unit*> GetSpawnedInfernals(Player* bot)
     constexpr float searchRadius = 100.0f;
 
     bot->GetCreatureListWithEntryInGrid(
-        creatureList, Id(KaraNpcs::NPC_NETHERSPITE_INFERNAL), searchRadius);
+        creatureList, KaraId(KaraNpcs::NPC_NETHERSPITE_INFERNAL), searchRadius);
 
     for (Creature* creature : creatureList)
     {

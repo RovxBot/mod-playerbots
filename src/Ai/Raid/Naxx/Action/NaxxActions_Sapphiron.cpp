@@ -74,7 +74,8 @@ bool SapphironFlightPositionAction::MoveToNearestIcebolt()
     Group* group = bot->GetGroup();
     if (!group)
         return false;
-
+    uint8 requiredIceboltCount = (bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL) ? 3 : 2;
+    uint8 iceboltCount = 0;
     Player* playerWithIcebolt = nullptr;
     float minDistance;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -83,6 +84,7 @@ bool SapphironFlightPositionAction::MoveToNearestIcebolt()
         if (NaxxSpellIds::HasAnyAura(member, {NaxxSpellIds::Icebolt10, NaxxSpellIds::Icebolt25}) ||
             botAI->HasAura("icebolt", member, false, false, -1, true))
         {
+            ++iceboltCount;
             if (!playerWithIcebolt || minDistance > bot->GetDistance(member))
             {
                 playerWithIcebolt = member;
@@ -90,6 +92,10 @@ bool SapphironFlightPositionAction::MoveToNearestIcebolt()
             }
         }
     }
+
+    if (iceboltCount < requiredIceboltCount)
+        return false;
+
     if (playerWithIcebolt)
     {
         Unit* boss = AI_VALUE2(Unit*, "find target", "sapphiron");
@@ -98,6 +104,15 @@ bool SapphironFlightPositionAction::MoveToNearestIcebolt()
             float angle = boss->GetAngle(playerWithIcebolt);
             float posX = playerWithIcebolt->GetPositionX() + cos(angle) * 3.0f;
             float posY = playerWithIcebolt->GetPositionY() + sin(angle) * 3.0f;
+            float distToSafePoint = bot->GetExactDist2d(posX, posY);
+            if (distToSafePoint < 1.0f)
+            {
+                if (botAI->IsRanged(bot))
+                {
+                    return false;
+                }
+                return true;
+            }
             if (MoveTo(NAXX_MAP_ID, posX, posY, helper.GENERIC_HEIGHT, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
                 return true;
 

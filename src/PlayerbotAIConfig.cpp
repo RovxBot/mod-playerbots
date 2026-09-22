@@ -193,6 +193,10 @@ bool PlayerbotAIConfig::Initialize()
     LoadList<std::vector<uint32>>(randomBotMapsAsString, randomBotMaps);
     probTeleToBankers = sConfigMgr->GetOption<float>("AiPlayerbot.ProbTeleToBankers", 0.25f);
     enableWeightTeleToCityBankers = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableWeightTeleToCityBankers", false);
+    enableRandomBotGuildBankDeposits =
+        sConfigMgr->GetOption<bool>("AiPlayerbot.EnableRandomBotGuildBankDeposits", true);
+    randomBotGuildBankDepositCooldown =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.RandomBotGuildBankDepositCooldown", 4 * HOUR);
     weightTeleToStormwind = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToStormwindWeight", 2);
     weightTeleToIronforge = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToIronforgeWeight", 1);
     weightTeleToDarnassus = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToDarnassusWeight", 1);
@@ -710,6 +714,7 @@ bool PlayerbotAIConfig::Initialize()
     lootGreedRollLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.LootGreedRollLevel", false);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
+    autoConvertTierTokens = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoConvertTierTokens", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);

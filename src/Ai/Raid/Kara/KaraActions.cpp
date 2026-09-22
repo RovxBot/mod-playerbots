@@ -107,13 +107,13 @@ bool KarazhanCastFearProtectionSpellAction::Execute(Event /*event*/)
 bool KarazhanCastFearProtectionSpellAction::CastFearWardOnMainTank()
 {
     Player* mainTank = GetGroupMainTank(bot);
-    if (!mainTank || mainTank->HasAura(Id(KaraSpells::SPELL_FEAR_WARD)))
+    if (!mainTank || mainTank->HasAura(KaraId(KaraSpells::SPELL_FEAR_WARD)))
         return false;
 
-    if (!botAI->CanCastSpell(Id(KaraSpells::SPELL_FEAR_WARD), mainTank))
+    if (!botAI->CanCastSpell(KaraId(KaraSpells::SPELL_FEAR_WARD), mainTank))
         return false;
 
-    return botAI->CastSpell(Id(KaraSpells::SPELL_FEAR_WARD), mainTank);
+    return botAI->CastSpell(KaraId(KaraSpells::SPELL_FEAR_WARD), mainTank);
 }
 
 bool KarazhanCastFearProtectionSpellAction::SetTremorTotem()
@@ -125,10 +125,10 @@ bool KarazhanCastFearProtectionSpellAction::SetTremorTotem()
     if (AI_VALUE2(bool, "has totem", "tremor totem"))
         return false;
 
-    if (!botAI->CanCastSpell(Id(KaraSpells::SPELL_TREMOR_TOTEM), bot))
+    if (!botAI->CanCastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot))
         return false;
 
-    return botAI->CastSpell(Id(KaraSpells::SPELL_TREMOR_TOTEM), bot);
+    return botAI->CastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot);
 }
 
 // Trash
@@ -138,7 +138,7 @@ bool ManaWarpStunCreatureBeforeWarpBreachAction::Execute(Event /*event*/)
     Unit* target = nullptr;
     constexpr float searchRadius = 40.0f;
     std::list<Creature*> manaWarps;
-    bot->GetCreatureListWithEntryInGrid(manaWarps, Id(KaraNpcs::NPC_MANA_WARP), searchRadius);
+    bot->GetCreatureListWithEntryInGrid(manaWarps, KaraId(KaraNpcs::NPC_MANA_WARP), searchRadius);
 
     for (Creature* manaWarp : manaWarps)
     {
@@ -325,7 +325,7 @@ bool MaidenOfVirtueTankPositionBossAction::Execute(Event /*event*/)
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !PlayerbotAI::IsHeal(member) ||
-            !member->HasAura(Id(KaraSpells::SPELL_REPENTANCE)))
+            !member->HasAura(KaraId(KaraSpells::SPELL_REPENTANCE)))
         {
             continue;
         }
@@ -415,8 +415,8 @@ bool MaidenOfVirtuePositionRangedBetweenPillarsAction::Execute(Event /*event*/)
 
 bool MaidenOfVirtueSetGroundingTotemAction::Execute(Event /*event*/)
 {
-    return botAI->CanCastSpell(Id(KaraSpells::SPELL_GROUNDING_TOTEM), bot) &&
-        botAI->CastSpell(Id(KaraSpells::SPELL_GROUNDING_TOTEM), bot);
+    return botAI->CanCastSpell(KaraId(KaraSpells::SPELL_GROUNDING_TOTEM), bot) &&
+        botAI->CastSpell(KaraId(KaraSpells::SPELL_GROUNDING_TOTEM), bot);
 }
 
 // The Big Bad Wolf
@@ -637,7 +637,7 @@ bool ShadeOfAranMarkConjuredElementalAction::Execute(Event /*event*/)
     constexpr float searchRadius = 75.0f;
 
     bot->GetCreatureListWithEntryInGrid(
-        creatureList, Id(KaraNpcs::NPC_CONJURED_ELEMENTAL), searchRadius);
+        creatureList, KaraId(KaraNpcs::NPC_CONJURED_ELEMENTAL), searchRadius);
 
     for (Creature* elemental : creatureList)
     {
@@ -677,7 +677,7 @@ bool ShadeOfAranRangedMaintainDistanceAction::Execute(Event /*event*/)
 bool NetherspiteBlockRedBeamAction::Execute(Event /*event*/)
 {
     constexpr float searchRadius = 150.0f;
-    Unit* redPortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_RED_PORTAL), searchRadius);
+    Unit* redPortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_RED_PORTAL), searchRadius);
     if (!redPortal)
         return false;
 
@@ -690,7 +690,7 @@ bool NetherspiteBlockRedBeamAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (bot->HasAura(Id(KaraSpells::SPELL_RED_BEAM_DEBUFF)))
+    if (bot->HasAura(KaraId(KaraSpells::SPELL_RED_BEAM_DEBUFF)))
     {
         if (!_redBeamTimerWasSet)
         {
@@ -757,7 +757,7 @@ bool NetherspiteBlockRedBeamAction::Execute(Event /*event*/)
 bool NetherspiteBlockBlueBeamAction::Execute(Event /*event*/)
 {
     constexpr float searchRadius = 150.0f;
-    Unit* bluePortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_BLUE_PORTAL), searchRadius);
+    Unit* bluePortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_BLUE_PORTAL), searchRadius);
     if (!bluePortal)
         return false;
 
@@ -809,7 +809,7 @@ bool NetherspiteBlockBlueBeamAction::Execute(Event /*event*/)
 bool NetherspiteBlockGreenBeamAction::Execute(Event /*event*/)
 {
     constexpr float searchRadius = 150.0f;
-    Unit* greenPortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_GREEN_PORTAL), searchRadius);
+    Unit* greenPortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_GREEN_PORTAL), searchRadius);
     if (!greenPortal)
         return false;
 
@@ -873,7 +873,7 @@ bool NetherspiteAvoidBeamAndVoidZoneAction::Execute(Event /*event*/)
     float const bossY = netherspite->GetPositionY();
     std::vector<BeamAvoid> beams;
 
-    if (Unit* redPortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_RED_PORTAL), searchRadius))
+    if (Unit* redPortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_RED_PORTAL), searchRadius))
     {
         float const len = netherspite->GetExactDist2d(redPortal);
         beams.push_back({0.0f, len,
@@ -881,7 +881,7 @@ bool NetherspiteAvoidBeamAndVoidZoneAction::Execute(Event /*event*/)
             len > 0.0f ? (redPortal->GetPositionY() - bossY) / len : 0.0f});
     }
 
-    if (Unit* bluePortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_BLUE_PORTAL), searchRadius))
+    if (Unit* bluePortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_BLUE_PORTAL), searchRadius))
     {
         float const len = netherspite->GetExactDist2d(bluePortal);
         beams.push_back({0.0f, len,
@@ -889,7 +889,7 @@ bool NetherspiteAvoidBeamAndVoidZoneAction::Execute(Event /*event*/)
             len > 0.0f ? (bluePortal->GetPositionY() - bossY) / len : 0.0f});
     }
 
-    if (Unit* greenPortal = bot->FindNearestCreature(Id(KaraNpcs::NPC_GREEN_PORTAL), searchRadius))
+    if (Unit* greenPortal = bot->FindNearestCreature(KaraId(KaraNpcs::NPC_GREEN_PORTAL), searchRadius))
     {
         float const len = netherspite->GetExactDist2d(greenPortal);
         beams.push_back({0.0f, len,
@@ -985,7 +985,7 @@ bool NetherspiteBanishPhaseAvoidVoidZoneAction::Execute(Event /*event*/)
 
     for (Unit* voidZone : voidZones)
     {
-        if (voidZone->GetEntry() == Id(KaraNpcs::NPC_VOID_ZONE) &&
+        if (voidZone->GetEntry() == KaraId(KaraNpcs::NPC_VOID_ZONE) &&
             bot->GetExactDist2d(voidZone) < safeDistance)
         {
             return FleePosition(voidZone->GetPosition(), safeDistance);
@@ -1123,7 +1123,7 @@ bool PrinceMalchezaarNonTankAvoidInfernalAction::Execute(Event /*event*/)
 
     constexpr float safeInfernalDistance = 22.0f;
     if (!bot->FindNearestCreature(
-            Id(KaraNpcs::NPC_NETHERSPITE_INFERNAL), safeInfernalDistance, true))
+            KaraId(KaraNpcs::NPC_NETHERSPITE_INFERNAL), safeInfernalDistance, true))
     {
         return false;
     }
@@ -1164,7 +1164,7 @@ bool PrinceMalchezaarTanksPositionBossAction::Execute(Event /*event*/)
 
     constexpr float safeInfernalDistance = 30.0f;
     if (!bot->FindNearestCreature(
-            Id(KaraNpcs::NPC_NETHERSPITE_INFERNAL), safeInfernalDistance, true))
+            KaraId(KaraNpcs::NPC_NETHERSPITE_INFERNAL), safeInfernalDistance, true))
     {
         return false;
     }
@@ -1324,7 +1324,7 @@ bool NightbaneGroundPhaseCoordinateRangedMovementAction::MoveRangedLeaderToSafeS
     constexpr float minBossDist = 15.0f;
 
     std::vector<Position> charredEarths = GetDynamicObjectPositions(
-        bot, searchRadius, Id(KaraSpells::SPELL_CHARRED_EARTH));
+        bot, searchRadius, KaraId(KaraSpells::SPELL_CHARRED_EARTH));
 
     if (charredEarths.empty())
     {
@@ -1478,7 +1478,7 @@ bool NightbaneFlightPhaseStackAndMoveAction::Execute(Event /*event*/)
         bot->CastStop();
     }
 
-    if (bot->HasAura(Id(KaraSpells::SPELL_RAIN_OF_BONES)))
+    if (bot->HasAura(KaraId(KaraSpells::SPELL_RAIN_OF_BONES)))
         _rainOfBonesHit = true;
 
     auto const& posArray = _rainOfBonesHit ?
@@ -1489,7 +1489,7 @@ bool NightbaneFlightPhaseStackAndMoveAction::Execute(Event /*event*/)
     constexpr float searchRadius = 40.0f;
     constexpr float charredEarthSafeDist = 12.0f;
     std::vector<Position> charredEarths = GetDynamicObjectPositions(
-        bot, searchRadius, Id(KaraSpells::SPELL_CHARRED_EARTH));
+        bot, searchRadius, KaraId(KaraSpells::SPELL_CHARRED_EARTH));
 
     for (uint8 i = 0; i < 2; i++)
     {
