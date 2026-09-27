@@ -16,13 +16,17 @@ class PlayerbotAI;
 class GuildBankAction : public InventoryAction
 {
 public:
-    GuildBankAction(PlayerbotAI* botAI) : InventoryAction(botAI, "guild bank") {}
+    GuildBankAction(PlayerbotAI* botAI, std::string const name = "guild bank") : InventoryAction(botAI, name) {}
 
     bool Execute(Event event) override;
 
+protected:
+    GameObject* GetNearbyGuildBank() const;
+    bool CanDepositToFirstTab() const;
+    bool MoveFromCharToBank(Item* item, GameObject* bank, bool report = true);
+
 private:
     bool Execute(std::string const text, GameObject* bank);
-    bool MoveFromCharToBank(Item* item, GameObject* bank);
 };
 
 #endif

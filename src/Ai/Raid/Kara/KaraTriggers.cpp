@@ -115,12 +115,12 @@ bool BigBadWolfBossEngagedByTankTrigger::IsActive()
     if (!AI_VALUE2(Unit*, "find target", "the big bad wolf"))
         return false;
 
-    return !bot->HasAura(Id(KaraSpells::SPELL_LITTLE_RED_RIDING_HOOD));
+    return !bot->HasAura(KaraId(KaraSpells::SPELL_LITTLE_RED_RIDING_HOOD));
 }
 
 bool BigBadWolfBossIsChasingLittleRedRidingHoodTrigger::IsActive()
 {
-    return bot->HasAura(Id(KaraSpells::SPELL_LITTLE_RED_RIDING_HOOD));
+    return bot->HasAura(KaraId(KaraSpells::SPELL_LITTLE_RED_RIDING_HOOD));
 }
 
 // Romulo and Julianne
@@ -208,7 +208,7 @@ bool ShadeOfAranBossCastsCounterspellNearbyTrigger::IsActive()
     if (!aran)
         return false;
 
-    if (bot->HasAura(Id(KaraSpells::SPELL_BLIZZARD)))
+    if (bot->HasAura(KaraId(KaraSpells::SPELL_BLIZZARD)))
         return false;
 
     return !IsAranCastingArcaneExplosion(aran) && !IsFlameWreathActive(bot);
@@ -223,7 +223,7 @@ bool NetherspiteRedBeamIsActiveTrigger::IsActive()
         return false;
 
     constexpr float searchRadius = 150.0f;
-    return bot->FindNearestCreature(Id(KaraNpcs::NPC_RED_PORTAL), searchRadius);
+    return bot->FindNearestCreature(KaraId(KaraNpcs::NPC_RED_PORTAL), searchRadius);
 }
 
 bool NetherspiteBlueBeamIsActiveTrigger::IsActive()
@@ -233,7 +233,7 @@ bool NetherspiteBlueBeamIsActiveTrigger::IsActive()
         return false;
 
     constexpr float searchRadius = 150.0f;
-    return bot->FindNearestCreature(Id(KaraNpcs::NPC_BLUE_PORTAL), searchRadius);
+    return bot->FindNearestCreature(KaraId(KaraNpcs::NPC_BLUE_PORTAL), searchRadius);
 }
 
 bool NetherspiteGreenBeamIsActiveTrigger::IsActive()
@@ -243,7 +243,7 @@ bool NetherspiteGreenBeamIsActiveTrigger::IsActive()
         return false;
 
     constexpr float searchRadius = 150.0f;
-    return bot->FindNearestCreature(Id(KaraNpcs::NPC_GREEN_PORTAL), searchRadius);
+    return bot->FindNearestCreature(KaraId(KaraNpcs::NPC_GREEN_PORTAL), searchRadius);
 }
 
 bool NetherspiteBotIsNotBeamBlockerTrigger::IsActive()
@@ -271,7 +271,7 @@ bool NetherspiteShouldManageTimersAndTrackersTrigger::IsActive()
 
 bool PrinceMalchezaarBotIsEnfeebledTrigger::IsActive()
 {
-    return bot->HasAura(Id(KaraSpells::SPELL_ENFEEBLE));
+    return bot->HasAura(KaraId(KaraSpells::SPELL_ENFEEBLE));
 }
 
 bool PrinceMalchezaarEngagedByNonTanksTrigger::IsActive()
@@ -280,7 +280,7 @@ bool PrinceMalchezaarEngagedByNonTanksTrigger::IsActive()
     if (!malchezaar)
         return false;
 
-    if (bot->HasAura(Id(KaraSpells::SPELL_ENFEEBLE)))
+    if (bot->HasAura(KaraId(KaraSpells::SPELL_ENFEEBLE)))
         return false;
 
     if ((PlayerbotAI::IsTank(bot) && malchezaar->GetVictim() == bot) ||

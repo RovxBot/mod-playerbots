@@ -1722,6 +1722,9 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
         case 578:
             strategyName = "wotlk-occ";  // The Oculus
             break;
+        case 580:
+            strategyName = "sunwell";  // Sunwell Plateau
+            break;
         case 585:
             strategyName = "tbc-mgt";  // Magisters' Terrace
             break;

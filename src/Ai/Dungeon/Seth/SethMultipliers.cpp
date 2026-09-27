@@ -46,7 +46,7 @@ float AnzuControlSpellCastingWithSpellBombMultiplier::GetValue(Action* action)
     if (bot->getPowerType() != POWER_MANA || PlayerbotAI::IsTank(bot))
         return 1.0f;
 
-    if (!bot->HasAura(Id(SethSpells::SPELL_SPELL_BOMB)))
+    if (!bot->HasAura(SethId(SethSpells::SPELL_SPELL_BOMB)))
         return 1.0f;
 
     if (PlayerbotAI::IsDps(bot))
@@ -110,5 +110,8 @@ float TalonKingIkissControlMovementMultiplier::GetValue(Action* action)
     if (isAlwaysDisabled)
         return 0.0f;
 
-    return ikiss->HasAura(Id(SethSpells::SPELL_ARCANE_BUBBLE)) ? 0.0f : 1.0f;
+    if (!ikiss->HasAura(SethId(SethSpells::SPELL_ARCANE_BUBBLE)))
+        return 1.0f;
+
+    return 0.0f;
 }
