@@ -134,7 +134,7 @@ ItemUsage ItemUsageValue::Calculate()
     if (isLootFromItem && botNeedsItemForQuest)
         return ITEM_USAGE_QUEST;
 
-    // If this is not a selfbot acting alone and the master needs this quest item, defer to the master
+    // If this is not a SelfBot acting alone and the master needs this quest item, defer to the master
     if (!IsSelfBot(bot) && masterNeedsItemForQuest)
         return ITEM_USAGE_NONE;
 
@@ -482,6 +482,12 @@ bool ItemUsageValue::IsItemUsefulForQuest(Player* player, ItemTemplate const* pr
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
     if (!botAI)
         return false;
+
+    // Core loot gating predicate: also covers quest source items (ItemDrop,
+    // e.g. quest keys). The local objective check below is kept because this
+    // predicate skips non-raid quests for raid groups.
+    if (player->HasQuestForItem(proto->ItemId))
+        return true;
 
     for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
     {

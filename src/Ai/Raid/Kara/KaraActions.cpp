@@ -96,7 +96,7 @@ bool KarazhanResetEncounterStatesAction::Execute(Event /*event*/)
     return reset;
 }
 
-bool KarazhanCastFearProtectionSpellAction::Execute(Event /*event*/)
+bool KarazhanSetTremorTotemAction::Execute(Event /*event*/)
 {
     if (bot->getClass() == CLASS_PRIEST)
         return CastFearWardOnMainTank();

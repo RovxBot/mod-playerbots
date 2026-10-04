@@ -11,6 +11,7 @@
 #include "CharacterCache.h"
 #include "CharacterPackets.h"
 #include "Common.h"
+#include "Containers.h"
 #include "DatabaseEnv.h"
 #include "Define.h"
 #include "Group.h"
@@ -1100,16 +1101,19 @@ std::vector<std::string> PlayerbotHolder::HandlePlayerbotCommand(char const* arg
     {
         if (GET_PLAYERBOT_AI(master))
         {
-            messages.push_back("Disable player botAI");
+            messages.push_back("SelfBot is now deactivated.");
             delete GET_PLAYERBOT_AI(master);
+
+            if (master->isTaxiCheater())
+                master->SetTaxiCheater(false);
         }
         else if (sPlayerbotAIConfig.selfBotLevel == 0)
-            messages.push_back("Self-bot is disabled");
+            messages.push_back("SelfBot is disabled server-wide.");
         else if (sPlayerbotAIConfig.selfBotLevel == 1 && !master->CanBeGameMaster())
-            messages.push_back("You do not have permission to enable player botAI");
+            messages.push_back("SelfBot is restricted for this account.");
         else
         {
-            messages.push_back("Enable player botAI");
+            messages.push_back("SelfBot is now active.");
             PlayerbotsMgr::instance().AddPlayerbotData(master, true);
             GET_PLAYERBOT_AI(master)->SetMaster(master);
             PlayerbotRepository::instance().Load(GET_PLAYERBOT_AI(master));
@@ -1208,23 +1212,46 @@ std::vector<std::string> PlayerbotHolder::HandlePlayerbotCommand(char const* arg
         }
         uint8 teamId = master->GetTeamId(true);
         std::unordered_set<ObjectGuid> const& guidCache = sRandomPlayerbotMgr.addclassCache[RandomPlayerbotMgr::GetTeamClassIdx(teamId == TEAM_ALLIANCE, claz)];
-        for (ObjectGuid const& guid: guidCache)
+        auto const pickFirstEligible = [&](auto const& pool) -> ObjectGuid
         {
-            // If the user requested a specific gender, skip any character that doesn't match.
-            if (gender != -1 && GetOfflinePlayerGender(guid) != gender)
-                continue;
-            if (botLoading.find(guid) != botLoading.end())
-                continue;
-            if (ObjectAccessor::FindConnectedPlayer(guid))
-                continue;
-            uint32 guildId = sCharacterCache->GetCharacterGuildIdByGuid(guid);
-            if (guildId && PlayerbotGuildMgr::instance().IsRealGuild(guildId))
-                continue;
-            AddPlayerBot(guid, master->GetSession()->GetAccountId());
-            messages.push_back("Add class " + std::string(charname));
+            for (ObjectGuid const& guid : pool)
+            {
+                // If the user requested a specific gender, skip any character that doesn't match.
+                if (gender != -1 && GetOfflinePlayerGender(guid) != gender)
+                    continue;
+                if (botLoading.find(guid) != botLoading.end())
+                    continue;
+                if (ObjectAccessor::FindConnectedPlayer(guid))
+                    continue;
+                uint32 guildId = sCharacterCache->GetCharacterGuildIdByGuid(guid);
+                if (guildId && PlayerbotGuildMgr::instance().IsRealGuild(guildId))
+                    continue;
+                return guid;
+            }
+            return ObjectGuid::Empty;
+        };
+
+        // The cache is an unordered_set: its iteration order does not change between calls, so the first
+        // eligible character is always the same one. Walk a shuffled copy when a random one is wanted,
+        // and the cache itself otherwise, so the default path copies nothing.
+        ObjectGuid picked = ObjectGuid::Empty;
+        if (sPlayerbotAIConfig.addClassRandomCharacter)
+        {
+            std::vector<ObjectGuid> candidates(guidCache.begin(), guidCache.end());
+            Acore::Containers::RandomShuffle(candidates);
+            picked = pickFirstEligible(candidates);
+        }
+        else
+            picked = pickFirstEligible(guidCache);
+
+        if (picked.IsEmpty())
+        {
+            messages.push_back("Add class failed, no available characters!");
             return messages;
         }
-        messages.push_back("Add class failed, no available characters!");
+
+        AddPlayerBot(picked, master->GetSession()->GetAccountId());
+        messages.push_back("Add class " + std::string(charname));
         return messages;
     }
 
