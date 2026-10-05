@@ -5,23 +5,31 @@
  */
 
 #include "SSCHelpers.h"
-#include "EncounterHelpers.h"
-#include "Map.h"
-#include "PathGenerator.h"
-#include "Random.h"
-#include "RtiTargetValue.h"
-#include "ObjectAccessor.h"
-#include "Playerbots.h"
+
 #include <algorithm>
 #include <cmath>
 #include <list>
 #include <string>
 #include <utility>
 
+#include "EncounterHelpers.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
+#include "PathGenerator.h"
+#include "Playerbots.h"
+#include "Random.h"
+#include "RtiTargetValue.h"
+
 using namespace EncounterHelpers;
 
 namespace SscHelpers
 {
+
+std::recursive_mutex& GetEncounterStateMutex()
+{
+    static std::recursive_mutex mutex;
+    return mutex;
+}
 
 namespace
 {
@@ -38,7 +46,7 @@ std::vector<Position> const& GetCachedHazardPositions(PlayerbotAI* botAI, std::s
     return botAI->GetAiObjectContext()->GetValue<std::vector<Position>>(value)->RefGet();
 }
 
-} // end anonymous namespace
+}  // end anonymous namespace
 
 // General
 
@@ -83,8 +91,7 @@ bool CastTankTaunt(PlayerbotAI* botAI, Unit* target)
     return botAI->CanCastSpell(taunt, target) && botAI->CastSpell(taunt, target);
 }
 
-bool FindHazardEscapeStep(
-    Player* bot, Position const& hazard, float moveDist, float& stepX, float& stepY, float& stepZ)
+bool FindHazardEscapeStep(Player* bot, Position const& hazard, float moveDist, float& stepX, float& stepY, float& stepZ)
 {
     float const botX = bot->GetPositionX();
     float const botY = bot->GetPositionY();
@@ -127,33 +134,29 @@ bool IsDryGround(Player* bot, float x, float y)
     if (ground <= INVALID_HEIGHT)
         return false;
 
-    LiquidData const liquid = bot->GetMap()->GetLiquidData(
-        bot->GetPhaseMask(), x, y, bot->GetPositionZ(), bot->GetCollisionHeight(), {});
+    LiquidData const liquid =
+        bot->GetMap()->GetLiquidData(bot->GetPhaseMask(), x, y, bot->GetPositionZ(), bot->GetCollisionHeight(), {});
 
     constexpr float clearance = 0.5f;
     return liquid.Level <= INVALID_HEIGHT || ground > liquid.Level - clearance;
 }
 
-bool GetPathStepTowardUnit(
-    Player* bot, Unit* target, float stopDistance, float& stepX, float& stepY)
+bool GetPathStepTowardUnit(Player* bot, Unit* target, float stopDistance, float& stepX, float& stepY)
 {
     if (!target)
         return false;
 
-    return GetPathStepTowardPoint(
-        bot, target->GetPosition(), stopDistance, PATH_STEP_DISTANCE, stepX, stepY);
+    return GetPathStepTowardPoint(bot, target->GetPosition(), stopDistance, PATH_STEP_DISTANCE, stepX, stepY);
 }
 
-bool GetPathStepTowardPoint(
-    Player* bot, Position const& destination, float stopDistance, float stepDistance,
-    float& stepX, float& stepY)
+bool GetPathStepTowardPoint(Player* bot, Position const& destination, float stopDistance, float stepDistance,
+                            float& stepX, float& stepY)
 {
     if (bot->GetExactDist(destination) < stopDistance)
         return false;
 
     PathGenerator path(bot);
-    path.CalculatePath(
-        destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
+    path.CalculatePath(destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
     if (!(path.GetPathType() & (PATHFIND_NORMAL | PATHFIND_INCOMPLETE | PATHFIND_SHORTCUT)))
         return false;
 
@@ -161,8 +164,7 @@ bool GetPathStepTowardPoint(
     if (points.size() < 2)
         return false;
 
-    G3D::Vector3 const targetPos(
-        destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
+    G3D::Vector3 const targetPos(destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
 
     float remaining = stepDistance;
     for (std::size_t i = 1; i < points.size(); ++i)
@@ -213,8 +215,7 @@ bool GetRangedArcAngle(Player* bot, float arcCenter, float arcSpan, float& angle
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member->GetMapId() != SSC_MAP_ID || !GET_PLAYERBOT_AI(member) ||
-            !PlayerbotAI::IsRanged(member))
+        if (!member || member->GetMapId() != SSC_MAP_ID || !GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsRanged(member))
         {
             continue;
         }
@@ -228,8 +229,9 @@ bool GetRangedArcAngle(Player* bot, float arcCenter, float arcSpan, float& angle
     if (count == 0)
         return false;
 
-    angle = count == 1 ? arcCenter : arcCenter - arcSpan / 2.0f +
-        arcSpan * static_cast<float>(botIndex) / static_cast<float>(count - 1);
+    angle = count == 1
+                ? arcCenter
+                : arcCenter - arcSpan / 2.0f + arcSpan * static_cast<float>(botIndex) / static_cast<float>(count - 1);
     return true;
 }
 
@@ -254,38 +256,30 @@ std::vector<Unit*> GetOtherLivingGroupMembers(Player* bot)
 
 bool GetToxicPoolPosition(PlayerbotAI* botAI, Position& toxicPool)
 {
-    std::vector<Position> const& positions =
-        GetCachedHazardPositions(botAI, "ssc toxic pool");
+    std::vector<Position> const& positions = GetCachedHazardPositions(botAI, "ssc toxic pool");
     if (positions.empty())
         return false;
 
     Player* bot = botAI->GetBot();
-    toxicPool = *std::min_element(positions.begin(), positions.end(),
-        [bot](Position const& a, Position const& b)
-        {
-            return bot->GetExactDist2d(a) < bot->GetExactDist2d(b);
-        });
+    toxicPool = *std::min_element(positions.begin(), positions.end(), [bot](Position const& a, Position const& b)
+                                  { return bot->GetExactDist2d(a) < bot->GetExactDist2d(b); });
     return true;
 }
 
 bool IsNearToxicPool(PlayerbotAI* botAI, float radius)
 {
     Position toxicPool;
-    return GetToxicPoolPosition(botAI, toxicPool) &&
-        botAI->GetBot()->GetExactDist2d(toxicPool) < radius;
+    return GetToxicPoolPosition(botAI, toxicPool) && botAI->GetBot()->GetExactDist2d(toxicPool) < radius;
 }
 
 ObjectGuid FindWaterElementalTotemGuid(Player* bot)
 {
-    Creature* totem = bot->FindNearestCreature(
-        Id(SscNpcs::NPC_WATER_ELEMENTAL_TOTEM), WATER_ELEMENTAL_TOTEM_SEARCH_DISTANCE);
+    Creature* totem =
+        bot->FindNearestCreature(Id(SscNpcs::NPC_WATER_ELEMENTAL_TOTEM), WATER_ELEMENTAL_TOTEM_SEARCH_DISTANCE);
     return totem ? totem->GetGUID() : ObjectGuid::Empty;
 }
 
-Creature* GetWaterElementalTotem(PlayerbotAI* botAI)
-{
-    return GetCachedCreature(botAI, "ssc water elemental totem");
-}
+Creature* GetWaterElementalTotem(PlayerbotAI* botAI) { return GetCachedCreature(botAI, "ssc water elemental totem"); }
 
 bool IsSkullOnWaterElementalTotem(PlayerbotAI* botAI)
 {
@@ -308,25 +302,13 @@ std::unordered_map<uint32, uint32> hydrossNaturePhaseStartTime;
 std::unordered_map<uint32, uint32> hydrossNatureMarkMaxedTime;
 std::unordered_map<uint32, uint32> hydrossFrostMarkMaxedTime;
 
-bool IsHydrossFrostTank(Player* bot)
-{
-    return PlayerbotAI::IsTank(bot) && PlayerbotAI::IsMainTank(bot);
-}
+bool IsHydrossFrostTank(Player* bot) { return PlayerbotAI::IsTank(bot) && PlayerbotAI::IsMainTank(bot); }
 
-bool IsHydrossNatureTank(Player* bot)
-{
-    return PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
-}
+bool IsHydrossNatureTank(Player* bot) { return PlayerbotAI::IsAssistTankOfIndex(bot, 0, true); }
 
-bool IsHydrossPhaseTank(Player* bot)
-{
-    return IsHydrossFrostTank(bot) || IsHydrossNatureTank(bot);
-}
+bool IsHydrossPhaseTank(Player* bot) { return IsHydrossFrostTank(bot) || IsHydrossNatureTank(bot); }
 
-bool IsHydrossAddTank(Player* bot)
-{
-    return PlayerbotAI::IsTank(bot) && !IsHydrossPhaseTank(bot);
-}
+bool IsHydrossAddTank(Player* bot) { return PlayerbotAI::IsTank(bot) && !IsHydrossPhaseTank(bot); }
 
 bool IsHydrossInFrostPhase(Unit* hydross)
 {
@@ -340,6 +322,8 @@ bool IsHydrossInNaturePhase(Unit* hydross)
 
 HydrossDpsHoldWindow GetHydrossDpsHoldWindow(Unit* hydross)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!hydross)
         return HydrossDpsHoldWindow::None;
 
@@ -355,15 +339,13 @@ HydrossDpsHoldWindow GetHydrossDpsHoldWindow(Unit* hydross)
     constexpr uint32 phaseStartWaitMs = 5 * IN_MILLISECONDS;
 
     auto itMarkMaxed = markMaxedTimes.find(instanceId);
-    if (itMarkMaxed != markMaxedTimes.end() &&
-        getMSTimeDiff(itMarkMaxed->second, now) >= handOverWaitMs)
+    if (itMarkMaxed != markMaxedTimes.end() && getMSTimeDiff(itMarkMaxed->second, now) >= handOverWaitMs)
     {
         return HydrossDpsHoldWindow::BeforePhaseChange;
     }
 
     auto itStart = phaseStartTimes.find(instanceId);
-    if (itStart == phaseStartTimes.end() ||
-        getMSTimeDiff(itStart->second, now) < phaseStartWaitMs)
+    if (itStart == phaseStartTimes.end() || getMSTimeDiff(itStart->second, now) < phaseStartWaitMs)
     {
         return HydrossDpsHoldWindow::AfterPhaseChange;
     }
@@ -374,8 +356,7 @@ HydrossDpsHoldWindow GetHydrossDpsHoldWindow(Unit* hydross)
 Position GetHydrossHandoffPosition(bool frostTank)
 {
     Position const& own = frostTank ? HYDROSS_FROST_TANK_POSITION : HYDROSS_NATURE_TANK_POSITION;
-    Position const& other =
-        frostTank ? HYDROSS_NATURE_TANK_POSITION : HYDROSS_FROST_TANK_POSITION;
+    Position const& other = frostTank ? HYDROSS_NATURE_TANK_POSITION : HYDROSS_FROST_TANK_POSITION;
 
     float const dx = other.GetPositionX() - own.GetPositionX();
     float const dy = other.GetPositionY() - own.GetPositionY();
@@ -388,8 +369,7 @@ Position GetHydrossHandoffPosition(bool frostTank)
     float const offX = own.GetPositionX() - HYDROSS_CLEANSING_FIELD_CENTER.GetPositionX();
     float const offY = own.GetPositionY() - HYDROSS_CLEANSING_FIELD_CENTER.GetPositionY();
     float const b = offX * dirX + offY * dirY;
-    float const c = offX * offX + offY * offY -
-        HYDROSS_CLEANSING_FIELD_RADIUS * HYDROSS_CLEANSING_FIELD_RADIUS;
+    float const c = offX * offX + offY * offY - HYDROSS_CLEANSING_FIELD_RADIUS * HYDROSS_CLEANSING_FIELD_RADIUS;
     float const discriminant = b * b - c;
     if (discriminant < 0.0f)
         return own;
@@ -400,8 +380,7 @@ Position GetHydrossHandoffPosition(bool frostTank)
     if (distance <= 0.0f || toEdge > length)
         return own;
 
-    return Position(own.GetPositionX() + dirX * distance, own.GetPositionY() + dirY * distance,
-        own.GetPositionZ());
+    return Position(own.GetPositionX() + dirX * distance, own.GetPositionY() + dirY * distance, own.GetPositionZ());
 }
 
 bool HasMarkOfHydrossAt100Percent(Player* player)
@@ -410,18 +389,18 @@ bool HasMarkOfHydrossAt100Percent(Player* player)
         return false;
 
     return player->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_100)) ||
-        player->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_250)) ||
-        player->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_500));
+           player->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_250)) ||
+           player->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_500));
 }
 
 bool HasNoMarkOfHydross(Player* bot)
 {
     return !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_10)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_25)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_50)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_100)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_250)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_500));
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_25)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_50)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_100)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_250)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_HYDROSS_500));
 }
 
 bool HasMarkOfCorruptionAt100Percent(Player* player)
@@ -430,24 +409,23 @@ bool HasMarkOfCorruptionAt100Percent(Player* player)
         return false;
 
     return player->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_100)) ||
-        player->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_250)) ||
-        player->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_500));
+           player->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_250)) ||
+           player->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_500));
 }
 
 bool HasNoMarkOfCorruption(Player* bot)
 {
     return !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_10)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_25)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_50)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_100)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_250)) &&
-        !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_500));
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_25)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_50)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_100)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_250)) &&
+           !bot->HasAura(Id(SscSpells::SPELL_MARK_OF_CORRUPTION_500));
 }
 
 // The Lurker Below
 
-std::unordered_map<uint32, std::array<ObjectGuid, LURKER_GUARDIAN_TANK_COUNT>>
-    lurkerGuardianTankAssignments;
+std::unordered_map<uint32, std::array<ObjectGuid, LURKER_GUARDIAN_TANK_COUNT>> lurkerGuardianTankAssignments;
 
 bool IsLurkerSpouting(Unit* lurker)
 {
@@ -457,8 +435,7 @@ bool IsLurkerSpouting(Unit* lurker)
 
 bool IsLurkerSurfacedAndCalm(Unit* lurker)
 {
-    return lurker && lurker->getStandState() != UNIT_STAND_STATE_SUBMERGED &&
-        !IsLurkerSpouting(lurker);
+    return lurker && lurker->getStandState() != UNIT_STAND_STATE_SUBMERGED && !IsLurkerSpouting(lurker);
 }
 
 bool DoesPathRoundLurker(Player* bot, Unit* lurker, float x, float y, float z, int8 direction)
@@ -474,10 +451,8 @@ bool DoesPathRoundLurker(Player* bot, Unit* lurker, float x, float y, float z, i
     if (points.size() < 2)
         return false;
 
-    float const startAngle = std::atan2(
-        points[0].y - lurker->GetPositionY(), points[0].x - lurker->GetPositionX());
-    float const cornerAngle = std::atan2(
-        points[1].y - lurker->GetPositionY(), points[1].x - lurker->GetPositionX());
+    float const startAngle = std::atan2(points[0].y - lurker->GetPositionY(), points[0].x - lurker->GetPositionX());
+    float const cornerAngle = std::atan2(points[1].y - lurker->GetPositionY(), points[1].x - lurker->GetPositionX());
     float delta = Position::NormalizeOrientation(cornerAngle - startAngle);
     if (delta > M_PI)
         delta -= 2.0f * static_cast<float>(M_PI);
@@ -522,8 +497,7 @@ GuidVector FindLurkerGuardianGuids(Player* bot)
     GuidVector guids;
 
     std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(
-        creatures, Id(SscNpcs::NPC_COILFANG_GUARDIAN), LURKER_GUARDIAN_SEARCH_RADIUS);
+    bot->GetCreatureListWithEntryInGrid(creatures, Id(SscNpcs::NPC_COILFANG_GUARDIAN), LURKER_GUARDIAN_SEARCH_RADIUS);
 
     for (Creature* creature : creatures)
     {
@@ -540,8 +514,7 @@ std::vector<Unit*> GetLurkerGuardians(PlayerbotAI* botAI)
 {
     std::vector<Unit*> guardians;
 
-    for (auto const& guid :
-         botAI->GetAiObjectContext()->GetValue<GuidVector>("ssc lurker guardians")->RefGet())
+    for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("ssc lurker guardians")->RefGet())
     {
         Unit* guardian = botAI->GetUnit(guid);
         if (guardian && guardian->IsAlive())
@@ -553,8 +526,7 @@ std::vector<Unit*> GetLurkerGuardians(PlayerbotAI* botAI)
 
 GuidVector FindLurkerGuardianTankGuids(Player* bot)
 {
-    std::array const tanks = {
-        GetGroupMainTank(bot), GetGroupAssistTank(bot, 0), GetGroupAssistTank(bot, 1) };
+    std::array const tanks = {GetGroupMainTank(bot), GetGroupAssistTank(bot, 0), GetGroupAssistTank(bot, 1)};
     static_assert(std::tuple_size_v<decltype(tanks)> == LURKER_GUARDIAN_TANK_COUNT);
 
     GuidVector guids;
@@ -571,8 +543,7 @@ GuidVector FindLurkerGuardianTankGuids(Player* bot)
 
 int8 GetLurkerGuardianTankIndex(PlayerbotAI* botAI)
 {
-    auto const& tanks = botAI->GetAiObjectContext()
-        ->GetValue<GuidVector>("ssc lurker guardian tanks")->RefGet();
+    auto const& tanks = botAI->GetAiObjectContext()->GetValue<GuidVector>("ssc lurker guardian tanks")->RefGet();
     ObjectGuid const guid = botAI->GetBot()->GetGUID();
     for (size_t i = 0; i < tanks.size(); ++i)
     {
@@ -592,7 +563,7 @@ bool ShouldGoToLurkerWalkway(Player* bot, Unit* lurker, Unit* target)
         return true;
 
     return target->GetEntry() == Id(SscNpcs::NPC_COILFANG_GUARDIAN) &&
-        bot->GetExactDist2d(lurker) > LURKER_ISLET_DISTANCE;
+           bot->GetExactDist2d(lurker) > LURKER_ISLET_DISTANCE;
 }
 
 // Leotheras the Blind
@@ -604,22 +575,17 @@ std::unordered_map<uint32, uint32> leotherasFinalPhaseStartTime;
 
 ObjectGuid FindLeotherasGuid(Player* bot)
 {
-    Creature* leotheras =
-        bot->FindNearestCreature(Id(SscNpcs::NPC_LEOTHERAS_THE_BLIND), LEOTHERAS_SEARCH_DISTANCE);
+    Creature* leotheras = bot->FindNearestCreature(Id(SscNpcs::NPC_LEOTHERAS_THE_BLIND), LEOTHERAS_SEARCH_DISTANCE);
     return leotheras ? leotheras->GetGUID() : ObjectGuid::Empty;
 }
 
 ObjectGuid FindShadowOfLeotherasGuid(Player* bot)
 {
-    Creature* shadow =
-        bot->FindNearestCreature(Id(SscNpcs::NPC_SHADOW_OF_LEOTHERAS), LEOTHERAS_SEARCH_DISTANCE);
+    Creature* shadow = bot->FindNearestCreature(Id(SscNpcs::NPC_SHADOW_OF_LEOTHERAS), LEOTHERAS_SEARCH_DISTANCE);
     return shadow ? shadow->GetGUID() : ObjectGuid::Empty;
 }
 
-Creature* GetLeotheras(PlayerbotAI* botAI)
-{
-    return GetCachedCreature(botAI, "ssc leotheras");
-}
+Creature* GetLeotheras(PlayerbotAI* botAI) { return GetCachedCreature(botAI, "ssc leotheras"); }
 
 bool IsSpellbinderPhase(Unit* leotheras)
 {
@@ -652,20 +618,11 @@ Creature* GetLeotherasDemon(PlayerbotAI* botAI)
     return nullptr;
 }
 
-bool IsLeotherasDemonPhase(PlayerbotAI* botAI)
-{
-    return GetLeotherasDemon(botAI);
-}
+bool IsLeotherasDemonPhase(PlayerbotAI* botAI) { return GetLeotherasDemon(botAI); }
 
-Creature* GetShadowOfLeotheras(PlayerbotAI* botAI)
-{
-    return GetCachedCreature(botAI, "ssc shadow of leotheras");
-}
+Creature* GetShadowOfLeotheras(PlayerbotAI* botAI) { return GetCachedCreature(botAI, "ssc shadow of leotheras"); }
 
-bool IsLeotherasFinalPhase(PlayerbotAI* botAI)
-{
-    return GetShadowOfLeotheras(botAI);
-}
+bool IsLeotherasFinalPhase(PlayerbotAI* botAI) { return GetShadowOfLeotheras(botAI); }
 
 Creature* GetLeotherasDemonOrShadow(PlayerbotAI* botAI)
 {
@@ -688,8 +645,7 @@ Player* GetLeotherasWarlockTank(Player* bot)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK ||
-            member->GetMapId() != SSC_MAP_ID)
+        if (!member || !member->IsAlive() || member->getClass() != CLASS_WARLOCK || member->GetMapId() != SSC_MAP_ID)
         {
             continue;
         }
@@ -739,8 +695,7 @@ Unit* GetDemonTargetToAvoid(Player* bot, Unit* demon)
         return nullptr;
 
     Unit* demonVictim = demon->GetVictim();
-    if (!demonVictim || demonVictim == bot ||
-        bot->GetExactDist2d(demonVictim) >= LEOTHERAS_CHAOS_BLAST_SAFE_DISTANCE)
+    if (!demonVictim || demonVictim == bot || bot->GetExactDist2d(demonVictim) >= LEOTHERAS_CHAOS_BLAST_SAFE_DISTANCE)
     {
         return nullptr;
     }
@@ -759,8 +714,7 @@ Unit* GetChaosBlastTargetToAvoid(PlayerbotAI* botAI)
         return demonVictim;
 
     Player* warlockTank = GetLeotherasWarlockTank(bot);
-    if (warlockTank && warlockTank != bot &&
-        bot->GetExactDist2d(warlockTank) < LEOTHERAS_CHAOS_BLAST_SAFE_DISTANCE)
+    if (warlockTank && warlockTank != bot && bot->GetExactDist2d(warlockTank) < LEOTHERAS_CHAOS_BLAST_SAFE_DISTANCE)
     {
         return warlockTank;
     }
@@ -791,6 +745,8 @@ Unit* GetShadowTargetToSeparateFrom(PlayerbotAI* botAI)
 
 bool IsLeotherasDpsHoldActive(PlayerbotAI* botAI, Unit* leotheras)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!leotheras)
         return false;
 
@@ -843,8 +799,7 @@ bool IsLeotherasDpsHoldActive(PlayerbotAI* botAI, Unit* leotheras)
             return false;
 
         auto it = leotherasFinalPhaseStartTime.find(instanceId);
-        if (it == leotherasFinalPhaseStartTime.end() ||
-            getMSTimeDiff(it->second, now) < LEOTHERAS_FINAL_DPS_WAIT_MS)
+        if (it == leotherasFinalPhaseStartTime.end() || getMSTimeDiff(it->second, now) < LEOTHERAS_FINAL_DPS_WAIT_MS)
         {
             return true;
         }
@@ -861,10 +816,7 @@ bool HasTooManyChaosBlastStacks(Player* bot)
     return chaosBlast && chaosBlast->GetStackAmount() >= 5;
 }
 
-bool HasInnerDemon(Player* bot)
-{
-    return bot->HasAura(Id(SscSpells::SPELL_INSIDIOUS_WHISPER));
-}
+bool HasInnerDemon(Player* bot) { return bot->HasAura(Id(SscSpells::SPELL_INSIDIOUS_WHISPER)); }
 
 Creature* GetPersonalInnerDemon(PlayerbotAI* botAI)
 {
@@ -876,8 +828,7 @@ Creature* GetPersonalInnerDemon(PlayerbotAI* botAI)
     for (ObjectGuid const& guid : targets)
     {
         Creature* creature = botAI->GetCreature(guid);
-        if (creature && creature->GetEntry() == Id(SscNpcs::NPC_INNER_DEMON) &&
-            creature->GetSummonerGUID() == botGuid)
+        if (creature && creature->GetEntry() == Id(SscNpcs::NPC_INNER_DEMON) && creature->GetSummonerGUID() == botGuid)
         {
             innerDemon = creature;
             break;
@@ -893,23 +844,18 @@ std::unordered_map<uint32, uint32> karathressDpsWaitTimer;
 
 ObjectGuid FindSpitfireTotemGuid(Player* bot)
 {
-    Creature* totem =
-        bot->FindNearestCreature(Id(SscNpcs::NPC_SPITFIRE_TOTEM), SPITFIRE_TOTEM_SEARCH_DISTANCE);
+    Creature* totem = bot->FindNearestCreature(Id(SscNpcs::NPC_SPITFIRE_TOTEM), SPITFIRE_TOTEM_SEARCH_DISTANCE);
     return totem ? totem->GetGUID() : ObjectGuid::Empty;
 }
 
-Creature* GetSpitfireTotem(PlayerbotAI* botAI)
-{
-    return GetCachedCreature(botAI, "ssc spitfire totem");
-}
+Creature* GetSpitfireTotem(PlayerbotAI* botAI) { return GetCachedCreature(botAI, "ssc spitfire totem"); }
 
 bool ShouldAttackSpitfireTotem(Player* bot, Unit* totem)
 {
-    return totem && (PlayerbotAI::IsMelee(bot) ||
-        bot->GetDistance(totem) < SPITFIRE_TOTEM_RANGED_ATTACK_DISTANCE);
+    return totem && (PlayerbotAI::IsMelee(bot) || bot->GetDistance(totem) < SPITFIRE_TOTEM_RANGED_ATTACK_DISTANCE);
 }
 
-namespace // Karathress
+namespace  // Karathress
 {
 
 // GetGroupAssistTank does not allow dead tanks to be indexed, so this helper serves that purpose.
@@ -925,8 +871,7 @@ Player* GetCouncilTank(Player* bot, int8 assistTankIndex)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->IsAlive() &&
-            PlayerbotAI::IsAssistTankOfIndex(member, assistTankIndex, false))
+        if (member && member->IsAlive() && PlayerbotAI::IsAssistTankOfIndex(member, assistTankIndex, false))
         {
             return member;
         }
@@ -941,9 +886,9 @@ Unit* GetAssignedCouncilMember(PlayerbotAI* botAI)
     AiObjectContext* context = botAI->GetAiObjectContext();
     for (KarathressCouncilAssignment const& assignment : KARATHRESS_COUNCIL)
     {
-        bool const assigned = assignment.assistTankIndex < 0 ?
-            PlayerbotAI::IsMainTank(tank) :
-            PlayerbotAI::IsAssistTankOfIndex(tank, assignment.assistTankIndex, false);
+        bool const assigned = assignment.assistTankIndex < 0
+                                  ? PlayerbotAI::IsMainTank(tank)
+                                  : PlayerbotAI::IsAssistTankOfIndex(tank, assignment.assistTankIndex, false);
         if (assigned)
             return AI_VALUE2(Unit*, "find target", assignment.name);
     }
@@ -951,7 +896,7 @@ Unit* GetAssignedCouncilMember(PlayerbotAI* botAI)
     return nullptr;
 }
 
-} // end anonymous namespace (Karathress)
+}  // namespace
 
 bool IsHoldingAnotherTanksCouncilMember(PlayerbotAI* botAI, Unit* ownTarget)
 {
@@ -1042,20 +987,18 @@ Unit* GetSharkkisPet(Player* bot)
 Position GetTidewalkerStackPoint(Player const& bot, Unit const& tidewalker)
 {
     Unit* victim = tidewalker.GetVictim();
-    float const behindAngle = (victim ? tidewalker.GetAngle(victim) :
-        tidewalker.GetOrientation()) + static_cast<float>(M_PI);
-    float const behindDistance = bot.getClass() == CLASS_HUNTER ?
-        TIDEWALKER_HUNTER_BEHIND_DISTANCE : TIDEWALKER_RANGED_BEHIND_DISTANCE;
+    float const behindAngle =
+        (victim ? tidewalker.GetAngle(victim) : tidewalker.GetOrientation()) + static_cast<float>(M_PI);
+    float const behindDistance =
+        bot.getClass() == CLASS_HUNTER ? TIDEWALKER_HUNTER_BEHIND_DISTANCE : TIDEWALKER_RANGED_BEHIND_DISTANCE;
 
-    return Position(
-        tidewalker.GetPositionX() + std::cos(behindAngle) * behindDistance,
-        tidewalker.GetPositionY() + std::sin(behindAngle) * behindDistance,
-        tidewalker.GetPositionZ());
+    return Position(tidewalker.GetPositionX() + std::cos(behindAngle) * behindDistance,
+                    tidewalker.GetPositionY() + std::sin(behindAngle) * behindDistance, tidewalker.GetPositionZ());
 }
 
 // Lady Vashj <Coilfang Matron>
 
-namespace // Vashj
+namespace  // Vashj
 {
 
 // Even-odd ray cast in 2D.
@@ -1087,16 +1030,14 @@ float DistanceToPolygonOutline(float x, float y, std::array<Position, N> const& 
         float const dx = polygon[i].GetPositionX() - ax;
         float const dy = polygon[i].GetPositionY() - ay;
         float const lengthSq = dx * dx + dy * dy;
-        float const t = lengthSq > 0.0f ?
-            std::clamp(((x - ax) * dx + (y - ay) * dy) / lengthSq, 0.0f, 1.0f) : 0.0f;
+        float const t = lengthSq > 0.0f ? std::clamp(((x - ax) * dx + (y - ay) * dy) / lengthSq, 0.0f, 1.0f) : 0.0f;
         closest = std::min(closest, std::hypot(x - (ax + t * dx), y - (ay + t * dy)));
     }
 
     return closest;
 }
 
-float SegmentLengthInCircle(
-    Position const& a, Position const& b, Position const& center, float radius)
+float SegmentLengthInCircle(Position const& a, Position const& b, Position const& center, float radius)
 {
     float const dx = b.GetPositionX() - a.GetPositionX();
     float const dy = b.GetPositionY() - a.GetPositionY();
@@ -1117,18 +1058,15 @@ float SegmentLengthInCircle(
     return leave > enter ? (leave - enter) * std::sqrt(qa) : 0.0f;
 }
 
-bool IsVashjLineOnDais(
-    Position const& a, Position const& b, float margin, float rockClearance)
+bool IsVashjLineOnDais(Position const& a, Position const& b, float margin, float rockClearance)
 {
     constexpr float sampleSpacing = 2.0f;
     uint8 const samples = static_cast<uint8>(a.GetExactDist2d(b) / sampleSpacing);
     for (uint8 s = 1; s < samples; ++s)
     {
         float const t = static_cast<float>(s) / samples;
-        if (!IsOnVashjDais(
-                a.GetPositionX() + (b.GetPositionX() - a.GetPositionX()) * t,
-                a.GetPositionY() + (b.GetPositionY() - a.GetPositionY()) * t, margin,
-                rockClearance))
+        if (!IsOnVashjDais(a.GetPositionX() + (b.GetPositionX() - a.GetPositionX()) * t,
+                           a.GetPositionY() + (b.GetPositionY() - a.GetPositionY()) * t, margin, rockClearance))
         {
             return false;
         }
@@ -1150,22 +1088,20 @@ float GetVashjEdgeNormalDistance(float x, float y)
 }
 
 template <std::size_t N>
-bool SegmentCrossesPolygon(
-    Position const& a, Position const& b, std::array<Position, N> const& polygon)
+bool SegmentCrossesPolygon(Position const& a, Position const& b, std::array<Position, N> const& polygon)
 {
     // Positive when r is left of the line from p to q.
     auto side = [](Position const& p, Position const& q, Position const& r)
     {
         return (q.GetPositionX() - p.GetPositionX()) * (r.GetPositionY() - p.GetPositionY()) -
-            (q.GetPositionY() - p.GetPositionY()) * (r.GetPositionX() - p.GetPositionX());
+               (q.GetPositionY() - p.GetPositionY()) * (r.GetPositionX() - p.GetPositionX());
     };
 
     for (std::size_t i = 0, j = N - 1; i < N; j = i++)
     {
         Position const& c = polygon[j];
         Position const& d = polygon[i];
-        if ((side(c, d, a) > 0.0f) != (side(c, d, b) > 0.0f) &&
-            (side(a, b, c) > 0.0f) != (side(a, b, d) > 0.0f))
+        if ((side(c, d, a) > 0.0f) != (side(c, d, b) > 0.0f) && (side(a, b, c) > 0.0f) != (side(a, b, d) > 0.0f))
         {
             return true;
         }
@@ -1188,6 +1124,8 @@ Position const& GetVashjStationPosition(VashjStationSlot const& slot)
 
 std::vector<Player*> GetVashjStationRanged(Player* bot, int8 station)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     std::vector<Player*> ranged;
     auto it = vashjStationHolders.find(bot->GetInstanceId());
     if (it == vashjStationHolders.end() || station < 0)
@@ -1205,12 +1143,13 @@ std::vector<Player*> GetVashjStationRanged(Player* bot, int8 station)
 
 Player* GetVashjStationHealer(Player* bot, int8 station)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto it = vashjStationHolders.find(bot->GetInstanceId());
     if (it == vashjStationHolders.end() || station < 0)
         return nullptr;
 
-    Player* holder =
-        ObjectAccessor::GetPlayer(*bot, it->second[station][VASHJ_STATION_HEALER_SLOT]);
+    Player* holder = ObjectAccessor::GetPlayer(*bot, it->second[station][VASHJ_STATION_HEALER_SLOT]);
     return holder && holder->IsAlive() ? holder : nullptr;
 }
 
@@ -1246,9 +1185,8 @@ float GetVashjGroundZ(Map* map, uint32 phaseMask, float x, float y)
     if (distance > VASHJ_STAIR_BASE_APOTHEM)
         return INVALID_HEIGHT;
 
-    float const slopeZ = distance <= VASHJ_DAIS_APOTHEM ?
-        centreZ - (centreZ - rimZ) * distance / VASHJ_DAIS_APOTHEM :
-        rimZ - (distance - VASHJ_DAIS_APOTHEM) / stairRun * stairDrop;
+    float const slopeZ = distance <= VASHJ_DAIS_APOTHEM ? centreZ - (centreZ - rimZ) * distance / VASHJ_DAIS_APOTHEM
+                                                        : rimZ - (distance - VASHJ_DAIS_APOTHEM) / stairRun * stairDrop;
 
     constexpr float searchAbove = 2.0f;
     constexpr float maxSearch = 5.0f;
@@ -1287,19 +1225,17 @@ bool IsVashjCoreSpotClear(float x, float y, bool useSpot)
     return true;
 }
 
-bool IsVashjCoreThrowInSight(
-    Map* map, uint32 phaseMask, Position const& from, float fromEyeHeight, Position const& to)
+bool IsVashjCoreThrowInSight(Map* map, uint32 phaseMask, Position const& from, float fromEyeHeight, Position const& to)
 {
-    return map->isInLineOfSight(
-        from.GetPositionX(), from.GetPositionY(), from.GetPositionZ() + fromEyeHeight,
-        to.GetPositionX(), to.GetPositionY(), to.GetPositionZ() + VASHJ_CORE_PLAN_EYE_HEIGHT,
-        phaseMask, LINEOFSIGHT_ALL_CHECKS, VMAP::ModelIgnoreFlags::Nothing);
+    return map->isInLineOfSight(from.GetPositionX(), from.GetPositionY(), from.GetPositionZ() + fromEyeHeight,
+                                to.GetPositionX(), to.GetPositionY(), to.GetPositionZ() + VASHJ_CORE_PLAN_EYE_HEIGHT,
+                                phaseMask, LINEOFSIGHT_ALL_CHECKS, VMAP::ModelIgnoreFlags::Nothing);
 }
 
 bool FindVashjGeneratorUseSpot(GameObject* generator, uint32 phaseMask, float angle, Position& spot)
 {
     constexpr float useSpotMargin = 0.5f;
-    float const useRange = generator->GetInteractionDistance() - useSpotMargin; // 4.5y
+    float const useRange = generator->GetInteractionDistance() - useSpotMargin;  // 4.5y
     constexpr float stepLength = 0.25f;
     constexpr int steps = 48;
 
@@ -1326,14 +1262,12 @@ bool FindVashjGeneratorUseSpot(GameObject* generator, uint32 phaseMask, float an
     return false;
 }
 
-bool PlanVashjCoreLegs(
-    Map* map, uint32 phaseMask, std::vector<Position> const& useSpots, Position const& from,
-    float leg, float fromEyeHeight, std::vector<Position>& spots)
+bool PlanVashjCoreLegs(Map* map, uint32 phaseMask, std::vector<Position> const& useSpots, Position const& from,
+                       float leg, float fromEyeHeight, std::vector<Position>& spots)
 {
     for (Position const& useSpot : useSpots)
     {
-        if (from.GetExactDist(useSpot) <= leg &&
-            IsVashjCoreThrowInSight(map, phaseMask, from, fromEyeHeight, useSpot))
+        if (from.GetExactDist(useSpot) <= leg && IsVashjCoreThrowInSight(map, phaseMask, from, fromEyeHeight, useSpot))
         {
             spots.push_back(useSpot);
             return true;
@@ -1362,7 +1296,7 @@ bool PlanVashjCoreLegs(
 
         for (int i = 0; i <= angles; ++i)
         {
-            for (int sign : { 1, -1 })
+            for (int sign : {1, -1})
             {
                 if (i == 0 && sign < 0)
                     continue;
@@ -1385,8 +1319,7 @@ bool PlanVashjCoreLegs(
         }
     }
 
-    std::sort(candidates.begin(), candidates.end(),
-        [](auto const& a, auto const& b) { return a.first < b.first; });
+    std::sort(candidates.begin(), candidates.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
 
     constexpr size_t branches = 3;
     size_t followed = 0;
@@ -1398,7 +1331,7 @@ bool PlanVashjCoreLegs(
 
         spots.push_back(candidate);
         if (PlanVashjCoreLegs(map, phaseMask, useSpots, candidate, VASHJ_CORE_THROW_PLAN_DISTANCE,
-                VASHJ_CORE_PLAN_EYE_HEIGHT, spots))
+                              VASHJ_CORE_PLAN_EYE_HEIGHT, spots))
         {
             return true;
         }
@@ -1411,9 +1344,8 @@ bool PlanVashjCoreLegs(
     return false;
 }
 
-std::vector<Position> PlanVashjCoreSpots(
-    Player* bot, GameObject* generator, Position const& origin, float firstLeg,
-    float originEyeHeight)
+std::vector<Position> PlanVashjCoreSpots(Player* bot, GameObject* generator, Position const& origin, float firstLeg,
+                                         float originEyeHeight)
 {
     uint32 const phaseMask = bot->GetPhaseMask();
 
@@ -1423,7 +1355,7 @@ std::vector<Position> PlanVashjCoreSpots(
     std::vector<Position> useSpots;
     for (int i = 0; i <= useAngles; ++i)
     {
-        for (int sign : { 1, -1 })
+        for (int sign : {1, -1})
         {
             if (i == 0 && sign < 0)
                 continue;
@@ -1436,8 +1368,8 @@ std::vector<Position> PlanVashjCoreSpots(
     }
 
     std::vector<Position> spots;
-    if (useSpots.empty() || !PlanVashjCoreLegs(bot->GetMap(), phaseMask, useSpots, origin,
-            firstLeg, originEyeHeight, spots))
+    if (useSpots.empty() ||
+        !PlanVashjCoreLegs(bot->GetMap(), phaseMask, useSpots, origin, firstLeg, originEyeHeight, spots))
     {
         return {};
     }
@@ -1445,19 +1377,19 @@ std::vector<Position> PlanVashjCoreSpots(
     return spots;
 }
 
-GameObject* PlanVashjCoreRoute(
-    Player* bot, Position const& origin, float firstLeg, float originEyeHeight,
-    ObjectGuid preferred, std::vector<Position>& spots)
+GameObject* PlanVashjCoreRoute(Player* bot, Position const& origin, float firstLeg, float originEyeHeight,
+                               ObjectGuid preferred, std::vector<Position>& spots)
 {
     std::vector<GameObject*> generators = GetUsableVashjGenerators(bot->GetMap());
-    std::sort(generators.begin(), generators.end(), [&](GameObject* a, GameObject* b)
-    {
-        bool const aPreferred = a->GetGUID() == preferred;
-        if (aPreferred != (b->GetGUID() == preferred))
-            return aPreferred;
+    std::sort(generators.begin(), generators.end(),
+              [&](GameObject* a, GameObject* b)
+              {
+                  bool const aPreferred = a->GetGUID() == preferred;
+                  if (aPreferred != (b->GetGUID() == preferred))
+                      return aPreferred;
 
-        return origin.GetExactDist2d(a) < origin.GetExactDist2d(b);
-    });
+                  return origin.GetExactDist2d(a) < origin.GetExactDist2d(b);
+              });
 
     for (GameObject* generator : generators)
     {
@@ -1469,9 +1401,8 @@ GameObject* PlanVashjCoreRoute(
     return nullptr;
 }
 
-Player* FindVashjCoreCatcher(
-    Player* bot, VashjCorePassingChain const& chain, Position const& spot, bool attackersOnly,
-    ObjectGuid excluded)
+Player* FindVashjCoreCatcher(Player* bot, VashjCorePassingChain const& chain, Position const& spot, bool attackersOnly,
+                             ObjectGuid excluded)
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -1482,8 +1413,8 @@ Player* FindVashjCoreCatcher(
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != SSC_MAP_ID ||
-            !GET_PLAYERBOT_AI(member) || PlayerbotAI::IsTank(member))
+        if (!member || !member->IsAlive() || member->GetMapId() != SSC_MAP_ID || !GET_PLAYERBOT_AI(member) ||
+            PlayerbotAI::IsTank(member))
         {
             continue;
         }
@@ -1495,8 +1426,8 @@ Player* FindVashjCoreCatcher(
         }
 
         float const distance = member->GetExactDist2d(spot);
-        if (distance >= nearestDistance ||
-            (attackersOnly && !GetTaintedElementalToKill(member)) || HasTaintedCore(member))
+        if (distance >= nearestDistance || (attackersOnly && !GetTaintedElementalToKill(member)) ||
+            HasTaintedCore(member))
         {
             continue;
         }
@@ -1557,9 +1488,8 @@ bool IsVashjCorePassingChainLive(Player* bot, VashjCorePassingChain const& chain
         return true;
 
     // Only the last holder, or the catcher it last threw to, can have it
-    ObjectGuid const holder =
-        chain.reached >= 0 ? chain.catchers[chain.reached].bot : chain.originBot;
-    for (ObjectGuid const guid : { holder, chain.throwTarget })
+    ObjectGuid const holder = chain.reached >= 0 ? chain.catchers[chain.reached].bot : chain.originBot;
+    for (ObjectGuid const guid : {holder, chain.throwTarget})
     {
         Player* player = ObjectAccessor::GetPlayer(*bot, guid);
         if (player && HasTaintedCore(player))
@@ -1569,7 +1499,7 @@ bool IsVashjCorePassingChainLive(Player* bot, VashjCorePassingChain const& chain
     return false;
 }
 
-} // end anonymous namespace (Vashj)
+}  // namespace
 
 // Vashj: General
 
@@ -1592,19 +1522,15 @@ int8 GetLadyVashjPhase(Unit* vashj)
 
 bool IsOnVashjDais(float x, float y, float margin, float rockClearance)
 {
-    return GetVashjEdgeNormalDistance(x, y) <= VASHJ_DAIS_APOTHEM - margin &&
-        !IsInPolygon(x, y, VASHJ_NORTH_ROCK) &&
-        DistanceToPolygonOutline(x, y, VASHJ_NORTH_ROCK) >= rockClearance;
+    return GetVashjEdgeNormalDistance(x, y) <= VASHJ_DAIS_APOTHEM - margin && !IsInPolygon(x, y, VASHJ_NORTH_ROCK) &&
+           DistanceToPolygonOutline(x, y, VASHJ_NORTH_ROCK) >= rockClearance;
 }
 
 // Vashj: Static Charge, Entangle and Shock Blast
 
 std::unordered_map<uint32, ObjectGuid> vashjGroundingShaman;
 
-bool HasVashjStaticCharge(Player* player)
-{
-    return player && player->HasAura(Id(SscSpells::SPELL_STATIC_CHARGE));
-}
+bool HasVashjStaticCharge(Player* player) { return player && player->HasAura(Id(SscSpells::SPELL_STATIC_CHARGE)); }
 
 bool IsVashjPhase3RangedTooClose(Player* bot, Unit* vashj)
 {
@@ -1689,17 +1615,14 @@ Player* GetVashjHandOfFreedomTarget(PlayerbotAI* botAI, Unit* vashj)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == skip || !member->IsAlive() ||
-            !member->HasAura(Id(SscSpells::SPELL_ENTANGLE)) || !PlayerbotAI::IsMelee(member))
+        if (!member || member == skip || !member->IsAlive() || !member->HasAura(Id(SscSpells::SPELL_ENTANGLE)) ||
+            !PlayerbotAI::IsMelee(member))
         {
             continue;
         }
 
-        bool const nearSpore = std::any_of(spores.begin(), spores.end(),
-            [member](Position const& spore)
-            {
-                return member->GetExactDist2d(spore) < TOXIC_SPORES_HIT_RADIUS;
-            });
+        bool const nearSpore = std::any_of(spores.begin(), spores.end(), [member](Position const& spore)
+                                           { return member->GetExactDist2d(spore) < TOXIC_SPORES_HIT_RADIUS; });
 
         if (nearSpore && (!inSpores || isMainTank(member)))
             inSpores = member;
@@ -1713,6 +1636,8 @@ Player* GetVashjHandOfFreedomTarget(PlayerbotAI* botAI, Unit* vashj)
 
 Player* GetVashjGroundingShaman(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto const it = vashjGroundingShaman.find(bot->GetInstanceId());
     if (it == vashjGroundingShaman.end())
         return nullptr;
@@ -1734,9 +1659,8 @@ Player* FindVashjGroundingShaman(Player* bot)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->getClass() == CLASS_SHAMAN && member->IsAlive() &&
-            member->GetMapId() == SSC_MAP_ID && group->SameSubGroup(mainTank, member) &&
-            GET_PLAYERBOT_AI(member))
+        if (member && member->getClass() == CLASS_SHAMAN && member->IsAlive() && member->GetMapId() == SSC_MAP_ID &&
+            group->SameSubGroup(mainTank, member) && GET_PLAYERBOT_AI(member))
         {
             return member;
         }
@@ -1752,10 +1676,9 @@ std::vector<Position> const& GetToxicSporePositions(PlayerbotAI* botAI)
     return GetCachedHazardPositions(botAI, "ssc toxic spores");
 }
 
-bool FindVashjDaisStepAwayFromPositions(
-    Player* bot, std::vector<Position> const& positions, Unit* facing, float rockClearance,
-    float& stepX, float& stepY, float& stepZ, bool& backwards,
-    std::vector<Position> const* spores, float sporeRadius)
+bool FindVashjDaisStepAwayFromPositions(Player* bot, std::vector<Position> const& positions, Unit* facing,
+                                        float rockClearance, float& stepX, float& stepY, float& stepZ, bool& backwards,
+                                        std::vector<Position> const* spores, float sporeRadius)
 {
     constexpr uint8 directions = 24;
 
@@ -1770,11 +1693,8 @@ bool FindVashjDaisStepAwayFromPositions(
 
     auto nearSpore = [spores, sporeRadius](float x, float y)
     {
-        return spores && std::any_of(spores->begin(), spores->end(),
-            [x, y, sporeRadius](Position const& spore)
-            {
-                return spore.GetExactDist2d(x, y) < sporeRadius;
-            });
+        return spores && std::any_of(spores->begin(), spores->end(), [x, y, sporeRadius](Position const& spore)
+                                     { return spore.GetExactDist2d(x, y) < sporeRadius; });
     };
 
     float const botX = bot->GetPositionX();
@@ -1790,8 +1710,7 @@ bool FindVashjDaisStepAwayFromPositions(
             candidates.emplace_back(angle, closestPosition(x, y));
     }
 
-    std::sort(candidates.begin(), candidates.end(),
-        [](auto const& a, auto const& b) { return a.second > b.second; });
+    std::sort(candidates.begin(), candidates.end(), [](auto const& a, auto const& b) { return a.second > b.second; });
 
     bool const tanking = facing && facing->GetVictim() == bot;
     float const current = closestPosition(botX, botY);
@@ -1802,13 +1721,11 @@ bool FindVashjDaisStepAwayFromPositions(
 
         float const dirX = std::cos(angle);
         float const dirY = std::sin(angle);
-        backwards = tanking && dirX * (facing->GetPositionX() - botX) +
-            dirY * (facing->GetPositionY() - botY) < 0.0f;
+        backwards = tanking && dirX * (facing->GetPositionX() - botX) + dirY * (facing->GetPositionY() - botY) < 0.0f;
 
         float const moveDist = backwards ? PATH_BACKWARD_STEP_DISTANCE : PATH_STEP_DISTANCE;
-        if (CanTakeStepTowards(
-                bot, botX + dirX * PATH_STEP_DISTANCE, botY + dirY * PATH_STEP_DISTANCE,
-                moveDist, stepX, stepY, stepZ))
+        if (CanTakeStepTowards(bot, botX + dirX * PATH_STEP_DISTANCE, botY + dirY * PATH_STEP_DISTANCE, moveDist, stepX,
+                               stepY, stepZ))
         {
             return true;
         }
@@ -1817,23 +1734,20 @@ bool FindVashjDaisStepAwayFromPositions(
     return false;
 }
 
-bool FindVashjDaisStepAwayFromUnits(
-    Player* bot, std::vector<Unit*> const& units, Unit* facing, float rockClearance,
-    float& stepX, float& stepY, float& stepZ, bool& backwards,
-    std::vector<Position> const* spores, float sporeRadius)
+bool FindVashjDaisStepAwayFromUnits(Player* bot, std::vector<Unit*> const& units, Unit* facing, float rockClearance,
+                                    float& stepX, float& stepY, float& stepZ, bool& backwards,
+                                    std::vector<Position> const* spores, float sporeRadius)
 {
     std::vector<Position> positions;
     positions.reserve(units.size());
     for (Unit* unit : units)
         positions.push_back(unit->GetPosition());
 
-    return FindVashjDaisStepAwayFromPositions(
-        bot, positions, facing, rockClearance, stepX, stepY, stepZ, backwards, spores,
-        sporeRadius);
+    return FindVashjDaisStepAwayFromPositions(bot, positions, facing, rockClearance, stepX, stepY, stepZ, backwards,
+                                              spores, sporeRadius);
 }
 
-bool FindVashjTankBreakoutSpot(
-    Player* bot, std::vector<Position> const& spores, Position& spot)
+bool FindVashjTankBreakoutSpot(Player* bot, std::vector<Position> const& spores, Position& spot)
 {
     constexpr uint8 directions = 24;
     constexpr uint8 rings = 7;
@@ -1851,16 +1765,13 @@ bool FindVashjTankBreakoutSpot(
         for (uint8 i = 0; i < directions; ++i)
         {
             float const angle = 2.0f * static_cast<float>(M_PI) * i / directions;
-            Position const candidate(
-                from.GetPositionX() + std::cos(angle) * radius,
-                from.GetPositionY() + std::sin(angle) * radius, from.GetPositionZ());
+            Position const candidate(from.GetPositionX() + std::cos(angle) * radius,
+                                     from.GetPositionY() + std::sin(angle) * radius, from.GetPositionZ());
 
-            if (!IsOnVashjDais(candidate.GetPositionX(), candidate.GetPositionY(),
-                    VASHJ_DAIS_MARGIN, VASHJ_NORTH_ROCK_CLEARANCE) ||
+            if (!IsOnVashjDais(candidate.GetPositionX(), candidate.GetPositionY(), VASHJ_DAIS_MARGIN,
+                               VASHJ_NORTH_ROCK_CLEARANCE) ||
                 std::any_of(spores.begin(), spores.end(), [&candidate](Position const& spore)
-                {
-                    return spore.GetExactDist2d(candidate) < TOXIC_SPORES_TANK_AVOID_RADIUS;
-                }))
+                            { return spore.GetExactDist2d(candidate) < TOXIC_SPORES_TANK_AVOID_RADIUS; }))
             {
                 continue;
             }
@@ -1901,22 +1812,16 @@ bool IsNearToxicSpores(PlayerbotAI* botAI, float radius)
 {
     Player* bot = botAI->GetBot();
     std::vector<Position> const& spores = GetToxicSporePositions(botAI);
-    return std::any_of(spores.begin(), spores.end(), [bot, radius](Position const& spore)
-    {
-        return bot->GetExactDist2d(spore) < radius;
-    });
+    return std::any_of(spores.begin(), spores.end(),
+                       [bot, radius](Position const& spore) { return bot->GetExactDist2d(spore) < radius; });
 }
 
-bool IsInMeleeRangeClearOfSpores(
-    Player* bot, Unit* target, std::vector<Position> const& spores, float radius)
+bool IsInMeleeRangeClearOfSpores(Player* bot, Unit* target, std::vector<Position> const& spores, float radius)
 {
     return target && bot->IsWithinMeleeRange(target) &&
-        IsOnVashjDais(bot->GetPositionX(), bot->GetPositionY(), VASHJ_DAIS_MARGIN,
-            VASHJ_STANDING_ROCK_CLEARANCE) &&
-        std::none_of(spores.begin(), spores.end(), [bot, radius](Position const& spore)
-        {
-            return bot->GetExactDist2d(spore) < radius;
-        });
+           IsOnVashjDais(bot->GetPositionX(), bot->GetPositionY(), VASHJ_DAIS_MARGIN, VASHJ_STANDING_ROCK_CLEARANCE) &&
+           std::none_of(spores.begin(), spores.end(),
+                        [bot, radius](Position const& spore) { return bot->GetExactDist2d(spore) < radius; });
 }
 
 bool CanWalkThroughToxicSpores(Player* bot)
@@ -1932,9 +1837,8 @@ bool CanWalkThroughToxicSpores(Player* bot)
     }
 }
 
-bool GetMeleeRingStepClearOfSpores(
-    Player* bot, Unit* target, std::vector<Position> const& spores, float radius, float& stepX,
-    float& stepY, float& stepZ)
+bool GetMeleeRingStepClearOfSpores(Player* bot, Unit* target, std::vector<Position> const& spores, float radius,
+                                   float& stepX, float& stepY, float& stepZ)
 {
     if (!target || IsInMeleeRangeClearOfSpores(bot, target, spores, radius))
         return false;
@@ -1955,14 +1859,11 @@ bool GetMeleeRingStepClearOfSpores(
     auto isClear = [&nearby, radius](float x, float y)
     {
         return IsOnVashjDais(x, y, VASHJ_DAIS_MARGIN, VASHJ_STANDING_ROCK_CLEARANCE) &&
-            std::none_of(nearby.begin(), nearby.end(), [x, y, radius](Position const& spore)
-            {
-                return spore.GetExactDist2d(x, y) < radius;
-            });
+               std::none_of(nearby.begin(), nearby.end(),
+                            [x, y, radius](Position const& spore) { return spore.GetExactDist2d(x, y) < radius; });
     };
 
-    float const botAngle = std::atan2(
-        bot->GetPositionY() - targetY, bot->GetPositionX() - targetX);
+    float const botAngle = std::atan2(bot->GetPositionY() - targetY, bot->GetPositionX() - targetX);
     constexpr uint8 samplesPerSide = 36;
     constexpr float sampleAngle = static_cast<float>(M_PI) / samplesPerSide;
     for (uint8 i = 0; i <= samplesPerSide; ++i)
@@ -1990,24 +1891,20 @@ bool GetMeleeRingStepClearOfSpores(
     return false;
 }
 
-bool GetStepOutOfNearestSpore(
-    Player* bot, std::vector<Position> const& spores, float radius, float& stepX, float& stepY,
-    float& stepZ)
+bool GetStepOutOfNearestSpore(Player* bot, std::vector<Position> const& spores, float radius, float& stepX,
+                              float& stepY, float& stepZ)
 {
-    auto const nearest = std::min_element(spores.begin(), spores.end(),
-        [bot](Position const& a, Position const& b)
-        {
-            return bot->GetExactDist2dSq(a) < bot->GetExactDist2dSq(b);
-        });
+    auto const nearest = std::min_element(spores.begin(), spores.end(), [bot](Position const& a, Position const& b)
+                                          { return bot->GetExactDist2dSq(a) < bot->GetExactDist2dSq(b); });
 
     if (nearest == spores.end())
         return false;
 
     float const sporeX = nearest->GetPositionX();
     float const sporeY = nearest->GetPositionY();
-    float const botAngle = bot->GetExactDist2d(sporeX, sporeY) > 0.1f ?
-        std::atan2(bot->GetPositionY() - sporeY, bot->GetPositionX() - sporeX) :
-        bot->GetOrientation();
+    float const botAngle = bot->GetExactDist2d(sporeX, sporeY) > 0.1f
+                               ? std::atan2(bot->GetPositionY() - sporeY, bot->GetPositionX() - sporeX)
+                               : bot->GetOrientation();
 
     constexpr uint8 samplesPerSide = 36;
     constexpr float sampleAngle = static_cast<float>(M_PI) / samplesPerSide;
@@ -2060,22 +1957,18 @@ bool GetVashjReachBlockedBySpores(PlayerbotAI* botAI, Unit*& target, float& rang
         return false;
 
     float const t = ringRadius / distance;
-    Position const stop(
-        target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * t,
-        target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * t,
-        bot->GetPositionZ());
+    Position const stop(target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * t,
+                        target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * t,
+                        bot->GetPositionZ());
 
     Position const from = bot->GetPosition();
     std::vector<Position> const& spores = GetToxicSporePositions(botAI);
     return std::any_of(spores.begin(), spores.end(), [&from, &stop](Position const& spore)
-    {
-        return SegmentLengthInCircle(from, stop, spore, TOXIC_SPORES_AVOID_RADIUS) > 0.0f;
-    });
+                       { return SegmentLengthInCircle(from, stop, spore, TOXIC_SPORES_AVOID_RADIUS) > 0.0f; });
 }
 
-bool GetStepToCastRangeAroundSpores(
-    Player* bot, Unit* target, float castRange, std::vector<Position> const& spores, float& stepX,
-    float& stepY, float& stepZ)
+bool GetStepToCastRangeAroundSpores(Player* bot, Unit* target, float castRange, std::vector<Position> const& spores,
+                                    float& stepX, float& stepY, float& stepZ)
 {
     if (!target)
         return false;
@@ -2093,16 +1986,13 @@ bool GetStepToCastRangeAroundSpores(
     for (uint8 i = 0; i < samples; ++i)
     {
         float const angle = 2.0f * static_cast<float>(M_PI) * i / samples;
-        Position const candidate(
-            target->GetPositionX() + std::cos(angle) * ringRadius,
-            target->GetPositionY() + std::sin(angle) * ringRadius, from.GetPositionZ());
+        Position const candidate(target->GetPositionX() + std::cos(angle) * ringRadius,
+                                 target->GetPositionY() + std::sin(angle) * ringRadius, from.GetPositionZ());
 
         if (!IsOnVashjDais(candidate.GetPositionX(), candidate.GetPositionY(), VASHJ_DAIS_MARGIN,
-                VASHJ_STANDING_ROCK_CLEARANCE) ||
+                           VASHJ_STANDING_ROCK_CLEARANCE) ||
             std::any_of(spores.begin(), spores.end(), [&candidate](Position const& spore)
-            {
-                return spore.GetExactDist2d(candidate) < TOXIC_SPORES_AVOID_RADIUS;
-            }))
+                        { return spore.GetExactDist2d(candidate) < TOXIC_SPORES_AVOID_RADIUS; }))
         {
             continue;
         }
@@ -2138,11 +2028,11 @@ std::vector<VashjStationSlot> GetVashjStationFillOrder()
     for (size_t slot = 0; slot < VASHJ_STATION_RANGED_SLOTS; ++slot)
     {
         for (int8 station : VASHJ_STATION_FILL_ORDER)
-            order.push_back({ station, static_cast<int8>(slot) });
+            order.push_back({station, static_cast<int8>(slot)});
     }
 
     for (int8 station : VASHJ_STATION_FILL_ORDER)
-        order.push_back({ station, VASHJ_STATION_HEALER_SLOT });
+        order.push_back({station, VASHJ_STATION_HEALER_SLOT});
 
     return order;
 }
@@ -2155,6 +2045,8 @@ bool IsLiveVashjStationHolder(Player* bot, ObjectGuid guid)
 
 bool HasVashjStationVacancy(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto it = vashjStationHolders.find(bot->GetInstanceId());
     if (it == vashjStationHolders.end())
         return true;
@@ -2173,6 +2065,8 @@ bool HasVashjStationVacancy(Player* bot)
 
 VashjStationSlot GetVashjStationSlot(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     VashjStationSlot result;
     auto it = vashjStationHolders.find(bot->GetInstanceId());
     if (it == vashjStationHolders.end())
@@ -2228,8 +2122,7 @@ int8 GetNearestVashjStation(Unit* unit)
     {
         Position const& slot = VASHJ_STATIONS[i].ranged[0];
         float const distance = unit->GetExactDist2d(slot);
-        if (distance < nearestDistance &&
-            !SegmentCrossesPolygon(slot, unit->GetPosition(), VASHJ_NORTH_ROCK))
+        if (distance < nearestDistance && !SegmentCrossesPolygon(slot, unit->GetPosition(), VASHJ_NORTH_ROCK))
         {
             nearestDistance = distance;
             nearest = static_cast<int8>(i);
@@ -2281,8 +2174,7 @@ std::vector<VashjTargetTier> const& GetVashjTargetTiers(Player* bot, int8 phase,
     {
         if (PlayerbotAI::IsRangedDps(bot))
         {
-            return killsTainted ?
-                VASHJ_PHASE_2_TAINTED_KILLER_TIERS : VASHJ_PHASE_2_STATION_RANGED_TIERS;
+            return killsTainted ? VASHJ_PHASE_2_TAINTED_KILLER_TIERS : VASHJ_PHASE_2_STATION_RANGED_TIERS;
         }
 
         if (PlayerbotAI::IsMelee(bot) && PlayerbotAI::IsDps(bot))
@@ -2293,14 +2185,12 @@ std::vector<VashjTargetTier> const& GetVashjTargetTiers(Player* bot, int8 phase,
 
     if (isTank)
     {
-        return PlayerbotAI::IsMainTank(bot) ?
-            VASHJ_PHASE_3_MAIN_TANK_TIERS : VASHJ_PHASE_3_TANK_TIERS;
+        return PlayerbotAI::IsMainTank(bot) ? VASHJ_PHASE_3_MAIN_TANK_TIERS : VASHJ_PHASE_3_TANK_TIERS;
     }
 
     if (PlayerbotAI::IsRanged(bot))
     {
-        return bot->getClass() == CLASS_HUNTER ?
-            VASHJ_PHASE_3_HUNTER_TIERS : VASHJ_PHASE_3_RANGED_TIERS;
+        return bot->getClass() == CLASS_HUNTER ? VASHJ_PHASE_3_HUNTER_TIERS : VASHJ_PHASE_3_RANGED_TIERS;
     }
 
     return VASHJ_PHASE_3_MELEE_TIERS;
@@ -2331,8 +2221,7 @@ Player* GetVashjAddOwningTank(Player* bot, Unit* add)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->IsAlive() && member->GetVictim() == add &&
-            PlayerbotAI::IsTank(member))
+        if (member && member->IsAlive() && member->GetVictim() == add && PlayerbotAI::IsTank(member))
         {
             return member;
         }
@@ -2350,17 +2239,15 @@ bool IsNearestFreeVashjTank(Player* bot, Unit* add, Unit* vashj, int8 phase)
     if (!group)
         return true;
 
-    bool const eliteHolderIsFree =
-        phase == 3 && add->GetEntry() == Id(SscNpcs::NPC_COILFANG_STRIDER);
+    bool const eliteHolderIsFree = phase == 3 && add->GetEntry() == Id(SscNpcs::NPC_COILFANG_STRIDER);
     Unit const* vashjTank = phase == 3 ? vashj->GetVictim() : nullptr;
     float const botDistance = bot->GetExactDist2d(add);
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == bot || member == vashjTank || !member->IsAlive() ||
-            member->GetMapId() != SSC_MAP_ID || !GET_PLAYERBOT_AI(member) ||
-            !PlayerbotAI::IsTank(member) || member->GetExactDist2d(add) >= botDistance)
+        if (!member || member == bot || member == vashjTank || !member->IsAlive() || member->GetMapId() != SSC_MAP_ID ||
+            !GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsTank(member) || member->GetExactDist2d(add) >= botDistance)
         {
             continue;
         }
@@ -2371,8 +2258,8 @@ bool IsNearestFreeVashjTank(Player* bot, Unit* add, Unit* vashj, int8 phase)
 
         uint32 const entry = victim->GetEntry();
         bool const holdsAdd = (entry == Id(SscNpcs::NPC_COILFANG_STRIDER) ||
-            (entry == Id(SscNpcs::NPC_COILFANG_ELITE) && !eliteHolderIsFree)) &&
-            GetVashjAddOwningTank(bot, victim) == member;
+                               (entry == Id(SscNpcs::NPC_COILFANG_ELITE) && !eliteHolderIsFree)) &&
+                              GetVashjAddOwningTank(bot, victim) == member;
 
         if (!holdsAdd)
             return false;
@@ -2381,9 +2268,8 @@ bool IsNearestFreeVashjTank(Player* bot, Unit* add, Unit* vashj, int8 phase)
     return true;
 }
 
-bool GetStepToBringTankedUnitTo(
-    Player* bot, Unit* add, Position const& spot, float arrivalDistance, float& stepX,
-    float& stepY, bool& backwards)
+bool GetStepToBringTankedUnitTo(Player* bot, Unit* add, Position const& spot, float arrivalDistance, float& stepX,
+                                float& stepY, bool& backwards)
 {
     if (!add)
         return false;
@@ -2393,38 +2279,30 @@ bool GetStepToBringTankedUnitTo(
         return false;
 
     float const lead = bot->GetExactDist2d(add) / addDistance;
-    Position const destination(
-        spot.GetPositionX() + (spot.GetPositionX() - add->GetPositionX()) * lead,
-        spot.GetPositionY() + (spot.GetPositionY() - add->GetPositionY()) * lead,
-        spot.GetPositionZ());
+    Position const destination(spot.GetPositionX() + (spot.GetPositionX() - add->GetPositionX()) * lead,
+                               spot.GetPositionY() + (spot.GetPositionY() - add->GetPositionY()) * lead,
+                               spot.GetPositionZ());
 
     return GetStepToPosition(bot, destination, arrivalDistance, add, stepX, stepY, backwards);
 }
 
 Position const& GetVashjStriderHoldPosition(Unit const& strider)
 {
-    return *std::min_element(
-        VASHJ_STRIDER_HOLD_POSITIONS.begin(), VASHJ_STRIDER_HOLD_POSITIONS.end(),
-        [&strider](Position const& a, Position const& b)
-        {
-            return strider.GetExactDist2d(a) < strider.GetExactDist2d(b);
-        });
+    return *std::min_element(VASHJ_STRIDER_HOLD_POSITIONS.begin(), VASHJ_STRIDER_HOLD_POSITIONS.end(),
+                             [&strider](Position const& a, Position const& b)
+                             { return strider.GetExactDist2d(a) < strider.GetExactDist2d(b); });
 }
 
 Position const& GetVashjEliteTankPosition(Unit const& elite)
 {
-    return *std::min_element(
-        VASHJ_ELITE_TANK_POSITIONS.begin(), VASHJ_ELITE_TANK_POSITIONS.end(),
-        [&elite](Position const& a, Position const& b)
-        {
-            return elite.GetExactDist2d(a) < elite.GetExactDist2d(b);
-        });
+    return *std::min_element(VASHJ_ELITE_TANK_POSITIONS.begin(), VASHJ_ELITE_TANK_POSITIONS.end(),
+                             [&elite](Position const& a, Position const& b)
+                             { return elite.GetExactDist2d(a) < elite.GetExactDist2d(b); });
 }
 
 bool ShouldPositionVashjStrider(Player* bot, Unit* strider, Unit* vashj, int8 phase)
 {
-    if (!vashj || !strider || !strider->IsAlive() ||
-        strider->GetEntry() != Id(SscNpcs::NPC_COILFANG_STRIDER))
+    if (!vashj || !strider || !strider->IsAlive() || strider->GetEntry() != Id(SscNpcs::NPC_COILFANG_STRIDER))
     {
         return false;
     }
@@ -2434,21 +2312,19 @@ bool ShouldPositionVashjStrider(Player* bot, Unit* strider, Unit* vashj, int8 ph
         if (strider->GetVictim() != bot)
             return false;
 
-        return strider->GetExactDist2d(GetVashjStriderHoldPosition(*strider)) >
-            VASHJ_ADD_TANK_ARRIVAL_DISTANCE;
+        return strider->GetExactDist2d(GetVashjStriderHoldPosition(*strider)) > VASHJ_ADD_TANK_ARRIVAL_DISTANCE;
     }
 
     if (phase != 3 || PlayerbotAI::IsMainTank(bot))
         return false;
 
-    return strider->GetVictim() != bot ||
-        bot->GetExactDist2d(vashj) < VASHJ_PHASE_3_STRIDER_DISTANCE_FROM_VASHJ;
+    return strider->GetVictim() != bot || bot->GetExactDist2d(vashj) < VASHJ_PHASE_3_STRIDER_DISTANCE_FROM_VASHJ;
 }
 
 bool IsTankedStriderInStepInReach(Player* bot, Unit* unit)
 {
     return unit && unit->IsAlive() && unit->GetEntry() == Id(SscNpcs::NPC_COILFANG_STRIDER) &&
-        bot->GetExactDist(unit) <= VASHJ_STRIDER_STEP_IN_DISTANCE && IsVashjAddHeldByTank(unit);
+           bot->GetExactDist(unit) <= VASHJ_STRIDER_STEP_IN_DISTANCE && IsVashjAddHeldByTank(unit);
 }
 
 Unit* GetVashjPetTarget(PlayerbotAI* botAI, Creature* pet, Unit* vashj)
@@ -2458,9 +2334,8 @@ Unit* GetVashjPetTarget(PlayerbotAI* botAI, Creature* pet, Unit* vashj)
 
     int8 const phase = GetLadyVashjPhase(vashj);
     uint32 const petEntry = pet->GetEntry();
-    bool const petStaysAtRange = petEntry == Id(SscNpcs::NPC_IMP) ||
-        petEntry == Id(SscNpcs::NPC_WATER_ELEMENTAL) ||
-        petEntry == Id(SscNpcs::NPC_WATER_ELEMENTAL_PERM);
+    bool const petStaysAtRange = petEntry == Id(SscNpcs::NPC_IMP) || petEntry == Id(SscNpcs::NPC_WATER_ELEMENTAL) ||
+                                 petEntry == Id(SscNpcs::NPC_WATER_ELEMENTAL_PERM);
 
     AiObjectContext* context = botAI->GetAiObjectContext();
     Unit* target = AI_VALUE(Unit*, "current target");
@@ -2468,8 +2343,8 @@ Unit* GetVashjPetTarget(PlayerbotAI* botAI, Creature* pet, Unit* vashj)
     {
         uint32 const entry = target->GetEntry();
         bool const useless = (target == vashj && phase == 2) ||
-            (entry == Id(SscNpcs::NPC_COILFANG_STRIDER) && !petStaysAtRange) ||
-            entry == Id(SscNpcs::NPC_TOXIC_SPOREBAT);
+                             (entry == Id(SscNpcs::NPC_COILFANG_STRIDER) && !petStaysAtRange) ||
+                             entry == Id(SscNpcs::NPC_TOXIC_SPOREBAT);
         if (!useless)
             return target;
     }
@@ -2479,8 +2354,7 @@ Unit* GetVashjPetTarget(PlayerbotAI* botAI, Creature* pet, Unit* vashj)
     for (ObjectGuid const& guid : adds.enchanted)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (unit && unit->IsAlive() &&
-            (!enchanted || vashj->GetExactDist2d(unit) < vashj->GetExactDist2d(enchanted)))
+        if (unit && unit->IsAlive() && (!enchanted || vashj->GetExactDist2d(unit) < vashj->GetExactDist2d(enchanted)))
         {
             enchanted = unit;
         }
@@ -2511,9 +2385,8 @@ Player* FindTaintedCoreLooter(Player* bot, Unit* tainted, int8 station)
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (!member || !member->IsAlive() || member->GetMapId() != SSC_MAP_ID ||
-                !GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsHeal(member) ||
-                GetVashjStationSlot(member).station >= 0)
+            if (!member || !member->IsAlive() || member->GetMapId() != SSC_MAP_ID || !GET_PLAYERBOT_AI(member) ||
+                !PlayerbotAI::IsHeal(member) || GetVashjStationSlot(member).station >= 0)
             {
                 continue;
             }
@@ -2545,6 +2418,8 @@ Player* FindTaintedCoreLooter(Player* bot, Unit* tainted, int8 station)
 
 Creature* GetAssignedTaintedElemental(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto it = vashjTaintedCoreLooter.find(bot->GetInstanceId());
     if (it == vashjTaintedCoreLooter.end())
         return nullptr;
@@ -2574,12 +2449,13 @@ bool IsTaintedCoreStillToLoot(Creature* tainted)
 
 Creature* GetTaintedElementalToKill(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!PlayerbotAI::IsRangedDps(bot))
         return nullptr;
 
     auto it = vashjTaintedCoreLooter.find(bot->GetInstanceId());
-    if (it == vashjTaintedCoreLooter.end() ||
-        GetVashjStationSlot(bot).station != it->second.station)
+    if (it == vashjTaintedCoreLooter.end() || GetVashjStationSlot(bot).station != it->second.station)
     {
         return nullptr;
     }
@@ -2590,15 +2466,14 @@ Creature* GetTaintedElementalToKill(Player* bot)
 
 bool IsDesignatedCoreLooter(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto it = vashjTaintedCoreLooter.find(bot->GetInstanceId());
     return it != vashjTaintedCoreLooter.end() && it->second.looter == bot->GetGUID();
 }
 
 // Paralyze is present when the Core is held, and the aura check is much cheaper than a bag search.
-bool HasTaintedCore(Player* player)
-{
-    return player && player->HasAura(Id(SscSpells::SPELL_TAINTED_CORE_PARALYZE));
-}
+bool HasTaintedCore(Player* player) { return player && player->HasAura(Id(SscSpells::SPELL_TAINTED_CORE_PARALYZE)); }
 
 // Vashj: Core Passing Chain
 
@@ -2606,6 +2481,8 @@ std::unordered_map<uint32, VashjCorePassingChain> vashjCorePassingChains;
 
 void PlanVashjCorePassingChain(Player* bot, Unit* tainted, Player* looter)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!tainted || !looter)
         return;
 
@@ -2614,13 +2491,13 @@ void PlanVashjCorePassingChain(Player* bot, Unit* tainted, Player* looter)
     chain.originBot = looter->GetGUID();
 
     std::vector<Position> spots;
-    if (GameObject* generator = PlanVashjCoreRoute(bot, tainted->GetPosition(),
-            VASHJ_CORE_THROW_PLAN_DISTANCE - VASHJ_CORE_LOOTER_OFFSET, VASHJ_CORE_PLAN_EYE_HEIGHT,
-            ObjectGuid::Empty, spots))
+    if (GameObject* generator =
+            PlanVashjCoreRoute(bot, tainted->GetPosition(), VASHJ_CORE_THROW_PLAN_DISTANCE - VASHJ_CORE_LOOTER_OFFSET,
+                               VASHJ_CORE_PLAN_EYE_HEIGHT, ObjectGuid::Empty, spots))
     {
         chain.generator = generator->GetGUID();
         for (Position const& spot : spots)
-            chain.catchers.push_back(VashjCoreCatcher{ spot });
+            chain.catchers.push_back(VashjCoreCatcher{spot});
     }
 
     AssignVashjCoreCatchers(bot, chain);
@@ -2641,12 +2518,12 @@ bool ReplanVashjCorePassingChain(Player* holder, VashjCorePassingChain& chain, O
     ResetVashjCoreThrows(chain);
 
     std::vector<Position> spots;
-    if (GameObject* generator = PlanVashjCoreRoute(holder, holder->GetPosition(),
-            VASHJ_CORE_THROW_PLAN_DISTANCE, holder->GetCollisionHeight(), chain.generator, spots))
+    if (GameObject* generator = PlanVashjCoreRoute(holder, holder->GetPosition(), VASHJ_CORE_THROW_PLAN_DISTANCE,
+                                                   holder->GetCollisionHeight(), chain.generator, spots))
     {
         chain.generator = generator->GetGUID();
         for (Position const& spot : spots)
-            chain.catchers.push_back(VashjCoreCatcher{ spot });
+            chain.catchers.push_back(VashjCoreCatcher{spot});
     }
 
     chain.failed = chain.catchers.empty();
@@ -2683,6 +2560,8 @@ void ReleaseVashjCoreCatcher(Player* bot, VashjCorePassingChain& chain, size_t i
 
 VashjCorePassingChain* GetVashjCorePassingChain(Player* bot)
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     auto it = vashjCorePassingChains.find(bot->GetInstanceId());
     return it != vashjCorePassingChains.end() ? &it->second : nullptr;
 }
@@ -2719,8 +2598,8 @@ bool IsVashjCoreCatcherActive(Player* bot, VashjCorePassingChain const& chain, i
 
 float GetVashjCoreSpotArrivalDistance(VashjCorePassingChain const& chain, int8 index)
 {
-    return static_cast<size_t>(index) + 1 == chain.catchers.size() ?
-        VASHJ_CORE_USE_SPOT_ARRIVAL_DISTANCE : VASHJ_CORE_SPOT_ARRIVAL_DISTANCE;
+    return static_cast<size_t>(index) + 1 == chain.catchers.size() ? VASHJ_CORE_USE_SPOT_ARRIVAL_DISTANCE
+                                                                   : VASHJ_CORE_SPOT_ARRIVAL_DISTANCE;
 }
 
-}
+}  // namespace SscHelpers

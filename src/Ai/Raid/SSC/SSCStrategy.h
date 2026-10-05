@@ -7,9 +7,10 @@
 #ifndef PLAYERBOTS_SSCSTRATEGY_H
 #define PLAYERBOTS_SSCSTRATEGY_H
 
-#include "Strategy.h"
 #include <string>
 #include <vector>
+
+#include "Strategy.h"
 
 class RaidSscStrategy : public Strategy
 {

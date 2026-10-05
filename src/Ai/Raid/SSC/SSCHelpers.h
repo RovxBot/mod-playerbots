@@ -7,15 +7,17 @@
 #ifndef PLAYERBOTS_SSCHELPERS_H
 #define PLAYERBOTS_SSCHELPERS_H
 
+#include <array>
+#include <limits>
+#include <mutex>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
+
 #include "Common.h"
 #include "ObjectDefines.h"
 #include "ObjectGuid.h"
 #include "Position.h"
-#include <array>
-#include <limits>
-#include <type_traits>
-#include <unordered_map>
-#include <vector>
 
 class Creature;
 class Player;
@@ -24,6 +26,9 @@ class Unit;
 
 namespace SscHelpers
 {
+
+// Hold this lock while using a pointer or reference into an encounter-state map.
+std::recursive_mutex& GetEncounterStateMutex();
 
 template <typename T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
 constexpr uint32 Id(T value)
@@ -34,109 +39,109 @@ constexpr uint32 Id(T value)
 enum class SscSpells : uint32
 {
     // Trash
-    SPELL_TOXIC_POOL             = 38718,
+    SPELL_TOXIC_POOL = 38718,
 
     // Hydross the Unstable <Duke of Currents>
-    SPELL_MARK_OF_HYDROSS_10     = 38215,
-    SPELL_MARK_OF_HYDROSS_25     = 38216,
-    SPELL_MARK_OF_HYDROSS_50     = 38217,
-    SPELL_MARK_OF_HYDROSS_100    = 38218,
-    SPELL_MARK_OF_HYDROSS_250    = 38231,
-    SPELL_MARK_OF_HYDROSS_500    = 40584,
-    SPELL_MARK_OF_CORRUPTION_10  = 38219,
-    SPELL_MARK_OF_CORRUPTION_25  = 38220,
-    SPELL_MARK_OF_CORRUPTION_50  = 38221,
+    SPELL_MARK_OF_HYDROSS_10 = 38215,
+    SPELL_MARK_OF_HYDROSS_25 = 38216,
+    SPELL_MARK_OF_HYDROSS_50 = 38217,
+    SPELL_MARK_OF_HYDROSS_100 = 38218,
+    SPELL_MARK_OF_HYDROSS_250 = 38231,
+    SPELL_MARK_OF_HYDROSS_500 = 40584,
+    SPELL_MARK_OF_CORRUPTION_10 = 38219,
+    SPELL_MARK_OF_CORRUPTION_25 = 38220,
+    SPELL_MARK_OF_CORRUPTION_50 = 38221,
     SPELL_MARK_OF_CORRUPTION_100 = 38222,
     SPELL_MARK_OF_CORRUPTION_250 = 38230,
     SPELL_MARK_OF_CORRUPTION_500 = 40583,
-    SPELL_HYDROSS_CORRUPTION     = 37961,
+    SPELL_HYDROSS_CORRUPTION = 37961,
 
     // The Lurker Below
     SPELL_SPOUT_COUNTERCLOCKWISE = 37429,
-    SPELL_SPOUT_CLOCKWISE        = 37430,
+    SPELL_SPOUT_CLOCKWISE = 37430,
 
     // Leotheras the Blind
-    SPELL_LEOTHERAS_BANISHED     = 37546,
-    SPELL_LEOTHERAS_WHIRLWIND    = 37640,
-    SPELL_METAMORPHOSIS          = 37673,
-    SPELL_CHAOS_BLAST            = 37675,
-    SPELL_INSIDIOUS_WHISPER      = 37676,
+    SPELL_LEOTHERAS_BANISHED = 37546,
+    SPELL_LEOTHERAS_WHIRLWIND = 37640,
+    SPELL_METAMORPHOSIS = 37673,
+    SPELL_CHAOS_BLAST = 37675,
+    SPELL_INSIDIOUS_WHISPER = 37676,
 
     // Fathom-Lord Karathress
-    SPELL_CYCLONE                = 38517, // 4 yd feather fall + knockback every 1s, 5s aura
+    SPELL_CYCLONE = 38517,  // 4 yd feather fall + knockback every 1s, 5s aura
 
     // Lady Vashj <Coilfang Matron>
-    SPELL_FEAR_WARD              =  6346,
-    SPELL_MAGIC_BARRIER          = 38112,
-    SPELL_TAINTED_CORE_PARALYZE  = 38132,
-    SPELL_STATIC_CHARGE          = 38280,
-    SPELL_ENTANGLE               = 38316,
-    SPELL_TOXIC_SPORES           = 38575,
+    SPELL_FEAR_WARD = 6346,
+    SPELL_MAGIC_BARRIER = 38112,
+    SPELL_TAINTED_CORE_PARALYZE = 38132,
+    SPELL_STATIC_CHARGE = 38280,
+    SPELL_ENTANGLE = 38316,
+    SPELL_TOXIC_SPORES = 38575,
 
     // Druid
-    SPELL_FAERIE_FIRE_FERAL      = 16857,
-    SPELL_TREE_OF_LIFE           = 33891,
-    SPELL_DRUID_BERSERK          = 50334,
+    SPELL_FAERIE_FIRE_FERAL = 16857,
+    SPELL_TREE_OF_LIFE = 33891,
+    SPELL_DRUID_BERSERK = 50334,
 
     // Hunter
-    SPELL_MISDIRECTION_CAST      = 34477,
-    SPELL_MISDIRECTION           = 35079, // the aura on the hunter
+    SPELL_MISDIRECTION_CAST = 34477,
+    SPELL_MISDIRECTION = 35079,  // the aura on the hunter
 
     // Paladin
-    SPELL_DIVINE_SHIELD          =   642,
-    SPELL_AVENGING_WRATH         = 31884,
+    SPELL_DIVINE_SHIELD = 642,
+    SPELL_AVENGING_WRATH = 31884,
 
     // Priest
-    SPELL_DISPERSION             = 47585,
+    SPELL_DISPERSION = 47585,
 
     // Rogue
-    SPELL_CLOAK_OF_SHADOWS       = 31224,
+    SPELL_CLOAK_OF_SHADOWS = 31224,
 
     // Shaman
-    SPELL_GROUNDING_TOTEM_EFFECT =  8178,
+    SPELL_GROUNDING_TOTEM_EFFECT = 8178,
 
     // Warrior
-    SPELL_VIGILANCE              = 50720,
+    SPELL_VIGILANCE = 50720,
 };
 
 enum class SscNpcs : uint32
 {
     // Trash
-    NPC_WATER_ELEMENTAL_TOTEM    = 22236,
+    NPC_WATER_ELEMENTAL_TOTEM = 22236,
 
     // The Lurker Below
-    NPC_THE_LURKER_BELOW         = 21217,
-    NPC_COILFANG_GUARDIAN        = 21873,
+    NPC_THE_LURKER_BELOW = 21217,
+    NPC_COILFANG_GUARDIAN = 21873,
 
     // Leotheras the Blind
-    NPC_LEOTHERAS_THE_BLIND      = 21215,
-    NPC_INNER_DEMON              = 21857,
-    NPC_SHADOW_OF_LEOTHERAS      = 21875,
+    NPC_LEOTHERAS_THE_BLIND = 21215,
+    NPC_INNER_DEMON = 21857,
+    NPC_SHADOW_OF_LEOTHERAS = 21875,
 
     // Morogrim Tidewalker
-    NPC_TIDEWALKER_LURKER        = 21920,
+    NPC_TIDEWALKER_LURKER = 21920,
 
     // Fathom-Lord Karathress
-    NPC_SPITFIRE_TOTEM           = 22091,
-    NPC_FATHOM_LURKER            = 22119,
-    NPC_FATHOM_SPOREBAT          = 22120,
+    NPC_SPITFIRE_TOTEM = 22091,
+    NPC_FATHOM_LURKER = 22119,
+    NPC_FATHOM_SPOREBAT = 22120,
 
     // Lady Vashj <Coilfang Matron>
-    NPC_ENCHANTED_ELEMENTAL      = 21958,
-    NPC_COILFANG_ELITE           = 22055,
-    NPC_COILFANG_STRIDER         = 22056,
-    NPC_TOXIC_SPOREBAT           = 22140,
+    NPC_ENCHANTED_ELEMENTAL = 21958,
+    NPC_COILFANG_ELITE = 22055,
+    NPC_COILFANG_STRIDER = 22056,
+    NPC_TOXIC_SPOREBAT = 22140,
 
     // Pets that PetAI keeps at spell range while they have mana to cast
-    NPC_IMP                      =   416,
-    NPC_WATER_ELEMENTAL          =   510,
-    NPC_WATER_ELEMENTAL_PERM     = 37994,
+    NPC_IMP = 416,
+    NPC_WATER_ELEMENTAL = 510,
+    NPC_WATER_ELEMENTAL_PERM = 37994,
 };
 
 enum class SscItems : uint32
 {
     // Lady Vashj <Coilfang Matron>
-    ITEM_TAINTED_CORE            = 31088,
+    ITEM_TAINTED_CORE = 31088,
 };
 
 // General
@@ -148,14 +153,12 @@ inline constexpr float PATH_BACKWARD_STEP_DISTANCE = 2.25f;
 
 bool MisdirectTargetToTank(PlayerbotAI* botAI, Unit* target, Player* tank);
 bool CastTankTaunt(PlayerbotAI* botAI, Unit* target);
-bool FindHazardEscapeStep(
-    Player* bot, Position const& hazard, float moveDist, float& stepX, float& stepY, float& stepZ);
+bool FindHazardEscapeStep(Player* bot, Position const& hazard, float moveDist, float& stepX, float& stepY,
+                          float& stepZ);
 bool IsDryGround(Player* bot, float x, float y);
-bool GetPathStepTowardPoint(
-    Player* bot, Position const& destination, float stopDistance, float stepDistance,
-    float& stepX, float& stepY);
-bool GetPathStepTowardUnit(
-    Player* bot, Unit* target, float stopDistance, float& stepX, float& stepY);
+bool GetPathStepTowardPoint(Player* bot, Position const& destination, float stopDistance, float stepDistance,
+                            float& stepX, float& stepY);
+bool GetPathStepTowardUnit(Player* bot, Unit* target, float stopDistance, float& stepX, float& stepY);
 bool GetRangedArcAngle(Player* bot, float arcCenter, float arcSpan, float& angle);
 std::vector<Unit*> GetOtherLivingGroupMembers(Player* bot);
 
@@ -193,9 +196,9 @@ inline constexpr float HYDROSS_CLEANSING_FIELD_RADIUS = 28.0f;
 // The incoming phase's tank waits this far short of the field's edge, on its own side.
 inline constexpr float HYDROSS_HANDOFF_SHORT_DISTANCE = 8.0f;
 
-inline Position const HYDROSS_FROST_TANK_POSITION =  { -235.653f, -354.823f, -0.828f };
-inline Position const HYDROSS_NATURE_TANK_POSITION = { -224.721f, -324.755f, -3.682f };
-inline Position const HYDROSS_CLEANSING_FIELD_CENTER = { -239.715f, -366.440f, -0.745f };
+inline Position const HYDROSS_FROST_TANK_POSITION = {-235.653f, -354.823f, -0.828f};
+inline Position const HYDROSS_NATURE_TANK_POSITION = {-224.721f, -324.755f, -3.682f};
+inline Position const HYDROSS_CLEANSING_FIELD_CENTER = {-239.715f, -366.440f, -0.745f};
 
 extern std::unordered_map<uint32, uint32> hydrossFrostPhaseStartTime;
 extern std::unordered_map<uint32, uint32> hydrossNaturePhaseStartTime;
@@ -245,10 +248,9 @@ inline constexpr uint32 LURKER_GUARDIAN_TANK_CACHE_INTERVAL_MS = 1000;
 inline constexpr float LURKER_GUARDIAN_SEARCH_RADIUS = 100.0f;
 
 // In front of a pillar to limit the distance that the main tank gets knocked back by Whirl.
-inline Position const LURKER_MAIN_TANK_POSITION = { 23.706f, -406.038f, -19.686f };
+inline Position const LURKER_MAIN_TANK_POSITION = {23.706f, -406.038f, -19.686f};
 
-extern std::unordered_map<uint32, std::array<ObjectGuid, LURKER_GUARDIAN_TANK_COUNT>>
-    lurkerGuardianTankAssignments;
+extern std::unordered_map<uint32, std::array<ObjectGuid, LURKER_GUARDIAN_TANK_COUNT>> lurkerGuardianTankAssignments;
 
 // Lurker is passive during Spout: a 3s wind-up (37431), then a 16s spin aura, turning 0.1 rad every
 // 250ms (37429 counterclockwise or 37430 clockwise).
@@ -315,14 +317,14 @@ Creature* GetPersonalInnerDemon(PlayerbotAI* botAI);
 struct KarathressCouncilAssignment
 {
     char const* name;
-    int8 assistTankIndex; // -1 for the main tank
+    int8 assistTankIndex;  // -1 for the main tank
 };
 
 inline constexpr std::array KARATHRESS_COUNCIL = {
-    KarathressCouncilAssignment{ "fathom-lord karathress", -1 },
-    KarathressCouncilAssignment{ "fathom-guard caribdis", 0 },
-    KarathressCouncilAssignment{ "fathom-guard sharkkis", 1 },
-    KarathressCouncilAssignment{ "fathom-guard tidalvess", 2 },
+    KarathressCouncilAssignment{"fathom-lord karathress", -1},
+    KarathressCouncilAssignment{"fathom-guard caribdis", 0},
+    KarathressCouncilAssignment{"fathom-guard sharkkis", 1},
+    KarathressCouncilAssignment{"fathom-guard tidalvess", 2},
 };
 
 // Karathress gains Blessing of the Tides if he hits 75% HP with any Fathom-Guard still alive, so if
@@ -351,10 +353,10 @@ inline constexpr float CARIBDIS_RANGED_SPREAD_DISTANCE = 4.0f;
 // about 1.5y, and a bot standing on the ground is well under 1 yd from the navmesh.
 inline constexpr float CARIBDIS_CYCLONE_DROP_HEIGHT = 1.0f;
 
-inline Position const KARATHRESS_TANK_POSITION = { 474.403f, -531.118f,  -7.548f };
-inline Position const CARIBDIS_TANK_POSITION =   { 464.462f, -475.820f, -13.158f };
-inline Position const SHARKKIS_TANK_POSITION =   { 508.057f, -541.109f, -10.133f };
-inline Position const TIDALVESS_TANK_POSITION =  { 521.833f, -503.329f, -13.158f };
+inline Position const KARATHRESS_TANK_POSITION = {474.403f, -531.118f, -7.548f};
+inline Position const CARIBDIS_TANK_POSITION = {464.462f, -475.820f, -13.158f};
+inline Position const SHARKKIS_TANK_POSITION = {508.057f, -541.109f, -10.133f};
+inline Position const TIDALVESS_TANK_POSITION = {521.833f, -503.329f, -13.158f};
 
 extern std::unordered_map<uint32, uint32> karathressDpsWaitTimer;
 
@@ -382,8 +384,8 @@ inline constexpr float TIDEWALKER_HUNTER_BEHIND_DISTANCE = 13.0f;
 inline constexpr float TIDEWALKER_RANGED_STACK_RADIUS = 3.0f;
 inline constexpr float TIDEWALKER_MURLOC_MAX_TARGET_DISTANCE = 50.0f;
 
-inline Position const TIDEWALKER_PHASE_1_TANK_POSITION = { 410.925f, -741.916f, -7.146f };
-inline Position const TIDEWALKER_PHASE_2_TANK_POSITION = { 446.571f, -767.155f, -7.144f };
+inline Position const TIDEWALKER_PHASE_1_TANK_POSITION = {410.925f, -741.916f, -7.146f};
+inline Position const TIDEWALKER_PHASE_2_TANK_POSITION = {446.571f, -767.155f, -7.144f};
 
 // The stack point is directly across Tidewalker from his tank to keep it stable.
 Position GetTidewalkerStackPoint(Player const& bot, Unit const& tidewalker);
@@ -404,16 +406,13 @@ inline constexpr float VASHJ_DAIS_MARGIN = 1.0f;
 // Bots this far above ground in P3 are teleported down to prevent airwalking after Sporebats.
 inline constexpr float VASHJ_ABOVE_GROUND_HEIGHT = 1.5f;
 
-inline Position const VASHJ_PLATFORM_CENTER_POSITION = { 29.634f, -923.541f, 42.902f };
+inline Position const VASHJ_PLATFORM_CENTER_POSITION = {29.634f, -923.541f, 42.902f};
 // The large rock that cuts into the North edge of the dais, measured from the stair base, up
 // across the dais, and back down.
 inline std::array const VASHJ_NORTH_ROCK = {
-    Position{ 119.256f, -910.155f, 22.314f },
-    Position{  85.970f, -893.277f, 38.525f },
-    Position{  73.946f, -897.039f, 41.173f },
-    Position{  68.584f, -917.259f, 41.333f },
-    Position{  77.624f, -925.960f, 41.165f },
-    Position{ 120.362f, -931.205f, 22.520f },
+    Position{119.256f, -910.155f, 22.314f}, Position{85.970f, -893.277f, 38.525f},
+    Position{73.946f, -897.039f, 41.173f},  Position{68.584f, -917.259f, 41.333f},
+    Position{77.624f, -925.960f, 41.165f},  Position{120.362f, -931.205f, 22.520f},
 };
 
 int8 GetLadyVashjPhase(Unit* vashj);
@@ -453,32 +452,27 @@ inline constexpr float TOXIC_SPORES_SEARCH_RADIUS = 50.0f;
 inline constexpr float TOXIC_SPORES_MELEE_CONTROL_RADIUS = 10.0f;
 
 std::vector<Position> const& GetToxicSporePositions(PlayerbotAI* botAI);
-bool FindVashjDaisStepAwayFromPositions(
-    Player* bot, std::vector<Position> const& positions, Unit* facing, float rockClearance,
-    float& stepX, float& stepY, float& stepZ, bool& backwards,
-    std::vector<Position> const* spores = nullptr, float sporeRadius = TOXIC_SPORES_AVOID_RADIUS);
-bool FindVashjDaisStepAwayFromUnits(
-    Player* bot, std::vector<Unit*> const& units, Unit* facing, float rockClearance,
-    float& stepX, float& stepY, float& stepZ, bool& backwards,
-    std::vector<Position> const* spores = nullptr, float sporeRadius = TOXIC_SPORES_AVOID_RADIUS);
-bool FindVashjTankBreakoutSpot(
-    Player* bot, std::vector<Position> const& spores, Position& spot);
+bool FindVashjDaisStepAwayFromPositions(Player* bot, std::vector<Position> const& positions, Unit* facing,
+                                        float rockClearance, float& stepX, float& stepY, float& stepZ, bool& backwards,
+                                        std::vector<Position> const* spores = nullptr,
+                                        float sporeRadius = TOXIC_SPORES_AVOID_RADIUS);
+bool FindVashjDaisStepAwayFromUnits(Player* bot, std::vector<Unit*> const& units, Unit* facing, float rockClearance,
+                                    float& stepX, float& stepY, float& stepZ, bool& backwards,
+                                    std::vector<Position> const* spores = nullptr,
+                                    float sporeRadius = TOXIC_SPORES_AVOID_RADIUS);
+bool FindVashjTankBreakoutSpot(Player* bot, std::vector<Position> const& spores, Position& spot);
 bool IsVashjRingMelee(Player* bot, Unit* vashj);
 bool IsNearToxicSpores(PlayerbotAI* botAI, float radius);
-bool IsInMeleeRangeClearOfSpores(
-    Player* bot, Unit* target, std::vector<Position> const& spores, float radius);
+bool IsInMeleeRangeClearOfSpores(Player* bot, Unit* target, std::vector<Position> const& spores, float radius);
 // If a bot has Divine Shield or Dispersion, it may walk through pools (but not stop in them).
 bool CanWalkThroughToxicSpores(Player* bot);
-bool GetMeleeRingStepClearOfSpores(
-    Player* bot, Unit* target, std::vector<Position> const& spores, float radius, float& stepX,
-    float& stepY, float& stepZ);
-bool GetStepOutOfNearestSpore(
-    Player* bot, std::vector<Position> const& spores, float radius, float& stepX, float& stepY,
-    float& stepZ);
+bool GetMeleeRingStepClearOfSpores(Player* bot, Unit* target, std::vector<Position> const& spores, float radius,
+                                   float& stepX, float& stepY, float& stepZ);
+bool GetStepOutOfNearestSpore(Player* bot, std::vector<Position> const& spores, float radius, float& stepX,
+                              float& stepY, float& stepZ);
 bool GetVashjReachBlockedBySpores(PlayerbotAI* botAI, Unit*& target, float& range);
-bool GetStepToCastRangeAroundSpores(
-    Player* bot, Unit* target, float castRange, std::vector<Position> const& spores, float& stepX,
-    float& stepY, float& stepZ);
+bool GetStepToCastRangeAroundSpores(Player* bot, Unit* target, float castRange, std::vector<Position> const& spores,
+                                    float& stepX, float& stepY, float& stepZ);
 
 // Vashj: Phase 2 Ranged Stations
 
@@ -503,38 +497,38 @@ inline std::array const VASHJ_STATIONS = {
     // Slots at -156, -178, and -134 degrees
     VashjStation{
         {
-            Position{ -17.87f, -944.69f, 41.30f },
-            Position{ -22.33f, -925.36f, 41.30f },
-            Position{  -6.49f, -960.95f, 41.30f },
+            Position{-17.87f, -944.69f, 41.30f},
+            Position{-22.33f, -925.36f, 41.30f},
+            Position{-6.49f, -960.95f, 41.30f},
         },
-        Position{ -6.91f, -939.81f, 41.65f },
+        Position{-6.91f, -939.81f, 41.65f},
     },
     // Slots at 116, 102, and 130 degrees
     VashjStation{
         {
-            Position{   6.84f, -876.80f, 41.30f },
-            Position{  18.82f, -872.68f, 41.30f },
-            Position{  -3.79f, -883.71f, 41.30f },
+            Position{6.84f, -876.80f, 41.30f},
+            Position{18.82f, -872.68f, 41.30f},
+            Position{-3.79f, -883.71f, 41.30f},
         },
-        Position{ 12.10f, -887.59f, 41.65f },
+        Position{12.10f, -887.59f, 41.65f},
     },
     // Slots at -68, -80, and -56 degrees
     VashjStation{
         {
-            Position{  49.11f, -971.75f, 41.30f },
-            Position{  38.66f, -974.75f, 41.30f },
-            Position{  58.71f, -966.65f, 41.30f },
+            Position{49.11f, -971.75f, 41.30f},
+            Position{38.66f, -974.75f, 41.30f},
+            Position{58.71f, -966.65f, 41.30f},
         },
-        Position{ 44.62f, -960.63f, 41.65f },
+        Position{44.62f, -960.63f, 41.65f},
     },
     // Slots at 43, 37, and 49 degrees
     VashjStation{
         {
-            Position{  67.66f, -888.08f, 41.30f },
-            Position{  71.16f, -892.25f, 41.30f },
-            Position{  63.75f, -884.30f, 41.30f },
+            Position{67.66f, -888.08f, 41.30f},
+            Position{71.16f, -892.25f, 41.30f},
+            Position{63.75f, -884.30f, 41.30f},
         },
-        Position{ 60.35f, -894.90f, 41.65f },
+        Position{60.35f, -894.90f, 41.65f},
     },
 };
 
@@ -542,11 +536,13 @@ inline constexpr size_t VASHJ_STATION_COUNT = std::tuple_size_v<decltype(VASHJ_S
 // The Northeast station is filled first because it has the farthest potential run to a Tainted
 // Elemental (the spawn point just east of the North rock), so it is the first to get a 3rd dps.
 inline constexpr std::array VASHJ_STATION_FILL_ORDER = {
-    int8{ 2 }, int8{ 0 }, int8{ 1 }, int8{ 3 },
+    int8{2},
+    int8{0},
+    int8{1},
+    int8{3},
 };
 static_assert(VASHJ_STATION_FILL_ORDER.size() == VASHJ_STATION_COUNT);
-using VashjStationHolders =
-    std::array<std::array<ObjectGuid, VASHJ_STATION_RANGED_SLOTS + 1>, VASHJ_STATION_COUNT>;
+using VashjStationHolders = std::array<std::array<ObjectGuid, VASHJ_STATION_RANGED_SLOTS + 1>, VASHJ_STATION_COUNT>;
 
 extern std::unordered_map<uint32, VashjStationHolders> vashjStationHolders;
 
@@ -619,70 +615,68 @@ inline constexpr float VASHJ_PHASE_3_STRIDER_DISTANCE_FROM_VASHJ = 28.0f;
 
 // Target tiers by phase and role, best first (GetVashjTargetTiers)
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_2_STATION_RANGED_TIERS = {
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
+    VashjTargetTier{VashjTarget::CoilfangStrider},
+    VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::CoilfangElite},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_2_TAINTED_KILLER_TIERS = {
-    VashjTargetTier{ VashjTarget::TaintedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
+    VashjTargetTier{VashjTarget::TaintedElemental},
+    VashjTargetTier{VashjTarget::CoilfangStrider},
+    VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::CoilfangElite},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_2_MELEE_TIERS = {
-    VashjTargetTier{ VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
+    VashjTargetTier{VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE},
+    VashjTargetTier{VashjTarget::CoilfangElite},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_2_TANK_TIERS = {
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE },
+    VashjTargetTier{VashjTarget::CoilfangStrider},
+    VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_2_HEALER_TIERS = {
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
+    VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::CoilfangStrider},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_3_MAIN_TANK_TIERS = {
-    VashjTargetTier{ VashjTarget::LadyVashj },
+    VashjTargetTier{VashjTarget::LadyVashj},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_3_TANK_TIERS = {
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::LadyVashj },
+    VashjTargetTier{VashjTarget::CoilfangStrider},
+    VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::LadyVashj},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_3_HUNTER_TIERS = {
-    VashjTargetTier{ VashjTarget::ToxicSporebat },
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::LadyVashj },
+    VashjTargetTier{VashjTarget::ToxicSporebat},   VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::CoilfangStrider}, VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::LadyVashj},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_3_RANGED_TIERS = {
-    VashjTargetTier{ VashjTarget::EnchantedElemental },
-    VashjTargetTier{ VashjTarget::CoilfangStrider },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::LadyVashj },
+    VashjTargetTier{VashjTarget::EnchantedElemental},
+    VashjTargetTier{VashjTarget::CoilfangStrider},
+    VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::LadyVashj},
 };
 inline std::vector<VashjTargetTier> const VASHJ_PHASE_3_MELEE_TIERS = {
-    VashjTargetTier{ VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE },
-    VashjTargetTier{ VashjTarget::CoilfangElite },
-    VashjTargetTier{ VashjTarget::LadyVashj },
+    VashjTargetTier{VashjTarget::EnchantedElemental, VASHJ_ENCHANTED_NEAR_HER_DISTANCE},
+    VashjTargetTier{VashjTarget::CoilfangElite},
+    VashjTargetTier{VashjTarget::LadyVashj},
 };
 
 // Each position is between two ranged stations, 16y+ from every station slot and healer post and
 // 18y+ from each generator.
 inline std::array const VASHJ_STRIDER_HOLD_POSITIONS = {
-    Position{ -6.0f, -913.5f, 41.9f },
-    Position{  9.5f, -963.5f, 41.5f },
-    Position{ 33.5f, -889.5f, 41.9f },
+    Position{-6.0f, -913.5f, 41.9f},
+    Position{9.5f, -963.5f, 41.5f},
+    Position{33.5f, -889.5f, 41.9f},
 };
 // Each position is in range of all three ranged dps slots of one ranged station and 18y+ from
 // every Strider holding position.
 inline std::array const VASHJ_ELITE_TANK_POSITIONS = {
-    Position{ 57.0f, -913.0f, 42.0f },
-    Position{  5.5f, -934.0f, 42.1f },
+    Position{57.0f, -913.0f, 42.0f},
+    Position{5.5f, -934.0f, 42.1f},
 };
 
 VashjAddGuids FindVashjAddGuids(PlayerbotAI* botAI);
@@ -690,9 +684,8 @@ std::vector<VashjTargetTier> const& GetVashjTargetTiers(Player* bot, int8 phase,
 bool IsVashjAddHeldByTank(Unit* unit);
 Player* GetVashjAddOwningTank(Player* bot, Unit* add);
 bool IsNearestFreeVashjTank(Player* bot, Unit* add, Unit* vashj, int8 phase);
-bool GetStepToBringTankedUnitTo(
-    Player* bot, Unit* add, Position const& spot, float arrivalDistance, float& stepX,
-    float& stepY, bool& backwards);
+bool GetStepToBringTankedUnitTo(Player* bot, Unit* add, Position const& spot, float arrivalDistance, float& stepX,
+                                float& stepY, bool& backwards);
 Position const& GetVashjStriderHoldPosition(Unit const& strider);
 Position const& GetVashjEliteTankPosition(Unit const& elite);
 bool ShouldPositionVashjStrider(Player* bot, Unit* strider, Unit* vashj, int8 phase);
@@ -786,34 +779,31 @@ inline constexpr size_t VASHJ_CORE_MAX_CATCHERS = 5;
 inline constexpr float VASHJ_CORE_SPOT_ARRIVAL_DISTANCE = 1.0f;
 inline constexpr float VASHJ_CORE_USE_SPOT_ARRIVAL_DISTANCE = 0.5f;
 inline constexpr std::array VASHJ_SHIELD_GENERATOR_SPAWN_IDS = {
-    uint32{ 47482 }, // NW
-    uint32{ 47483 }, // NE
-    uint32{ 47484 }, // SE
-    uint32{ 47485 }, // SW
+    uint32{47482},  // NW
+    uint32{47483},  // NE
+    uint32{47484},  // SE
+    uint32{47485},  // SW
 };
 
 // The locations of the four triggers that spawn Elites and Striders. Each is just inside the dais
 // edge (they range from 54-56.5y from the center).
 inline std::array const VASHJ_ADD_SPAWN_POSITIONS = {
-    Position{  43.329f, -869.731f, 41.2f },
-    Position{ -22.597f, -900.382f, 41.2f },
-    Position{  13.781f, -975.633f, 41.2f },
-    Position{  78.381f, -950.659f, 41.2f },
+    Position{43.329f, -869.731f, 41.2f},
+    Position{-22.597f, -900.382f, 41.2f},
+    Position{13.781f, -975.633f, 41.2f},
+    Position{78.381f, -950.659f, 41.2f},
 };
 // The small rock that cuts into the Southwestern stairs, measured from stair base to the highest
 // point of the rock and back down the other side.
 inline std::array const VASHJ_SOUTH_WEST_ROCK = {
-    Position{ -16.473f, -843.635f, 22.78f },
-    Position{ -10.493f, -849.837f, 27.23f },
-    Position{ -10.034f, -860.397f, 32.37f },
-    Position{ -14.241f, -865.373f, 32.69f },
-    Position{ -46.103f, -872.655f, 22.53f },
+    Position{-16.473f, -843.635f, 22.78f}, Position{-10.493f, -849.837f, 27.23f}, Position{-10.034f, -860.397f, 32.37f},
+    Position{-14.241f, -865.373f, 32.69f}, Position{-46.103f, -872.655f, 22.53f},
 };
 inline std::array const VASHJ_SHIELD_GENERATOR_POSITIONS = {
-    Position{ 52.048f, -901.236f, 44.0f },
-    Position{ 52.448f, -944.825f, 44.0f },
-    Position{  7.810f, -945.244f, 44.0f },
-    Position{  7.417f, -901.109f, 44.0f },
+    Position{52.048f, -901.236f, 44.0f},
+    Position{52.448f, -944.825f, 44.0f},
+    Position{7.810f, -945.244f, 44.0f},
+    Position{7.417f, -901.109f, 44.0f},
 };
 
 extern std::unordered_map<uint32, VashjCorePassingChain> vashjCorePassingChains;
@@ -827,6 +817,6 @@ int8 GetVashjCoreCatcherIndex(VashjCorePassingChain const& chain, Player* bot);
 bool IsVashjCoreCatcherActive(Player* bot, VashjCorePassingChain const& chain, int8 index);
 float GetVashjCoreSpotArrivalDistance(VashjCorePassingChain const& chain, int8 index);
 
-}
+}  // namespace SscHelpers
 
 #endif

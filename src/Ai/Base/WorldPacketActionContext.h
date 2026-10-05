@@ -41,7 +41,6 @@
 #include "TalkToQuestGiverAction.h"
 #include "TellCastFailedAction.h"
 #include "TellMasterAction.h"
-#include "TierTokenAction.h"
 #include "TradeStatusAction.h"
 #include "TradeStatusExtendedAction.h"
 #include "UseMeetingStoneAction.h"
@@ -76,7 +75,6 @@ public:
         creators["self resurrect"] = &WorldPacketActionContext::self_resurrect;
         creators["pet"] = &WorldPacketActionContext::pet;
         creators["equip upgrades packet action"] = &WorldPacketActionContext::equip_upgrades_packet_action;
-        creators["convert tier token"] = &WorldPacketActionContext::convert_tier_token;
 
         // quest
         creators["talk to quest giver"] = &WorldPacketActionContext::turn_in_quest;
@@ -144,10 +142,16 @@ private:
     static Action* auto_release(PlayerbotAI* botAI) { return new AutoReleaseSpiritAction(botAI); }
     static Action* revive_from_corpse(PlayerbotAI* botAI) { return new ReviveFromCorpseAction(botAI); }
     static Action* accept_invitation(PlayerbotAI* botAI) { return new AcceptInvitationAction(botAI); }
-    static Action* give_leader_in_dungeon(PlayerbotAI* botAI) { return new GiveLeaderAction(botAI, "I don't know this dungeon, lead the way!"); }
+    static Action* give_leader_in_dungeon(PlayerbotAI* botAI)
+    {
+        return new GiveLeaderAction(botAI, "I don't know this dungeon, lead the way!");
+    }
     static Action* pass_leadership_to_master(PlayerbotAI* botAI) { return new PassLeadershipToMasterAction(botAI); }
     static Action* tell_not_enough_money(PlayerbotAI* botAI) { return new TellMasterAction(botAI, "Not enough money"); }
-    static Action* tell_not_enough_reputation(PlayerbotAI* botAI) { return new TellMasterAction(botAI, "Not enough reputation"); }
+    static Action* tell_not_enough_reputation(PlayerbotAI* botAI)
+    {
+        return new TellMasterAction(botAI, "Not enough reputation");
+    }
     static Action* tell_cannot_equip(PlayerbotAI* botAI) { return new InventoryChangeFailureAction(botAI); }
     static Action* self_resurrect(PlayerbotAI* botAI) { return new SelfResurrectAction(botAI); }
     static Action* pet(PlayerbotAI* botAI) { return new PetsAction(botAI); }
@@ -167,11 +171,10 @@ private:
     static Action* accept_all_quests(PlayerbotAI* botAI) { return new AcceptAllQuestsAction(botAI); }
     static Action* accept_quest_share(PlayerbotAI* botAI) { return new AcceptQuestShareAction(botAI); }
     static Action* turn_in_query_quest(PlayerbotAI* botAI) { return new TurnInQueryQuestAction(botAI); }
-    //static Action* quest_confirm_accept(PlayerbotAI* botAI) { return new QuestConfirmAcceptAction(botAI); }
+    // static Action* quest_confirm_accept(PlayerbotAI* botAI) { return new QuestConfirmAcceptAction(botAI); }
 
     static Action* loot_roll(PlayerbotAI* botAI) { return new LootRollAction(botAI); }
     static Action* master_loot_roll(PlayerbotAI* botAI) { return new MasterLootRollAction(botAI); }
-    static Action* convert_tier_token(PlayerbotAI* botAI) { return new ConvertTierTokenAction(botAI); }
     static Action* bg_join(PlayerbotAI* botAI) { return new BGJoinAction(botAI); }
     static Action* bg_leave(PlayerbotAI* botAI) { return new BGLeaveAction(botAI); }
     static Action* bg_status(PlayerbotAI* botAI) { return new BGStatusAction(botAI); }

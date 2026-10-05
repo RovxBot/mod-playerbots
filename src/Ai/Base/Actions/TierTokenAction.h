@@ -7,16 +7,12 @@
 #ifndef PLAYERBOTS_TIERTOKENACTION_H
 #define PLAYERBOTS_TIERTOKENACTION_H
 
-#include "Action.h"
+class Item;
+class Player;
+class WorldPacket;
 
-class PlayerbotAI;
-
-class ConvertTierTokenAction : public Action
-{
-public:
-    ConvertTierTokenAction(PlayerbotAI* botAI) : Action(botAI, "convert tier token") {}
-
-    bool Execute(Event event) override;
-};
+void InitializeTierTokenRewards();
+void ScheduleTierTokenConversion(Player* bot, Item* token);
+void ScheduleTierTokenConversionFromPacket(Player* bot, WorldPacket const& packet);
 
 #endif

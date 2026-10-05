@@ -31,8 +31,7 @@
 #include "WotlkDungeonTriggerContext.h"
 #include "ZATriggerContext.h"
 
-void AiObjectContext::BuildSharedTriggerContexts(
-    SharedNamedObjectContextList<Trigger>& triggerContexts)
+void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Trigger>& triggerContexts)
 {
     triggerContexts.Add(new TriggerContext());
     triggerContexts.Add(new ChatTriggerContext());

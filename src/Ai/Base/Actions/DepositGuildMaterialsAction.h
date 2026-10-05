@@ -18,6 +18,7 @@ public:
     DepositGuildMaterialsAction(PlayerbotAI* botAI) : GuildBankAction(botAI, "deposit guild materials") {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
     bool isPossible() override;
 
 private:

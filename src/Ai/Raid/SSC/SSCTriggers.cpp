@@ -5,6 +5,7 @@
  */
 
 #include "SSCTriggers.h"
+
 #include "EncounterHelpers.h"
 #include "MotionMaster.h"
 #include "MoveSpline.h"
@@ -18,10 +19,7 @@ using namespace EncounterHelpers;
 
 // Shared
 
-bool SscNoEncounterInProgressTrigger::IsActive()
-{
-    return !IsEncounterInProgress(bot, SSC_MAP_ID);
-}
+bool SscNoEncounterInProgressTrigger::IsActive() { return !IsEncounterInProgress(bot, SSC_MAP_ID); }
 
 bool SscHunterShouldMisdirectTrigger::IsActiveInEncounter()
 {
@@ -34,13 +32,12 @@ bool SscHunterShouldMisdirectTrigger::IsActiveInEncounter()
 
 // Trash
 
-bool UnderbogColossusInToxicPoolTrigger::IsActive()
+bool UnderbogColossusInToxicPoolTrigger::CalculateIsActive()
 {
-    return !IsEncounterInProgress(bot, SSC_MAP_ID) &&
-        IsNearToxicPool(botAI, TOXIC_POOL_HAZARD_RADIUS);
+    return !IsEncounterInProgress(bot, SSC_MAP_ID) && IsNearToxicPool(botAI, TOXIC_POOL_HAZARD_RADIUS);
 }
 
-bool GreyheartTidecallerWaterElementalTotemSpawnedTrigger::IsActive()
+bool GreyheartTidecallerWaterElementalTotemSpawnedTrigger::CalculateIsActive()
 {
     if (IsEncounterInProgress(bot, SSC_MAP_ID) || !PlayerbotAI::IsDps(bot))
         return false;
@@ -56,13 +53,13 @@ bool GreyheartTidecallerWaterElementalTotemSpawnedTrigger::IsActive()
 bool HydrossTheUnstableShouldBeTankedByFrostTankTrigger::IsActiveInEncounter()
 {
     return PlayerbotAI::IsTank(bot) && AI_VALUE2(Unit*, "find target", "hydross the unstable") &&
-        IsHydrossFrostTank(bot);
+           IsHydrossFrostTank(bot);
 }
 
 bool HydrossTheUnstableShouldBeTankedByNatureTankTrigger::IsActiveInEncounter()
 {
     return PlayerbotAI::IsTank(bot) && AI_VALUE2(Unit*, "find target", "hydross the unstable") &&
-        IsHydrossNatureTank(bot);
+           IsHydrossNatureTank(bot);
 }
 
 bool HydrossTheUnstableRangedShouldSpreadInFrostPhaseTrigger::IsActiveInEncounter()
@@ -101,7 +98,7 @@ bool HydrossTheUnstableAggroResetsUponPhaseChangeTrigger::IsActiveInEncounter()
 
     HydrossDpsHoldWindow const window = GetHydrossDpsHoldWindow(hydross);
     return window == HydrossDpsHoldWindow::BeforePhaseChange ||
-        (window == HydrossDpsHoldWindow::AfterPhaseChange && bot->getClass() != CLASS_HUNTER);
+           (window == HydrossDpsHoldWindow::AfterPhaseChange && bot->getClass() != CLASS_HUNTER);
 }
 
 bool HydrossTheUnstableNonPhaseTankAttackingTrigger::IsActiveInEncounter()
@@ -113,8 +110,7 @@ bool HydrossTheUnstableNonPhaseTankAttackingTrigger::IsActiveInEncounter()
     if (!hydross)
         return false;
 
-    bool const phaseTank =
-        IsHydrossInFrostPhase(hydross) ? IsHydrossFrostTank(bot) : IsHydrossNatureTank(bot);
+    bool const phaseTank = IsHydrossInFrostPhase(hydross) ? IsHydrossFrostTank(bot) : IsHydrossNatureTank(bot);
     if (phaseTank)
         return false;
 
@@ -123,8 +119,7 @@ bool HydrossTheUnstableNonPhaseTankAttackingTrigger::IsActiveInEncounter()
 
 bool HydrossTheUnstableShouldManagePhaseTimersTrigger::IsActiveInEncounter()
 {
-    return IsMechanicTrackerBot(bot, SSC_MAP_ID) &&
-        AI_VALUE2(Unit*, "find target", "hydross the unstable");
+    return IsMechanicTrackerBot(bot, SSC_MAP_ID) && AI_VALUE2(Unit*, "find target", "hydross the unstable");
 }
 
 // The Lurker Below
@@ -190,8 +185,7 @@ bool TheLurkerBelowMeleeCannotReachTargetTrigger::IsActiveInEncounter()
     if (!bot->isMoving())
         return true;
 
-    return target == lurker &&
-        AI_VALUE(LastMovement&, "last movement").priority < MovementPriority::MOVEMENT_FORCED;
+    return target == lurker && AI_VALUE(LastMovement&, "last movement").priority < MovementPriority::MOVEMENT_FORCED;
 }
 
 // Bots can "fall" into the water when crossing between islets.
@@ -215,7 +209,7 @@ bool TheLurkerBelowMeleeInWaterTrigger::IsActiveInEncounter()
 
 // Leotheras the Blind
 
-bool LeotherasTheBlindRangedShouldSpreadUponPullTrigger::IsActive()
+bool LeotherasTheBlindRangedShouldSpreadUponPullTrigger::CalculateIsActive()
 {
     if (bot->GetMapId() != SSC_MAP_ID || !PlayerbotAI::IsRanged(bot))
         return false;
@@ -301,8 +295,7 @@ bool LeotherasTheBlindTooManyChaosBlastStacksTrigger::IsActiveInEncounter()
     if (!leotherasDemon || leotherasDemon->GetVictim() == bot)
         return false;
 
-    if (bot->getClass() == CLASS_ROGUE &&
-        !bot->HasSpellCooldown(Id(SscSpells::SPELL_CLOAK_OF_SHADOWS)))
+    if (bot->getClass() == CLASS_ROGUE && !bot->HasSpellCooldown(Id(SscSpells::SPELL_CLOAK_OF_SHADOWS)))
     {
         return true;
     }
@@ -310,10 +303,7 @@ bool LeotherasTheBlindTooManyChaosBlastStacksTrigger::IsActiveInEncounter()
     return GetDemonTargetToAvoid(bot, leotherasDemon);
 }
 
-bool LeotherasTheBlindInnerDemonHasAwakenedTrigger::IsActiveInEncounter()
-{
-    return HasInnerDemon(bot);
-}
+bool LeotherasTheBlindInnerDemonHasAwakenedTrigger::IsActiveInEncounter() { return HasInnerDemon(bot); }
 
 bool LeotherasTheBlindInFinalPhaseTrigger::IsActiveInEncounter()
 {
@@ -374,16 +364,14 @@ bool LeotherasTheBlindAggroResetsTrigger::IsActiveInEncounter()
 
 bool LeotherasTheBlindShouldManageDpsWaitTimersTrigger::IsActiveInEncounter()
 {
-    return IsMechanicTrackerBot(bot, SSC_MAP_ID) &&
-        AI_VALUE2(Unit*, "find target", "leotheras the blind");
+    return IsMechanicTrackerBot(bot, SSC_MAP_ID) && AI_VALUE2(Unit*, "find target", "leotheras the blind");
 }
 
 // Fathom-Lord Karathress
 
 bool FathomLordKarathressTargetsShouldBeTankedTrigger::IsActiveInEncounter()
 {
-    return PlayerbotAI::IsTank(bot) &&
-        AI_VALUE2(Unit*, "find target", "fathom-lord karathress");
+    return PlayerbotAI::IsTank(bot) && AI_VALUE2(Unit*, "find target", "fathom-lord karathress");
 }
 
 bool FathomLordKarathressShouldHealCaribdisTankTrigger::IsActiveInEncounter()
@@ -422,11 +410,12 @@ bool FathomLordKarathressShouldAssignDpsPriorityTrigger::IsActiveInEncounter()
 
 bool FathomLordKarathressShouldManageDpsTimerTrigger::IsActiveInEncounter()
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (karathressDpsWaitTimer.find(bot->GetInstanceId()) != karathressDpsWaitTimer.end())
         return false;
 
-    return IsMechanicTrackerBot(bot, SSC_MAP_ID) &&
-        AI_VALUE2(Unit*, "find target", "fathom-lord karathress");
+    return IsMechanicTrackerBot(bot, SSC_MAP_ID) && AI_VALUE2(Unit*, "find target", "fathom-lord karathress");
 }
 
 bool FathomLordKarathressRangedShouldSpreadTrigger::IsActiveInEncounter()
@@ -455,8 +444,8 @@ bool FathomLordKarathressStuckMidairAfterCycloneTrigger::IsActiveInEncounter()
     if (!AI_VALUE2(Unit*, "find target", "fathom-lord karathress"))
         return false;
 
-    float const floorZ = bot->GetMapHeight(
-        bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), true, MAX_FALL_DISTANCE);
+    float const floorZ =
+        bot->GetMapHeight(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), true, MAX_FALL_DISTANCE);
     return floorZ > INVALID_HEIGHT && bot->GetPositionZ() - floorZ > CARIBDIS_CYCLONE_DROP_HEIGHT;
 }
 
@@ -465,7 +454,7 @@ bool FathomLordKarathressStuckMidairAfterCycloneTrigger::IsActiveInEncounter()
 bool MorogrimTidewalkerShouldBeTankedTrigger::IsActiveInEncounter()
 {
     return PlayerbotAI::IsTank(bot) && AI_VALUE2(Unit*, "find target", "morogrim tidewalker") &&
-        PlayerbotAI::IsMainTank(bot);
+           PlayerbotAI::IsMainTank(bot);
 }
 
 bool MorogrimTidewalkerRangedShouldStackTrigger::IsActiveInEncounter()
@@ -477,8 +466,7 @@ bool MorogrimTidewalkerRangedShouldStackTrigger::IsActiveInEncounter()
     if (!tidewalker || tidewalker->GetHealthPct() > TIDEWALKER_PHASE_2_MOVE_HEALTH_PCT)
         return false;
 
-    return bot->GetExactDist(GetTidewalkerStackPoint(*bot, *tidewalker)) >
-        TIDEWALKER_RANGED_STACK_RADIUS;
+    return bot->GetExactDist(GetTidewalkerStackPoint(*bot, *tidewalker)) > TIDEWALKER_RANGED_STACK_RADIUS;
 }
 
 bool MorogrimTidewalkerTooFarFromBossTrigger::IsActiveInEncounter()
@@ -488,7 +476,7 @@ bool MorogrimTidewalkerTooFarFromBossTrigger::IsActiveInEncounter()
 
     Unit* tidewalker = AI_VALUE2(Unit*, "find target", "morogrim tidewalker");
     return tidewalker && tidewalker->GetHealthPct() > TIDEWALKER_PHASE_2_MOVE_HEALTH_PCT &&
-        bot->GetExactDist(tidewalker) >= TIDEWALKER_MAX_DISTANCE_FROM_BOSS;
+           bot->GetExactDist(tidewalker) >= TIDEWALKER_MAX_DISTANCE_FROM_BOSS;
 }
 
 // Lady Vashj <Coilfang Matron>
@@ -512,8 +500,7 @@ bool LadyVashjRangedShouldSpreadInPhase1Trigger::IsActiveInEncounter()
         return false;
 
     Action* spreadAction = context->GetAction("lady vashj phase 1 spread ranged in arc");
-    if (!spreadAction || static_cast<LadyVashjPhase1SpreadRangedInArcAction*>(
-            spreadAction)->HasReachedRangedPosition())
+    if (!spreadAction || static_cast<LadyVashjPhase1SpreadRangedInArcAction*>(spreadAction)->HasReachedRangedPosition())
     {
         return false;
     }
@@ -637,8 +624,7 @@ bool LadyVashjTankIsIdleAwayFromTheMiddleTrigger::IsActiveInEncounter()
         return false;
 
     Unit* vashj = AI_VALUE2(Unit*, "find target", "lady vashj");
-    if (!vashj || GetLadyVashjPhase(vashj) != 2 ||
-        bot->GetExactDist(vashj) < VASHJ_IDLE_TANK_DISTANCE)
+    if (!vashj || GetLadyVashjPhase(vashj) != 2 || bot->GetExactDist(vashj) < VASHJ_IDLE_TANK_DISTANCE)
     {
         return false;
     }
@@ -661,6 +647,8 @@ bool LadyVashjTankIsIdleAwayFromTheMiddleTrigger::IsActiveInEncounter()
 
 bool LadyVashjTaintedElementalNeedsLooterTrigger::IsActiveInEncounter()
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!IsMechanicTrackerBot(bot, SSC_MAP_ID))
         return false;
 
@@ -707,6 +695,8 @@ bool LadyVashjTaintedCoreLooterTrigger::IsActiveInEncounter()
 
 bool LadyVashjCorePassingChainMemberTrigger::IsActiveInEncounter()
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     VashjCorePassingChain const* chain = GetVashjCorePassingChain(bot);
     if (!chain || chain->failed)
         return false;
@@ -726,8 +716,7 @@ bool LadyVashjCorePassingChainMemberTrigger::IsActiveInEncounter()
         return false;
 
     VashjCoreCatcher const& catcher = chain->catchers[index];
-    if (catcher.arrived &&
-        bot->GetExactDist2d(catcher.spot) <= GetVashjCoreSpotArrivalDistance(*chain, index))
+    if (catcher.arrived && bot->GetExactDist2d(catcher.spot) <= GetVashjCoreSpotArrivalDistance(*chain, index))
     {
         return false;
     }
@@ -737,6 +726,8 @@ bool LadyVashjCorePassingChainMemberTrigger::IsActiveInEncounter()
 
 bool LadyVashjShouldDestroyTaintedCoreTrigger::IsActiveInEncounter()
 {
+    std::lock_guard<std::recursive_mutex> lock(GetEncounterStateMutex());
+
     if (!HasTaintedCore(bot))
         return false;
 
@@ -783,8 +774,8 @@ bool LadyVashjBotAboveTheGroundTrigger::IsActiveInEncounter()
     if (!vashj || GetLadyVashjPhase(vashj) != 3)
         return false;
 
-    float const floorZ = bot->GetMapHeight(
-        bot->GetPositionX(), bot->GetPositionY(), VASHJ_PLATFORM_CENTER_POSITION.GetPositionZ());
+    float const floorZ =
+        bot->GetMapHeight(bot->GetPositionX(), bot->GetPositionY(), VASHJ_PLATFORM_CENTER_POSITION.GetPositionZ());
     return floorZ > INVALID_HEIGHT && bot->GetPositionZ() - floorZ > VASHJ_ABOVE_GROUND_HEIGHT;
 }
 
@@ -818,9 +809,8 @@ bool LadyVashjMeleeNearToxicSporesTrigger::IsActiveInEncounter()
         return false;
     }
 
-    return !IsInMeleeRangeClearOfSpores(
-        bot, AI_VALUE(Unit*, "current target"), GetToxicSporePositions(botAI),
-        TOXIC_SPORES_AVOID_RADIUS);
+    return !IsInMeleeRangeClearOfSpores(bot, AI_VALUE(Unit*, "current target"), GetToxicSporePositions(botAI),
+                                        TOXIC_SPORES_AVOID_RADIUS);
 }
 
 bool LadyVashjRangedReachBlockedByToxicSporesTrigger::IsActiveInEncounter()

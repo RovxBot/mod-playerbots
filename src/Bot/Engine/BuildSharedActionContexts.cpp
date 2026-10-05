@@ -31,8 +31,7 @@
 #include "WotlkDungeonActionContext.h"
 #include "ZAActionContext.h"
 
-void AiObjectContext::BuildSharedActionContexts(
-    SharedNamedObjectContextList<Action>& actionContexts)
+void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
 {
     actionContexts.Add(new ActionContext());
     actionContexts.Add(new ChatActionContext());

@@ -16,12 +16,10 @@ public:
     RaidSscTriggerContext()
     {
         // Shared
-        creators["ssc no encounter in progress"] =
-            &RaidSscTriggerContext::ssc_no_encounter_in_progress;
+        creators["ssc no encounter in progress"] = &RaidSscTriggerContext::ssc_no_encounter_in_progress;
 
         // Trash
-        creators["underbog colossus in toxic pool"] =
-            &RaidSscTriggerContext::underbog_colossus_in_toxic_pool;
+        creators["underbog colossus in toxic pool"] = &RaidSscTriggerContext::underbog_colossus_in_toxic_pool;
 
         creators["greyheart tidecaller water elemental totem spawned"] =
             &RaidSscTriggerContext::greyheart_tidecaller_water_elemental_totem_spawned;
@@ -49,11 +47,9 @@ public:
             &RaidSscTriggerContext::hydross_the_unstable_should_manage_phase_timers;
 
         // The Lurker Below
-        creators["the lurker below spout is active"] =
-            &RaidSscTriggerContext::the_lurker_below_spout_is_active;
+        creators["the lurker below spout is active"] = &RaidSscTriggerContext::the_lurker_below_spout_is_active;
 
-        creators["the lurker below should be tanked"] =
-            &RaidSscTriggerContext::the_lurker_below_should_be_tanked;
+        creators["the lurker below should be tanked"] = &RaidSscTriggerContext::the_lurker_below_should_be_tanked;
 
         creators["the lurker below ranged should spread"] =
             &RaidSscTriggerContext::the_lurker_below_ranged_should_spread;
@@ -64,8 +60,7 @@ public:
         creators["the lurker below melee cannot reach target"] =
             &RaidSscTriggerContext::the_lurker_below_melee_cannot_reach_target;
 
-        creators["the lurker below melee in water"] =
-            &RaidSscTriggerContext::the_lurker_below_melee_in_water;
+        creators["the lurker below melee in water"] = &RaidSscTriggerContext::the_lurker_below_melee_in_water;
 
         // Leotheras the Blind
         creators["leotheras the blind ranged should spread upon pull"] =
@@ -89,8 +84,7 @@ public:
         creators["leotheras the blind inner demon has awakened"] =
             &RaidSscTriggerContext::leotheras_the_blind_inner_demon_has_awakened;
 
-        creators["leotheras the blind in final phase"] =
-            &RaidSscTriggerContext::leotheras_the_blind_in_final_phase;
+        creators["leotheras the blind in final phase"] = &RaidSscTriggerContext::leotheras_the_blind_in_final_phase;
 
         creators["leotheras the blind should separate boss from demon"] =
             &RaidSscTriggerContext::leotheras_the_blind_should_separate_boss_from_demon;
@@ -98,8 +92,7 @@ public:
         creators["leotheras the blind hunter should misdirect demon form"] =
             &RaidSscTriggerContext::leotheras_the_blind_hunter_should_misdirect_demon_form;
 
-        creators["leotheras the blind aggro resets"] =
-            &RaidSscTriggerContext::leotheras_the_blind_aggro_resets;
+        creators["leotheras the blind aggro resets"] = &RaidSscTriggerContext::leotheras_the_blind_aggro_resets;
 
         creators["leotheras the blind should manage dps wait timers"] =
             &RaidSscTriggerContext::leotheras_the_blind_should_manage_dps_wait_timers;
@@ -127,8 +120,7 @@ public:
             &RaidSscTriggerContext::fathom_lord_karathress_stuck_midair_after_cyclone;
 
         // Morogrim Tidewalker
-        creators["morogrim tidewalker should be tanked"] =
-            &RaidSscTriggerContext::morogrim_tidewalker_should_be_tanked;
+        creators["morogrim tidewalker should be tanked"] = &RaidSscTriggerContext::morogrim_tidewalker_should_be_tanked;
 
         creators["morogrim tidewalker ranged should stack"] =
             &RaidSscTriggerContext::morogrim_tidewalker_ranged_should_stack;
@@ -140,8 +132,7 @@ public:
             &RaidSscTriggerContext::morogrim_tidewalker_hunter_should_misdirect;
 
         // Lady Vashj <Coilfang Matron>
-        creators["lady vashj should be tanked"] =
-            &RaidSscTriggerContext::lady_vashj_should_be_tanked;
+        creators["lady vashj should be tanked"] = &RaidSscTriggerContext::lady_vashj_should_be_tanked;
 
         creators["lady vashj ranged should spread in phase 1"] =
             &RaidSscTriggerContext::lady_vashj_ranged_should_spread_in_phase_1;
@@ -164,14 +155,12 @@ public:
         creators["lady vashj static charge on group member"] =
             &RaidSscTriggerContext::lady_vashj_static_charge_on_group_member;
 
-        creators["lady vashj hunter should misdirect"] =
-            &RaidSscTriggerContext::lady_vashj_hunter_should_misdirect;
+        creators["lady vashj hunter should misdirect"] = &RaidSscTriggerContext::lady_vashj_hunter_should_misdirect;
 
         creators["lady vashj should assign target priority"] =
             &RaidSscTriggerContext::lady_vashj_should_assign_target_priority;
 
-        creators["lady vashj tank needs fear ward"] =
-            &RaidSscTriggerContext::lady_vashj_tank_needs_fear_ward;
+        creators["lady vashj tank needs fear ward"] = &RaidSscTriggerContext::lady_vashj_tank_needs_fear_ward;
 
         creators["lady vashj coilfang strider should be tanked"] =
             &RaidSscTriggerContext::lady_vashj_coilfang_strider_should_be_tanked;
@@ -188,35 +177,27 @@ public:
         creators["lady vashj should attack tainted elemental"] =
             &RaidSscTriggerContext::lady_vashj_should_attack_tainted_elemental;
 
-        creators["lady vashj tainted core looter"] =
-            &RaidSscTriggerContext::lady_vashj_tainted_core_looter;
+        creators["lady vashj tainted core looter"] = &RaidSscTriggerContext::lady_vashj_tainted_core_looter;
 
-        creators["lady vashj core passing chain member"] =
-            &RaidSscTriggerContext::lady_vashj_core_passing_chain_member;
+        creators["lady vashj core passing chain member"] = &RaidSscTriggerContext::lady_vashj_core_passing_chain_member;
 
         creators["lady vashj should destroy tainted core"] =
             &RaidSscTriggerContext::lady_vashj_should_destroy_tainted_core;
 
-        creators["lady vashj pet should switch target"] =
-            &RaidSscTriggerContext::lady_vashj_pet_should_switch_target;
+        creators["lady vashj pet should switch target"] = &RaidSscTriggerContext::lady_vashj_pet_should_switch_target;
 
-        creators["lady vashj bot above the ground"] =
-            &RaidSscTriggerContext::lady_vashj_bot_above_the_ground;
+        creators["lady vashj bot above the ground"] = &RaidSscTriggerContext::lady_vashj_bot_above_the_ground;
 
-        creators["lady vashj bot in toxic spores"] =
-            &RaidSscTriggerContext::lady_vashj_bot_in_toxic_spores;
+        creators["lady vashj bot in toxic spores"] = &RaidSscTriggerContext::lady_vashj_bot_in_toxic_spores;
 
-        creators["lady vashj melee near toxic spores"] =
-            &RaidSscTriggerContext::lady_vashj_melee_near_toxic_spores;
+        creators["lady vashj melee near toxic spores"] = &RaidSscTriggerContext::lady_vashj_melee_near_toxic_spores;
 
         creators["lady vashj ranged reach blocked by toxic spores"] =
             &RaidSscTriggerContext::lady_vashj_ranged_reach_blocked_by_toxic_spores;
 
-        creators["lady vashj entangle on melee"] =
-            &RaidSscTriggerContext::lady_vashj_entangle_on_melee;
+        creators["lady vashj entangle on melee"] = &RaidSscTriggerContext::lady_vashj_entangle_on_melee;
 
-        creators["lady vashj static charge on rogue"] =
-            &RaidSscTriggerContext::lady_vashj_static_charge_on_rogue;
+        creators["lady vashj static charge on rogue"] = &RaidSscTriggerContext::lady_vashj_static_charge_on_rogue;
     }
 
 private:
@@ -353,8 +334,8 @@ private:
     }
     static Trigger* fathom_lord_karathress_hunter_should_misdirect(PlayerbotAI* botAI)
     {
-        return new SscHunterShouldMisdirectTrigger(
-            botAI, "fathom-lord karathress hunter should misdirect", "fathom-guard tidalvess");
+        return new SscHunterShouldMisdirectTrigger(botAI, "fathom-lord karathress hunter should misdirect",
+                                                   "fathom-guard tidalvess");
     }
     static Trigger* fathom_lord_karathress_should_assign_dps_priority(PlayerbotAI* botAI)
     {
@@ -388,8 +369,8 @@ private:
     }
     static Trigger* morogrim_tidewalker_hunter_should_misdirect(PlayerbotAI* botAI)
     {
-        return new SscHunterShouldMisdirectTrigger(
-            botAI, "morogrim tidewalker hunter should misdirect", "morogrim tidewalker");
+        return new SscHunterShouldMisdirectTrigger(botAI, "morogrim tidewalker hunter should misdirect",
+                                                   "morogrim tidewalker");
     }
 
     // Lady Vashj <Coilfang Matron>
@@ -427,8 +408,7 @@ private:
     }
     static Trigger* lady_vashj_hunter_should_misdirect(PlayerbotAI* botAI)
     {
-        return new SscHunterShouldMisdirectTrigger(
-            botAI, "lady vashj hunter should misdirect", "lady vashj");
+        return new SscHunterShouldMisdirectTrigger(botAI, "lady vashj hunter should misdirect", "lady vashj");
     }
     static Trigger* lady_vashj_should_assign_target_priority(PlayerbotAI* botAI)
     {

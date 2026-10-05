@@ -10,6 +10,7 @@
 #include "ItemUsageValue.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "PlayerbotAIConfig.h"
 #include "QuestDef.h"
 
 bool DepositGuildMaterialsAction::Execute(Event /*event*/)
@@ -40,6 +41,12 @@ bool DepositGuildMaterialsAction::Execute(Event /*event*/)
     }
 
     return deposited;
+}
+
+bool DepositGuildMaterialsAction::isUseful()
+{
+    return sPlayerbotAIConfig.enableRandomBotGuildBankDeposits && bot->IsAlive() && !bot->IsInCombat() &&
+           !bot->GetTradeData() && bot->GetGuildId();
 }
 
 bool DepositGuildMaterialsAction::isPossible()
