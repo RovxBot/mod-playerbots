@@ -180,6 +180,8 @@ protected:
     void OnBotLoginInternal(Player* const bot) override;
 
 private:
+    class GuildBankDepositOperation;
+
     RandomPlayerbotMgr() : PlayerbotHolder()
     {
         this->playersLevel = sPlayerbotAIConfig.randombotStartingLevel;

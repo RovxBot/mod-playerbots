@@ -63,7 +63,17 @@ constexpr char GUILD_BANK_DEPOSIT_COOLDOWN_EVENT[] = "guild_bank_deposit_cooldow
 constexpr uint32 GUILD_BANK_DEPOSIT_PENDING_TIMEOUT = MINUTE;
 constexpr uint32 GUILD_BANK_DEPOSIT_DISPATCH_DELAY_MS = 5 * IN_MILLISECONDS;
 
-class GuildBankDepositOperation : public PlayerbotOperation
+bool CanDepositGuildMaterials(PlayerbotAI* botAI)
+{
+    if (!botAI || !botAI->GetAiObjectContext())
+        return false;
+
+    Action* action = botAI->GetAiObjectContext()->GetAction("deposit guild materials");
+    return action && action->isUseful() && action->isPossible();
+}
+}  // namespace
+
+class RandomPlayerbotMgr::GuildBankDepositOperation : public PlayerbotOperation
 {
 public:
     explicit GuildBankDepositOperation(ObjectGuid botGuid) : _botGuid(botGuid) {}
@@ -84,16 +94,6 @@ public:
 private:
     ObjectGuid _botGuid;
 };
-
-bool CanDepositGuildMaterials(PlayerbotAI* botAI)
-{
-    if (!botAI || !botAI->GetAiObjectContext())
-        return false;
-
-    Action* action = botAI->GetAiObjectContext()->GetAction("deposit guild materials");
-    return action && action->isUseful() && action->isPossible();
-}
-}  // namespace
 
 struct GuidClassRaceInfo
 {
