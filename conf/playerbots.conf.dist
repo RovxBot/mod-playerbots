@@ -294,6 +294,9 @@ AiPlayerbot.AutoEquipUpgradeLoot = 1
 
 # Converts awarded, non-stackable epic raid tier tokens into the class/spec-appropriate tier-set item
 # that the token purchases from a vendor. This applies only to loot awards, never traded or created tokens.
+# Conversion waits until the bot is out of combat and retries every 30 seconds while the awarded token stays in its bags.
+# Required upgrade items are consumed as well; tokens remain untouched until an affordable, usable reward is available.
+# Only item costs are supported; exchanges that also charge gold, honor or arena points are left to vendors.
 # Default: 1 (enabled)
 AiPlayerbot.AutoConvertTierTokens = 1
 

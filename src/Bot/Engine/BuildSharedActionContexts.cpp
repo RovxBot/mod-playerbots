@@ -31,8 +31,7 @@
 #include "WotlkDungeonActionContext.h"
 #include "ZAActionContext.h"
 
-void AiObjectContext::BuildSharedActionContexts(
-    SharedNamedObjectContextList<Action>& actionContexts)
+void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
 {
     actionContexts.Add(new ActionContext());
     actionContexts.Add(new ChatActionContext());
@@ -43,7 +42,7 @@ void AiObjectContext::BuildSharedActionContexts(
     actionContexts.Add(new RaidKarazhanActionContext());
     actionContexts.Add(new RaidGruulsLairActionContext());
     actionContexts.Add(new RaidMagtheridonActionContext());
-    actionContexts.Add(new RaidSSCActionContext());
+    actionContexts.Add(new RaidSscActionContext());
     actionContexts.Add(new RaidTempestKeepActionContext());
     actionContexts.Add(new RaidHyjalActionContext());
     actionContexts.Add(new RaidBlackTempleActionContext());

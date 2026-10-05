@@ -11,18 +11,19 @@
 #include "MagValueContext.h"
 #include "MechValueContext.h"
 #include "MgTValueContext.h"
+#include "SSCValueContext.h"
 #include "TKValueContext.h"
 #include "UBValueContext.h"
-#include "ZAValueContext.h"
 #include "ValueContext.h"
+#include "ZAValueContext.h"
 
-void AiObjectContext::BuildSharedValueContexts(
-    SharedNamedObjectContextList<UntypedValue>& valueContexts)
+void AiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
 {
     valueContexts.Add(new ValueContext());
     valueContexts.Add(new RaidGruulsLairValueContext());
     valueContexts.Add(new RaidHyjalValueContext());
     valueContexts.Add(new RaidMagtheridonValueContext());
+    valueContexts.Add(new RaidSscValueContext());
     valueContexts.Add(new RaidTempestKeepValueContext());
     valueContexts.Add(new RaidZulAmanValueContext());
     valueContexts.Add(new TbcDungeonMechValueContext());

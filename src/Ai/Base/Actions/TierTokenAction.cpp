@@ -6,27 +6,36 @@
 
 #include "TierTokenAction.h"
 
+#include <algorithm>
+#include <limits>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
 #include "DBCStores.h"
-#include "DatabaseEnv.h"
-#include "Event.h"
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
-#include "LootMgr.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "StatsWeightCalculator.h"
 #include "WorldPacket.h"
-#include <algorithm>
-#include <limits>
-#include <unordered_map>
-#include <vector>
 
 namespace
 {
-using TierTokenRewards = std::unordered_map<uint32, std::vector<uint32>>;
+constexpr uint32 TIER_TOKEN_RETRY_DELAY_MS = 30 * IN_MILLISECONDS;
+
+struct TierReward
+{
+    uint32 ItemId;
+    uint32 ExtendedCost;
+};
+
+// Populated on startup, before map updates begin; readers never modify this cache.
+std::unordered_map<uint32, std::vector<TierReward>> tierTokenRewards;
 
 bool IsTierToken(ItemTemplate const* item)
 {
@@ -34,184 +43,185 @@ bool IsTierToken(ItemTemplate const* item)
            item->Quality == ITEM_QUALITY_EPIC && item->GetMaxStackSize() == 1;
 }
 
-TierTokenRewards LoadTierTokenRewards()
+bool CanAffordTierReward(Player* bot, TierReward const& reward)
 {
-    TierTokenRewards rewards;
-    QueryResult result = WorldDatabase.Query("SELECT item, ExtendedCost FROM npc_vendor WHERE item > 0 AND ExtendedCost > 0");
-    if (!result)
-    {
-        LOG_WARN("playerbots", "No vendor items with extended costs found; tier tokens will not be converted");
-        return rewards;
-    }
+    ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(reward.ExtendedCost);
+    if (!cost || cost->reqhonorpoints || cost->reqarenapoints || cost->reqpersonalarenarating)
+        return false;
 
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 rewardId = fields[0].Get<uint32>();
-        ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(fields[1].Get<uint32>());
-        ItemTemplate const* reward = sObjectMgr->GetItemTemplate(rewardId);
+    for (uint8 requirement = 0; requirement < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++requirement)
+        if (cost->reqitem[requirement] &&
+            !bot->HasItemCount(cost->reqitem[requirement], cost->reqitemcount[requirement]))
+            return false;
 
-        // A raid-tier reward is an armour item belonging to an item set. This prevents currencies and
-        // non-tier vendor items from becoming conversion targets.
-        if (!cost || !reward || reward->Class != ITEM_CLASS_ARMOR || reward->ItemSet == 0)
-            continue;
-
-        for (uint8 requirement = 0; requirement < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++requirement)
-        {
-            uint32 tokenId = cost->reqitem[requirement];
-            if (cost->reqitemcount[requirement] != 1 || !IsTierToken(sObjectMgr->GetItemTemplate(tokenId)))
-                continue;
-
-            rewards[tokenId].push_back(rewardId);
-        }
-    } while (result->NextRow());
-
-    uint32 rewardCount = 0;
-    for (auto& [tokenId, tokenRewards] : rewards)
-    {
-        std::sort(tokenRewards.begin(), tokenRewards.end());
-        tokenRewards.erase(std::unique(tokenRewards.begin(), tokenRewards.end()), tokenRewards.end());
-        rewardCount += tokenRewards.size();
-    }
-
-    LOG_INFO("playerbots", "Loaded {} tier-token rewards for {} tokens", rewardCount, rewards.size());
-    return rewards;
+    return bot->CanTakeMoreSimilarItems(reward.ItemId, 1) == EQUIP_ERR_OK;
 }
 
-TierTokenRewards const& GetTierTokenRewards()
+TierReward const* SelectTierReward(Player* bot, uint32 tokenId)
 {
-    static TierTokenRewards const rewards = LoadTierTokenRewards();
-    return rewards;
-}
+    auto const tokenRewards = tierTokenRewards.find(tokenId);
+    if (tokenRewards == tierTokenRewards.end())
+        return nullptr;
 
-uint32 SelectTierReward(Player* bot, uint32 tokenId)
-{
-    TierTokenRewards const& rewards = GetTierTokenRewards();
-    auto const tokenRewards = rewards.find(tokenId);
-    if (tokenRewards == rewards.end())
-        return 0;
-
-    uint32 const classMask = 1u << (bot->getClass() - 1);
     float bestScore = std::numeric_limits<float>::lowest();
-    uint32 bestRewardId = 0;
+    TierReward const* bestReward = nullptr;
     StatsWeightCalculator calculator(bot, true);
 
-    for (uint32 rewardId : tokenRewards->second)
+    for (TierReward const& candidate : tokenRewards->second)
     {
-        ItemTemplate const* reward = sObjectMgr->GetItemTemplate(rewardId);
-        if (!reward || (reward->AllowableClass && !(reward->AllowableClass & classMask)) ||
-            bot->CanUseItem(reward) != EQUIP_ERR_OK)
-        {
+        ItemTemplate const* reward = sObjectMgr->GetItemTemplate(candidate.ItemId);
+        if (!reward || bot->CanUseItem(reward) != EQUIP_ERR_OK || !CanAffordTierReward(bot, candidate))
             continue;
-        }
 
-        float score = calculator.CalculateItem(rewardId);
+        float const score = calculator.CalculateItem(candidate.ItemId);
         if (score > bestScore)
         {
             bestScore = score;
-            bestRewardId = rewardId;
+            bestReward = &candidate;
         }
     }
 
-    return bestRewardId;
-}
-
-void RestoreToken(Player* bot, uint32 tokenId)
-{
-    ItemPosCountVec dest;
-    if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, tokenId, 1) != EQUIP_ERR_OK)
-        return;
-
-    if (Item* token = bot->StoreNewItem(dest, tokenId, true))
-        bot->SendNewItem(token, 1, false, false);
+    return bestReward;
 }
 
 bool ConvertTierToken(Player* bot, Item* token)
 {
     uint32 const tokenId = token->GetEntry();
-    uint32 rewardId = SelectTierReward(bot, tokenId);
-    if (!rewardId || bot->CanTakeMoreSimilarItems(rewardId, 1) != EQUIP_ERR_OK)
+    TierReward const* selected = SelectTierReward(bot, tokenId);
+    if (!selected)
         return false;
 
-    // Removing the non-stackable token first frees a bag slot. CanStoreNewItem below must therefore
-    // succeed unless an unexpected inventory rule rejects the selected reward.
-    bot->DestroyItem(token->GetBagSlot(), token->GetSlot(), true);
-
-    ItemPosCountVec dest;
-    if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, rewardId, 1) != EQUIP_ERR_OK)
-    {
-        LOG_ERROR("playerbots", "Could not store tier reward {} for bot {}; restoring token {}", rewardId,
-                  bot->GetName(), tokenId);
-        RestoreToken(bot, tokenId);
-        return false;
-    }
-
-    Item* reward = bot->StoreNewItem(dest, rewardId, true);
+    std::unique_ptr<Item> reward(Item::CreateItem(selected->ItemId, 1, bot));
     if (!reward)
-    {
-        LOG_ERROR("playerbots", "Could not create tier reward {} for bot {}; restoring token {}", rewardId,
-                  bot->GetName(), tokenId);
-        RestoreToken(bot, tokenId);
         return false;
+
+    // Validate the replacement before consuming anything, including when the bags are full.
+    ItemPosCountVec dest;
+    if (bot->CanStoreItem(token->GetBagSlot(), token->GetSlot(), dest, reward.get(), true) != EQUIP_ERR_OK)
+        return false;
+
+    ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(selected->ExtendedCost);
+    bot->DestroyItem(token->GetBagSlot(), token->GetSlot(), true);
+    for (uint8 requirement = 0; requirement < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++requirement)
+        if (cost->reqitem[requirement] && cost->reqitem[requirement] != tokenId)
+            bot->DestroyItemCount(cost->reqitem[requirement], cost->reqitemcount[requirement], true);
+
+    Item* storedReward = bot->StoreItem(dest, reward.release(), true);
+    bot->AdditionalSavingAddMask(ADDITIONAL_SAVING_INVENTORY_AND_GOLD);
+    bot->ItemAddedQuestCheck(selected->ItemId, 1);
+    bot->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_RECEIVE_EPIC_ITEM, selected->ItemId, 1);
+    bot->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_OWN_ITEM, selected->ItemId, 1);
+    bot->SendNewItem(storedReward, 1, true, false);
+    LOG_DEBUG("playerbots", "Converted tier token {} into reward {} for bot {}", tokenId, selected->ItemId,
+              bot->GetName());
+    return true;
+}
+
+void AttemptTierTokenConversion(ObjectGuid botGuid, ObjectGuid tokenGuid)
+{
+    Player* bot = ObjectAccessor::FindPlayer(botGuid);
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    if (!botAI || !sPlayerbotAIConfig.autoConvertTierTokens)
+        return;
+
+    Item* token = bot->GetItemByGuid(tokenGuid);
+    if (!token || !Player::IsInventoryPos(token->GetBagSlot(), token->GetSlot()))
+        return;
+
+    if (bot->IsAlive() && bot->IsInWorld() && !bot->IsBeingTeleported() && !bot->IsInCombat() && !bot->GetTradeData() &&
+        ConvertTierToken(bot, token))
+    {
+        botAI->DoSpecificAction("equip upgrades packet action", Event(), true);
+        return;
     }
 
-    bot->SendNewItem(reward, 1, false, false);
-    LOG_DEBUG("playerbots", "Converted tier token {} into reward {} for bot {}", tokenId, rewardId, bot->GetName());
-    return true;
+    botAI->AddTimedEvent([botGuid, tokenGuid]() { AttemptTierTokenConversion(botGuid, tokenGuid); },
+                         TIER_TOKEN_RETRY_DELAY_MS);
 }
 }  // namespace
 
-bool ConvertTierTokenAction::Execute(Event event)
+void InitializeTierTokenRewards()
 {
-    if (!sPlayerbotAIConfig.autoConvertTierTokens)
-        return false;
-
-    WorldPacket packet(event.getPacket());
-    packet.rpos(0);
-
-    Item* token = nullptr;
-    uint32 tokenId = 0;
-    if (event.GetSource() == "item push result")
+    for (auto const& [entry, creature] : *sObjectMgr->GetCreatureTemplates())
     {
-        ObjectGuid owner;
-        uint32 received;
-        uint32 created;
-        uint32 sendChatMessage;
-        uint8 bag;
-        uint32 slot;
+        VendorItemData const* vendor = sObjectMgr->GetNpcVendorItemList(entry);
+        if (!vendor)
+            continue;
 
-        packet >> owner >> received >> created >> sendChatMessage >> bag >> slot >> tokenId;
+        for (uint32 slot = 0; slot < vendor->GetItemCount(); ++slot)
+        {
+            VendorItem const* vendorItem = vendor->GetItem(slot);
+            ItemTemplate const* reward = sObjectMgr->GetItemTemplate(vendorItem->item);
+            ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(vendorItem->ExtendedCost);
+            if (!cost || !reward || reward->Class != ITEM_CLASS_ARMOR || !reward->ItemSet ||
+                (vendorItem->IsGoldRequired(reward) && reward->BuyPrice) || cost->reqhonorpoints ||
+                cost->reqarenapoints || cost->reqpersonalarenarating)
+                continue;
 
-        // Loot awards are sent with received == 0 and created == 0. Limiting conversion to this case
-        // prevents a traded, vendor-bought, crafted, or GM-created token from being consumed.
-        if (owner != bot->GetGUID() || received != 0 || created != 0 || slot == uint32(-1))
-            return false;
+            for (uint8 requirement = 0; requirement < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++requirement)
+            {
+                uint32 const tokenId = cost->reqitem[requirement];
+                if (cost->reqitemcount[requirement] != 1 || !IsTierToken(sObjectMgr->GetItemTemplate(tokenId)))
+                    continue;
 
-        token = bot->GetItemByPos(bag, uint8(slot));
+                auto& rewards = tierTokenRewards[tokenId];
+                if (std::none_of(rewards.begin(), rewards.end(),
+                                 [vendorItem](TierReward const& candidate)
+                                 {
+                                     return candidate.ItemId == vendorItem->item &&
+                                            candidate.ExtendedCost == vendorItem->ExtendedCost;
+                                 }))
+                    rewards.push_back({vendorItem->item, vendorItem->ExtendedCost});
+            }
+        }
     }
-    else if (event.GetSource() == "loot roll won")
+
+    for (auto& [tokenId, rewards] : tierTokenRewards)
+        std::sort(rewards.begin(), rewards.end(),
+                  [](TierReward const& left, TierReward const& right)
+                  {
+                      return left.ItemId < right.ItemId ||
+                             (left.ItemId == right.ItemId && left.ExtendedCost < right.ExtendedCost);
+                  });
+
+    LOG_INFO("playerbots", "Loaded tier-token rewards for {} tokens", tierTokenRewards.size());
+}
+
+void ScheduleTierTokenConversion(Player* bot, Item* token)
+{
+    if (!bot || !token || !sPlayerbotAIConfig.autoConvertTierTokens ||
+        tierTokenRewards.find(token->GetEntry()) == tierTokenRewards.end())
+        return;
+
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
     {
-        ObjectGuid source;
-        uint32 lootSlot;
-        uint32 itemSuffix;
-        uint32 itemProperty;
-        ObjectGuid winner;
-        uint8 rollNumber;
-        uint8 rollType;
-
-        packet >> source >> lootSlot >> tokenId >> itemSuffix >> itemProperty >> winner >> rollNumber >> rollType;
-        if (winner != bot->GetGUID() || (rollType != ROLL_NEED && rollType != ROLL_GREED))
-            return false;
-
-        // Group-roll rewards do not send SMSG_ITEM_PUSH_RESULT. The bot AI handles this packet on its
-        // next update, after the reward has been stored, so locate the newly awarded non-stackable token.
-        token = bot->GetItemByEntry(tokenId);
+        ObjectGuid const botGuid = bot->GetGUID();
+        ObjectGuid const tokenGuid = token->GetGUID();
+        // Loot hooks run while the core still uses the awarded Item*. Defer its destruction until the next update.
+        botAI->AddTimedEvent([botGuid, tokenGuid]() { AttemptTierTokenConversion(botGuid, tokenGuid); }, 1);
     }
-    else
-        return false;
+}
 
-    if (!token || token->GetEntry() != tokenId || !IsTierToken(token->GetTemplate()))
-        return false;
+void ScheduleTierTokenConversionFromPacket(Player* bot, WorldPacket const& packet)
+{
+    if (!sPlayerbotAIConfig.autoConvertTierTokens || packet.GetOpcode() != SMSG_ITEM_PUSH_RESULT)
+        return;
 
-    return ConvertTierToken(bot, token);
+    WorldPacket award(packet);
+    award.rpos(0);
+    ObjectGuid owner;
+    uint32 received;
+    uint32 created;
+    uint32 sendChatMessage;
+    uint8 bag;
+    uint32 slot;
+    uint32 tokenId;
+    award >> owner >> received >> created >> sendChatMessage >> bag >> slot >> tokenId;
+    if (owner != bot->GetGUID() || received || created || slot == uint32(-1))
+        return;
+
+    // Capture the GUID while the packet's slot still refers to the awarded item, before the AI queue runs.
+    Item* token = bot->GetItemByPos(bag, uint8(slot));
+    if (token && token->GetEntry() == tokenId)
+        ScheduleTierTokenConversion(bot, token);
 }

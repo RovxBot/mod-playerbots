@@ -31,8 +31,7 @@
 #include "WotlkDungeonTriggerContext.h"
 #include "ZATriggerContext.h"
 
-void AiObjectContext::BuildSharedTriggerContexts(
-    SharedNamedObjectContextList<Trigger>& triggerContexts)
+void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Trigger>& triggerContexts)
 {
     triggerContexts.Add(new TriggerContext());
     triggerContexts.Add(new ChatTriggerContext());
@@ -44,7 +43,7 @@ void AiObjectContext::BuildSharedTriggerContexts(
     triggerContexts.Add(new RaidGruulsLairTriggerContext());
     triggerContexts.Add(new RaidMagtheridonTriggerContext());
     triggerContexts.Add(new RaidNaxxTriggerContext());
-    triggerContexts.Add(new RaidSSCTriggerContext());
+    triggerContexts.Add(new RaidSscTriggerContext());
     triggerContexts.Add(new RaidTempestKeepTriggerContext());
     triggerContexts.Add(new RaidHyjalTriggerContext());
     triggerContexts.Add(new RaidBlackTempleTriggerContext());
