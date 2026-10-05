@@ -98,26 +98,6 @@ bool KarazhanResetEncounterStatesAction::Execute(Event /*event*/)
 
 bool KarazhanSetTremorTotemAction::Execute(Event /*event*/)
 {
-    if (bot->getClass() == CLASS_PRIEST)
-        return CastFearWardOnMainTank();
-
-    return SetTremorTotem();
-}
-
-bool KarazhanCastFearProtectionSpellAction::CastFearWardOnMainTank()
-{
-    Player* mainTank = GetGroupMainTank(bot);
-    if (!mainTank || mainTank->HasAura(KaraId(KaraSpells::SPELL_FEAR_WARD)))
-        return false;
-
-    if (!botAI->CanCastSpell(KaraId(KaraSpells::SPELL_FEAR_WARD), mainTank))
-        return false;
-
-    return botAI->CastSpell(KaraId(KaraSpells::SPELL_FEAR_WARD), mainTank);
-}
-
-bool KarazhanCastFearProtectionSpellAction::SetTremorTotem()
-{
     Unit* nightbane = AI_VALUE2(Unit*, "find target", "nightbane");
     if (!nightbane || nightbane->GetPositionZ() > NIGHTBANE_FLIGHT_Z)
         return false;
