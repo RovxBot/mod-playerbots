@@ -45,9 +45,9 @@ extern Position const EREDAR_TWINS_RANGED_CONFLAG_POSITION;
 extern Position const EREDAR_TWINS_MELEE_CONFLAG_POSITION;
 
 extern std::unordered_map<uint32, EredarTwinsIncomingConflagrationState>
-	eredarTwinsIncomingConflagrationStates;
+    eredarTwinsIncomingConflagrationStates;
 extern std::unordered_map<uint32, EredarTwinsBlazeTargetState>
-	eredarTwinsBlazeTargetStates;
+    eredarTwinsBlazeTargetStates;
 extern std::unordered_map<uint32, time_t> eredarTwinsDpsHoldTimer;
 
 Position GetAlythessTankPosition(Unit* alythess, uint8 index);

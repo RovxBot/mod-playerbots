@@ -45,7 +45,7 @@ bool DepositGuildMaterialsAction::Execute(Event /*event*/)
 
 bool DepositGuildMaterialsAction::isUseful()
 {
-    return sPlayerbotAIConfig.enableRandomBotGuildBankDeposits && bot->IsAlive() && !bot->IsInCombat() &&
+    return sPlayerbotAIConfig.EnableRandomBotGuildBankDeposits && bot->IsAlive() && !bot->IsInCombat() &&
            !bot->GetTradeData() && bot->GetGuildId();
 }
 

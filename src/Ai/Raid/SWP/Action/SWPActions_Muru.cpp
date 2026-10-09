@@ -619,7 +619,7 @@ bool MuruCastStunOnShadowswordBerserkerAction::Execute(Event /*event*/)
     if (!berserker || berserker->HasUnitState(UNIT_STATE_STUNNED))
         return false;
 
-    auto const castStun = [&](const char* spell)
+    auto const castStun = [&](char const* spell)
     {
         return botAI->CanCastSpell(spell, berserker) && botAI->CastSpell(spell, berserker);
     };
@@ -653,7 +653,7 @@ bool MuruInterruptFelFireballAction::Execute(Event /*event*/)
     if (!furyMage)
         return false;
 
-    auto const castInterrupt = [&](const char* spell)
+    auto const castInterrupt = [&](char const* spell)
     {
         return botAI->CanCastSpell(spell, furyMage) && botAI->CastSpell(spell, furyMage);
     };
@@ -766,7 +766,7 @@ bool MuruEnslavedVoidSpawnCastShadowBoltVolleyAction::Execute(Event /*event*/)
 
     bool const commandedAttack = CommandControlledCreatureToAttack(voidSpawn, target);
 
-    if (voidSpawn->GetExactDist2d(target) > sPlayerbotAIConfig.spellDistance)
+    if (voidSpawn->GetExactDist2d(target) > sPlayerbotAIConfig.SpellDistance)
         return commandedAttack;
 
     constexpr uint32 volleySpellId = static_cast<uint32>(SwpSpells::SPELL_SHADOW_BOLT_VOLLEY);

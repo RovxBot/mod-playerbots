@@ -95,7 +95,7 @@ TierReward const* SelectTierReward(Player* bot, uint32 tokenId, bool tokenAwardP
             float const equippedScore =
                 calculator.CalculateItem(equipped->GetEntry(), equipped->GetItemRandomPropertyId());
             if (equipped->GetEntry() == candidate.ItemId || score <= equippedScore ||
-                score <= equippedScore * sPlayerbotAIConfig.equipUpgradeThreshold)
+                score <= equippedScore * sPlayerbotAIConfig.EquipUpgradeThreshold)
                 continue;
         }
 
@@ -146,7 +146,7 @@ void AttemptTierTokenConversion(ObjectGuid botGuid, ObjectGuid tokenGuid)
 {
     Player* bot = ObjectAccessor::FindPlayer(botGuid);
     PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-    if (!botAI || !sPlayerbotAIConfig.autoConvertTierTokens)
+    if (!botAI || !sPlayerbotAIConfig.AutoConvertTierTokens)
         return;
 
     Item* token = bot->GetItemByGuid(tokenGuid);
@@ -220,7 +220,7 @@ bool CanBotUseTierToken(Player* bot, ItemTemplate const* token)
 
 void ScheduleTierTokenConversion(Player* bot, Item* token)
 {
-    if (!bot || !token || !sPlayerbotAIConfig.autoConvertTierTokens ||
+    if (!bot || !token || !sPlayerbotAIConfig.AutoConvertTierTokens ||
         tierTokenRewards.find(token->GetEntry()) == tierTokenRewards.end())
         return;
 
@@ -235,7 +235,7 @@ void ScheduleTierTokenConversion(Player* bot, Item* token)
 
 void ScheduleTierTokenConversionFromPacket(Player* bot, WorldPacket const& packet)
 {
-    if (!sPlayerbotAIConfig.autoConvertTierTokens || packet.GetOpcode() != SMSG_ITEM_PUSH_RESULT)
+    if (!sPlayerbotAIConfig.AutoConvertTierTokens || packet.GetOpcode() != SMSG_ITEM_PUSH_RESULT)
         return;
 
     WorldPacket award(packet);
