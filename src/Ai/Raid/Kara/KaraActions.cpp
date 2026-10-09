@@ -98,17 +98,8 @@ bool KarazhanResetEncounterStatesAction::Execute(Event /*event*/)
 
 bool KarazhanSetTremorTotemAction::Execute(Event /*event*/)
 {
-    Unit* nightbane = AI_VALUE2(Unit*, "find target", "nightbane");
-    if (!nightbane || nightbane->GetPositionZ() > NIGHTBANE_FLIGHT_Z)
-        return false;
-
-    if (AI_VALUE2(bool, "has totem", "tremor totem"))
-        return false;
-
-    if (!botAI->CanCastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot))
-        return false;
-
-    return botAI->CastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot);
+    return botAI->CanCastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot) &&
+        botAI->CastSpell(KaraId(KaraSpells::SPELL_TREMOR_TOTEM), bot);
 }
 
 // Trash
