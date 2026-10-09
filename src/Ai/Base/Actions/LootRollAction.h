@@ -26,7 +26,6 @@ protected:
     RollVote CalculateRollVote(ItemTemplate const* proto, ItemUsage usage = ITEM_USAGE_NONE);
 };
 
-bool CanBotUseToken(ItemTemplate const* proto, Player* bot);
 bool RollUniqueCheck(ItemTemplate const* proto, Player* bot);
 
 class MasterLootRollAction : public LootRollAction

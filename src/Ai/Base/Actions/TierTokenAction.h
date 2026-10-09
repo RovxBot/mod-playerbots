@@ -11,7 +11,10 @@ class Item;
 class Player;
 class WorldPacket;
 
+struct ItemTemplate;
+
 void InitializeTierTokenRewards();
+bool CanBotUseTierToken(Player* bot, ItemTemplate const* token);
 void ScheduleTierTokenConversion(Player* bot, Item* token);
 void ScheduleTierTokenConversionFromPacket(Player* bot, WorldPacket const& packet);
 

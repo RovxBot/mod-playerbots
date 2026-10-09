@@ -21,6 +21,7 @@
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RandomItemMgr.h"
 #include "StatsWeightCalculator.h"
 #include "WorldPacket.h"
 
@@ -43,22 +44,26 @@ bool IsTierToken(ItemTemplate const* item)
            item->Quality == ITEM_QUALITY_EPIC && item->GetMaxStackSize() == 1;
 }
 
-bool CanAffordTierReward(Player* bot, TierReward const& reward)
+bool CanAffordTierReward(Player* bot, TierReward const& reward, uint32 pendingTokenId)
 {
     ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(reward.ExtendedCost);
     if (!cost || cost->reqhonorpoints || cost->reqarenapoints || cost->reqpersonalarenarating)
         return false;
 
     for (uint8 requirement = 0; requirement < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++requirement)
-        if (cost->reqitem[requirement] &&
+        if (cost->reqitem[requirement] && cost->reqitem[requirement] != pendingTokenId &&
             !bot->HasItemCount(cost->reqitem[requirement], cost->reqitemcount[requirement]))
             return false;
 
     return bot->CanTakeMoreSimilarItems(reward.ItemId, 1) == EQUIP_ERR_OK;
 }
 
-TierReward const* SelectTierReward(Player* bot, uint32 tokenId)
+TierReward const* SelectTierReward(Player* bot, uint32 tokenId, bool tokenAwardPending = false)
 {
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return nullptr;
+
     auto const tokenRewards = tierTokenRewards.find(tokenId);
     if (tokenRewards == tierTokenRewards.end())
         return nullptr;
@@ -66,14 +71,34 @@ TierReward const* SelectTierReward(Player* bot, uint32 tokenId)
     float bestScore = std::numeric_limits<float>::lowest();
     TierReward const* bestReward = nullptr;
     StatsWeightCalculator calculator(bot, true);
+    calculator.SetItemSetBonus(false);
+    calculator.SetOverflowPenalty(false);
 
     for (TierReward const& candidate : tokenRewards->second)
     {
         ItemTemplate const* reward = sObjectMgr->GetItemTemplate(candidate.ItemId);
-        if (!reward || bot->CanUseItem(reward) != EQUIP_ERR_OK || !CanAffordTierReward(bot, candidate))
+        if (!reward || bot->CanUseItem(reward) != EQUIP_ERR_OK ||
+            !sRandomItemMgr.CanEquipArmor(reward, bot->getClass(), bot->GetLevel()) ||
+            !CanAffordTierReward(bot, candidate, tokenAwardPending ? tokenId : 0))
+            continue;
+
+        uint8 const slot = botAI->FindEquipSlot(reward, NULL_SLOT, true);
+        if (slot == NULL_SLOT)
             continue;
 
         float const score = calculator.CalculateItem(candidate.ItemId);
+        if (score <= 0.0f)
+            continue;
+
+        if (Item* equipped = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        {
+            float const equippedScore =
+                calculator.CalculateItem(equipped->GetEntry(), equipped->GetItemRandomPropertyId());
+            if (equipped->GetEntry() == candidate.ItemId || score <= equippedScore ||
+                score <= equippedScore * sPlayerbotAIConfig.equipUpgradeThreshold)
+                continue;
+        }
+
         if (score > bestScore)
         {
             bestScore = score;
@@ -185,6 +210,12 @@ void InitializeTierTokenRewards()
                   });
 
     LOG_INFO("playerbots", "Loaded tier-token rewards for {} tokens", tierTokenRewards.size());
+}
+
+bool CanBotUseTierToken(Player* bot, ItemTemplate const* token)
+{
+    // The token being rolled on is not in the bot's inventory yet.
+    return bot && token && bot->CanUseItem(token) == EQUIP_ERR_OK && SelectTierReward(bot, token->ItemId, true);
 }
 
 void ScheduleTierTokenConversion(Player* bot, Item* token)

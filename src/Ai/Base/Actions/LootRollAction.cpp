@@ -5,6 +5,7 @@
  */
 
 #include "LootRollAction.h"
+
 #include "Event.h"
 #include "Group.h"
 #include "ItemUsageValue.h"
@@ -12,6 +13,7 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "TierTokenAction.h"
 
 bool LootRollAction::Execute(Event /*event*/)
 {
@@ -48,13 +50,13 @@ bool LootRollAction::Execute(Event /*event*/)
 
         ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", itemUsageParam);
 
-        // Armor Tokens are classed as MISC JUNK (Class 15, Subclass 0), luckily no other items I found have class bits and epic quality.
-        if (proto->Class == ITEM_CLASS_MISC && proto->SubClass == ITEM_SUBCLASS_JUNK && proto->Quality == ITEM_QUALITY_EPIC)
+        if (proto->Class == ITEM_CLASS_MISC && proto->SubClass == ITEM_SUBCLASS_JUNK &&
+            proto->Quality == ITEM_QUALITY_EPIC)
         {
-            if (CanBotUseToken(proto, bot))
-                vote = NEED; // Eligible for "Need"
+            if (CanBotUseTierToken(bot, proto))
+                vote = NEED;
             else
-                vote = GREED; // Not eligible, so "Greed"
+                vote = GREED;
         }
         else if (usage == ITEM_USAGE_DISENCHANT)
             vote = sPlayerbotAIConfig.lootRollDisenchant ? DISENCHANT : GREED;
@@ -111,6 +113,14 @@ bool LootRollAction::Execute(Event /*event*/)
 
 RollVote LootRollAction::CalculateRollVote(ItemTemplate const* proto, ItemUsage usage)
 {
+    if (proto->Class == ITEM_CLASS_MISC && proto->SubClass == ITEM_SUBCLASS_JUNK && proto->Quality == ITEM_QUALITY_EPIC)
+    {
+        if (!StoreLootAction::IsLootAllowed(proto->ItemId, botAI))
+            return PASS;
+
+        return CanBotUseTierToken(bot, proto) ? NEED : GREED;
+    }
+
     if (usage == ITEM_USAGE_NONE)
     {
         std::ostringstream out;
@@ -182,18 +192,6 @@ bool MasterLootRollAction::Execute(Event event)
     return true;
 }
 
-bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
-{
-    // Get the bitmask for the bot's class
-    uint32 botClassMask = (1 << (bot->getClass() - 1));
-
-    // Check if the bot's class is allowed to use the token
-    if (proto->AllowableClass & botClassMask)
-        return true; // Bot's class is eligible to use this token
-
-    return false; // Bot's class cannot use this token
-}
-
 bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
 {
     // Count the total number of the item (equipped + in bags)
@@ -207,8 +205,8 @@ bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
     if (isEquipped && proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
         return true;  // Unique Item is already equipped
     else if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && (bagItemCount > 1))
-        return true; // Unique item already in bag, don't roll for it
-    return false; // Item is not equipped or in bags, roll for it
+        return true;  // Unique item already in bag, don't roll for it
+    return false;     // Item is not equipped or in bags, roll for it
 }
 
 bool RollAction::Execute(Event event)
@@ -217,7 +215,7 @@ bool RollAction::Execute(Event event)
 
     if (link.empty())
     {
-        bot->DoRandomRoll(0,100);
+        bot->DoRandomRoll(0, 100);
         return false;
     }
     ItemIds itemIds = chat->parseItems(link);
@@ -237,10 +235,10 @@ bool RollAction::Execute(Event event)
     {
         case ITEM_CLASS_WEAPON:
         case ITEM_CLASS_ARMOR:
-        if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
-        {
-            bot->DoRandomRoll(0,100);
-        }
+            if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
+            {
+                bot->DoRandomRoll(0, 100);
+            }
     }
     return true;
 }
