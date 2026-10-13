@@ -380,14 +380,18 @@ void RaidSunwellStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValu
 
     switch (type)
     {
-        case TargetValueExclusionType::Tank:
+        case TargetValueExclusionType::TankTarget:
             AppendMuruTankExclusions(botAI, context, exclusions);
             break;
-        case TargetValueExclusionType::Dps:
-        case TargetValueExclusionType::Attacker:
+        case TargetValueExclusionType::DpsTarget:
+        case TargetValueExclusionType::DebuffTarget:
             AppendKiljaedenSinisterReflectionExclusions(botAI, context, exclusions);
             break;
-        case TargetValueExclusionType::None:
+        case TargetValueExclusionType::Aoe:
+            if (PlayerbotAI::IsTank(botAI->GetBot()))
+                AppendMuruTankExclusions(botAI, context, exclusions);
+            else
+                AppendKiljaedenSinisterReflectionExclusions(botAI, context, exclusions);
             break;
     }
 }

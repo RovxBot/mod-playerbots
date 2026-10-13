@@ -13,9 +13,11 @@ using namespace SscHelpers;
 class LeotherasWhirlwindSpellListenerScript : public AllSpellScript
 {
 public:
-    LeotherasWhirlwindSpellListenerScript() : AllSpellScript("LeotherasWhirlwindSpellListenerScript") {}
+    LeotherasWhirlwindSpellListenerScript()
+        : AllSpellScript("LeotherasWhirlwindSpellListenerScript") {}
 
-    void OnSpellCast(Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
+    void OnSpellCast(
+        Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
     {
         if (!caster || spellInfo->Id != Id(SscSpells::SPELL_LEOTHERAS_WHIRLWIND))
             return;
@@ -30,13 +32,15 @@ public:
                 continue;
             }
 
-            if (!player->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !player->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            if (!player->GetCurrentSpell(CURRENT_GENERIC_SPELL) &&
+                !player->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
             {
                 continue;
             }
 
             PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
-            if (botAI && botAI->HasStrategy("ssc", BOT_STATE_COMBAT) && !PlayerbotAI::IsTank(player))
+            if (botAI && botAI->HasStrategy("ssc", BOT_STATE_COMBAT) &&
+                !PlayerbotAI::IsTank(player))
             {
                 botAI->RequestSpellInterrupt();
             }
@@ -49,9 +53,11 @@ public:
 class LadyVashjToxicSporesSpellListenerScript : public AllSpellScript
 {
 public:
-    LadyVashjToxicSporesSpellListenerScript() : AllSpellScript("LadyVashjToxicSporesSpellListenerScript") {}
+    LadyVashjToxicSporesSpellListenerScript()
+        : AllSpellScript("LadyVashjToxicSporesSpellListenerScript") {}
 
-    void OnSpellCast(Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
+    void OnSpellCast(
+        Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
     {
         if (!caster || spellInfo->Id != Id(SscSpells::SPELL_TOXIC_SPORES))
             return;
@@ -60,12 +66,14 @@ public:
         for (Map::PlayerList::const_iterator it = players.begin(); it != players.end(); ++it)
         {
             Player* player = it->GetSource();
-            if (!player || !player->IsAlive() || caster->GetExactDist2d(player) >= TOXIC_SPORES_HIT_RADIUS)
+            if (!player || !player->IsAlive() ||
+                caster->GetExactDist2d(player) >= TOXIC_SPORES_HIT_RADIUS)
             {
                 continue;
             }
 
-            if (!player->GetCurrentSpell(CURRENT_GENERIC_SPELL) && !player->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            if (!player->GetCurrentSpell(CURRENT_GENERIC_SPELL) &&
+                !player->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
             {
                 continue;
             }

@@ -16,10 +16,12 @@ public:
     RaidSscActionContext()
     {
         // Shared
-        creators["ssc reset encounter states"] = &RaidSscActionContext::ssc_reset_encounter_states;
+        creators["ssc reset encounter states"] =
+            &RaidSscActionContext::ssc_reset_encounter_states;
 
         // Trash
-        creators["underbog colossus escape toxic pool"] = &RaidSscActionContext::underbog_colossus_escape_toxic_pool;
+        creators["underbog colossus escape toxic pool"] =
+            &RaidSscActionContext::underbog_colossus_escape_toxic_pool;
 
         creators["greyheart tidecaller mark water elemental totem"] =
             &RaidSscActionContext::greyheart_tidecaller_mark_water_elemental_totem;
@@ -47,7 +49,8 @@ public:
         creators["the lurker below run around behind boss"] =
             &RaidSscActionContext::the_lurker_below_run_around_behind_boss;
 
-        creators["the lurker below position main tank"] = &RaidSscActionContext::the_lurker_below_position_main_tank;
+        creators["the lurker below position main tank"] =
+            &RaidSscActionContext::the_lurker_below_position_main_tank;
 
         creators["the lurker below spread ranged in arc"] =
             &RaidSscActionContext::the_lurker_below_spread_ranged_in_arc;
@@ -114,7 +117,8 @@ public:
         creators["fathom-lord karathress manage dps timer"] =
             &RaidSscActionContext::fathom_lord_karathress_manage_dps_timer;
 
-        creators["fathom-lord karathress spread ranged"] = &RaidSscActionContext::fathom_lord_karathress_spread_ranged;
+        creators["fathom-lord karathress spread ranged"] =
+            &RaidSscActionContext::fathom_lord_karathress_spread_ranged;
 
         creators["fathom-lord karathress drop to ground after cyclone"] =
             &RaidSscActionContext::fathom_lord_karathress_drop_to_ground_after_cyclone;
@@ -126,25 +130,33 @@ public:
         creators["morogrim tidewalker stack ranged behind boss"] =
             &RaidSscActionContext::morogrim_tidewalker_stack_ranged_behind_boss;
 
-        creators["morogrim tidewalker return to boss"] = &RaidSscActionContext::morogrim_tidewalker_return_to_boss;
+        creators["morogrim tidewalker return to boss"] =
+            &RaidSscActionContext::morogrim_tidewalker_return_to_boss;
 
         creators["morogrim tidewalker misdirect to main tank"] =
             &RaidSscActionContext::morogrim_tidewalker_misdirect_to_main_tank;
 
         // Lady Vashj <Coilfang Matron>
-        creators["lady vashj main tank position boss"] = &RaidSscActionContext::lady_vashj_main_tank_position_boss;
+        creators["lady vashj main tank position boss"] =
+            &RaidSscActionContext::lady_vashj_main_tank_position_boss;
 
         creators["lady vashj phase 1 spread ranged in arc"] =
             &RaidSscActionContext::lady_vashj_phase_1_spread_ranged_in_arc;
 
-        creators["lady vashj assign station slots"] = &RaidSscActionContext::lady_vashj_assign_station_slots;
+        creators["lady vashj assign station slots"] =
+            &RaidSscActionContext::lady_vashj_assign_station_slots;
 
         creators["lady vashj phase 2 position at station"] =
             &RaidSscActionContext::lady_vashj_phase_2_position_at_station;
 
-        creators["lady vashj phase 3 position ranged"] = &RaidSscActionContext::lady_vashj_phase_3_position_ranged;
+        creators["lady vashj phase 3 position ranged"] =
+            &RaidSscActionContext::lady_vashj_phase_3_position_ranged;
 
-        creators["lady vashj assign grounding shaman"] = &RaidSscActionContext::lady_vashj_assign_grounding_shaman;
+        creators["lady vashj phase 3 move into sight"] =
+            &RaidSscActionContext::lady_vashj_phase_3_move_into_sight;
+
+        creators["lady vashj assign grounding shaman"] =
+            &RaidSscActionContext::lady_vashj_assign_grounding_shaman;
 
         creators["lady vashj set grounding totem in main tank group"] =
             &RaidSscActionContext::lady_vashj_set_grounding_totem_in_main_tank_group;
@@ -152,34 +164,47 @@ public:
         creators["lady vashj static charge move away from group"] =
             &RaidSscActionContext::lady_vashj_static_charge_move_away_from_group;
 
-        creators["lady vashj misdirect to main tank"] = &RaidSscActionContext::lady_vashj_misdirect_to_main_tank;
+        creators["lady vashj misdirect to main tank"] =
+            &RaidSscActionContext::lady_vashj_misdirect_to_main_tank;
 
-        creators["lady vashj assign target priority"] = &RaidSscActionContext::lady_vashj_assign_target_priority;
+        creators["lady vashj assign target priority"] =
+            &RaidSscActionContext::lady_vashj_assign_target_priority;
 
-        creators["lady vashj tank apply fear ward"] = &RaidSscActionContext::lady_vashj_tank_apply_fear_ward;
+        creators["lady vashj tank apply fear ward"] =
+            &RaidSscActionContext::lady_vashj_tank_apply_fear_ward;
 
-        creators["lady vashj position coilfang strider"] = &RaidSscActionContext::lady_vashj_position_coilfang_strider;
+        creators["lady vashj position coilfang strider"] =
+            &RaidSscActionContext::lady_vashj_position_coilfang_strider;
 
-        creators["lady vashj position coilfang elite"] = &RaidSscActionContext::lady_vashj_position_coilfang_elite;
+        creators["lady vashj position coilfang elite"] =
+            &RaidSscActionContext::lady_vashj_position_coilfang_elite;
 
-        creators["lady vashj tank wait in the middle"] = &RaidSscActionContext::lady_vashj_tank_wait_in_the_middle;
+        creators["lady vashj tank wait in the middle"] =
+            &RaidSscActionContext::lady_vashj_tank_wait_in_the_middle;
 
         creators["lady vashj assign tainted core looter"] =
             &RaidSscActionContext::lady_vashj_assign_tainted_core_looter;
 
-        creators["lady vashj attack tainted elemental"] = &RaidSscActionContext::lady_vashj_attack_tainted_elemental;
+        creators["lady vashj attack tainted elemental"] =
+            &RaidSscActionContext::lady_vashj_attack_tainted_elemental;
 
-        creators["lady vashj loot tainted core"] = &RaidSscActionContext::lady_vashj_loot_tainted_core;
+        creators["lady vashj loot tainted core"] =
+            &RaidSscActionContext::lady_vashj_loot_tainted_core;
 
-        creators["lady vashj pass the tainted core"] = &RaidSscActionContext::lady_vashj_pass_the_tainted_core;
+        creators["lady vashj pass the tainted core"] =
+            &RaidSscActionContext::lady_vashj_pass_the_tainted_core;
 
-        creators["lady vashj destroy tainted core"] = &RaidSscActionContext::lady_vashj_destroy_tainted_core;
+        creators["lady vashj destroy tainted core"] =
+            &RaidSscActionContext::lady_vashj_destroy_tainted_core;
 
-        creators["lady vashj command pet target"] = &RaidSscActionContext::lady_vashj_command_pet_target;
+        creators["lady vashj command pet target"] =
+            &RaidSscActionContext::lady_vashj_command_pet_target;
 
-        creators["lady vashj return to the ground"] = &RaidSscActionContext::lady_vashj_return_to_the_ground;
+        creators["lady vashj return to the ground"] =
+            &RaidSscActionContext::lady_vashj_return_to_the_ground;
 
-        creators["lady vashj avoid toxic spores"] = &RaidSscActionContext::lady_vashj_avoid_toxic_spores;
+        creators["lady vashj avoid toxic spores"] =
+            &RaidSscActionContext::lady_vashj_avoid_toxic_spores;
 
         creators["lady vashj melee move around toxic spores"] =
             &RaidSscActionContext::lady_vashj_melee_move_around_toxic_spores;
@@ -196,7 +221,10 @@ public:
 
 private:
     // Shared
-    static Action* ssc_reset_encounter_states(PlayerbotAI* botAI) { return new SscResetEncounterStatesAction(botAI); }
+    static Action* ssc_reset_encounter_states(PlayerbotAI* botAI)
+    {
+        return new SscResetEncounterStatesAction(botAI);
+    }
 
     // Trash
     static Action* underbog_colossus_escape_toxic_pool(PlayerbotAI* botAI)
@@ -211,18 +239,19 @@ private:
     // Hydross the Unstable <Duke of Currents>
     static Action* hydross_the_unstable_position_frost_tank(PlayerbotAI* botAI)
     {
-        return new HydrossTheUnstablePositionAndSwapTanksAction(botAI, "hydross the unstable position frost tank",
-                                                                true);
+        return new HydrossTheUnstablePositionAndSwapTanksAction(
+            botAI, "hydross the unstable position frost tank", true);
     }
     static Action* hydross_the_unstable_position_nature_tank(PlayerbotAI* botAI)
     {
-        return new HydrossTheUnstablePositionAndSwapTanksAction(botAI, "hydross the unstable position nature tank",
-                                                                false);
+        return new HydrossTheUnstablePositionAndSwapTanksAction(
+            botAI, "hydross the unstable position nature tank", false);
     }
     static Action* hydross_the_unstable_frost_phase_spread_ranged(PlayerbotAI* botAI)
     {
-        return new SscSpreadRangedAction(botAI, "hydross the unstable frost phase spread ranged",
-                                         SscHelpers::HYDROSS_FROST_RANGED_SPREAD_DISTANCE);
+        return new SscSpreadRangedAction(
+            botAI, "hydross the unstable frost phase spread ranged",
+            SscHelpers::HYDROSS_FROST_RANGED_SPREAD_DISTANCE);
     }
     static Action* hydross_the_unstable_misdirect_to_tank(PlayerbotAI* botAI)
     {
@@ -230,7 +259,8 @@ private:
     }
     static Action* hydross_the_unstable_stop_attacking_upon_phase_change(PlayerbotAI* botAI)
     {
-        return new SscStopAttackingAction(botAI, "hydross the unstable stop attacking upon phase change");
+        return new SscStopAttackingAction(
+            botAI, "hydross the unstable stop attacking upon phase change");
     }
     static Action* hydross_the_unstable_manage_phase_timers(PlayerbotAI* botAI)
     {
@@ -266,8 +296,9 @@ private:
     // Leotheras the Blind
     static Action* leotheras_the_blind_spread_ranged_upon_pull(PlayerbotAI* botAI)
     {
-        return new SscSpreadRangedAction(botAI, "leotheras the blind spread ranged upon pull",
-                                         SscHelpers::LEOTHERAS_RANGED_SPREAD_DISTANCE);
+        return new SscSpreadRangedAction(
+            botAI, "leotheras the blind spread ranged upon pull",
+            SscHelpers::LEOTHERAS_RANGED_SPREAD_DISTANCE);
     }
     static Action* leotheras_the_blind_warlock_tank_attack_demon_form(PlayerbotAI* botAI)
     {
@@ -337,8 +368,9 @@ private:
     }
     static Action* fathom_lord_karathress_spread_ranged(PlayerbotAI* botAI)
     {
-        return new SscSpreadRangedAction(botAI, "fathom-lord karathress spread ranged",
-                                         SscHelpers::CARIBDIS_RANGED_SPREAD_DISTANCE);
+        return new SscSpreadRangedAction(
+            botAI, "fathom-lord karathress spread ranged",
+            SscHelpers::CARIBDIS_RANGED_SPREAD_DISTANCE);
     }
     static Action* fathom_lord_karathress_drop_to_ground_after_cyclone(PlayerbotAI* botAI)
     {
@@ -360,8 +392,8 @@ private:
     }
     static Action* morogrim_tidewalker_misdirect_to_main_tank(PlayerbotAI* botAI)
     {
-        return new SscMisdirectToMainTankAction(botAI, "morogrim tidewalker misdirect to main tank",
-                                                "morogrim tidewalker");
+        return new SscMisdirectToMainTankAction(
+            botAI, "morogrim tidewalker misdirect to main tank", "morogrim tidewalker");
     }
 
     // Lady Vashj <Coilfang Matron>
@@ -385,6 +417,10 @@ private:
     {
         return new LadyVashjPhase3PositionRangedAction(botAI);
     }
+    static Action* lady_vashj_phase_3_move_into_sight(PlayerbotAI* botAI)
+    {
+        return new LadyVashjPhase3MoveIntoSightAction(botAI);
+    }
     static Action* lady_vashj_assign_grounding_shaman(PlayerbotAI* botAI)
     {
         return new LadyVashjAssignGroundingShamanAction(botAI);
@@ -399,7 +435,8 @@ private:
     }
     static Action* lady_vashj_misdirect_to_main_tank(PlayerbotAI* botAI)
     {
-        return new SscMisdirectToMainTankAction(botAI, "lady vashj misdirect to main tank", "lady vashj");
+        return new SscMisdirectToMainTankAction(
+            botAI, "lady vashj misdirect to main tank", "lady vashj");
     }
     static Action* lady_vashj_assign_target_priority(PlayerbotAI* botAI)
     {

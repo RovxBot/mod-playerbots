@@ -17,6 +17,7 @@
 #include "Config.h"
 #include "DBUpdater.h"
 #include "DatabaseEnv.h"
+#include "GatherNodeMgr.h"
 #include "GlobalScript.h"
 #include "GuildTaskMgr.h"
 #include "PlayerScript.h"
@@ -537,6 +538,9 @@ public:
 
         PlayerbotSpellRepository::Instance().Initialize();
         CheckMountStateAction::LoadPreferredMounts();
+
+        LOG_INFO("server.loading", "Loading gather node index...");
+        GatherNodeMgr::instance().Load();
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
