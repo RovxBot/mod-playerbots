@@ -599,12 +599,12 @@ public:
                 break;
         }
 
-        bgStrategies[bg->GetInstanceID()] = data;
+        BGTactics::SetBotStrategies(bg->GetInstanceID(), data);
     }
 
     void OnBattlegroundEnd(Battleground* bg, TeamId /*winnerTeam*/) override
     {
-        bgStrategies.erase(bg->GetInstanceID());
+        BGTactics::ClearBotStrategies(bg->GetInstanceID());
     }
 };
 
