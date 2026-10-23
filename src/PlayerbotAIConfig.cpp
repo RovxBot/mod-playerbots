@@ -762,6 +762,7 @@ bool PlayerbotAIConfig::Initialize()
 
     SelfBotLevel = sConfigMgr->GetOption<int32>("Playerbots.SelfBotLevel", 1);
 
+    RandomPlayerbotFactory::LoadLocalizedNameColumns();
     RandomPlayerbotFactory::CreateRandomBots();
     if (World::IsStopped())
     {
