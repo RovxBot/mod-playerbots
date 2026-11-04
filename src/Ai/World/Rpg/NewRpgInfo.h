@@ -7,19 +7,19 @@
 #ifndef PLAYERBOTS_NEWRPGINFO_H
 #define PLAYERBOTS_NEWRPGINFO_H
 
+#include <array>
+#include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
+#include "ProfessionMgr.h"
 #include "QuestDef.h"
 #include "Strategy.h"
 #include "Timer.h"
 #include "TravelMgr.h"
-
-#include <array>
-#include <string>
-#include <unordered_map>
 
 using NewRpgStatusTransitionProb = std::vector<std::vector<int>>;
 
@@ -90,6 +90,12 @@ struct NewRpgInfo
     {
     };
 
+    struct DoProfessions
+    {
+    };
+
+    ProfessionWork Profession;
+
     uint32 startT{0};  // start timestamp of the current status
 
     // MOVE_FAR
@@ -106,18 +112,8 @@ struct NewRpgInfo
     GuidSet ignoredQuestGivers;  // skipped until the next IDLE
     // END QUEST GIVER
 
-    using RpgData = std::variant<
-        Idle,
-        GoGrind,
-        GoCamp,
-        WanderNpc,
-        WanderRandom,
-        DoQuest,
-        Rest,
-        TravelFlight,
-        OutdoorPvP,
-        DoGather
-    >;
+    using RpgData = std::variant<Idle, GoGrind, GoCamp, WanderNpc, WanderRandom, DoQuest, Rest, TravelFlight,
+                                 OutdoorPvP, DoGather, DoProfessions>;
     RpgData data;
 
     NewRpgStatus GetStatus();
@@ -131,6 +127,7 @@ struct NewRpgInfo
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToDoGather();
+    void ChangeToDoProfessions();
     void ChangeToRest();
     void ChangeToIdle();
     bool CanChangeTo(NewRpgStatus status);

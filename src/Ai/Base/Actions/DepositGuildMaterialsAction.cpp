@@ -11,6 +11,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
+#include "ProfessionMgr.h"
 #include "QuestDef.h"
 
 bool DepositGuildMaterialsAction::Execute(Event /*event*/)
@@ -70,7 +71,7 @@ bool DepositGuildMaterialsAction::HasDepositCandidate()
 
 bool DepositGuildMaterialsAction::IsDepositCandidate(Item* item)
 {
-    if (!item || item->IsSoulBound() || !item->CanBeTraded())
+    if (!item || item->IsSoulBound() || !item->CanBeTraded() || ProfessionMgr::IsReserved(botAI, item->GetEntry()))
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();

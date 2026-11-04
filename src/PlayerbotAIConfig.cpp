@@ -763,6 +763,14 @@ bool PlayerbotAIConfig::Initialize()
     AutoTeleportForLevel = sConfigMgr->GetOption<bool>("Playerbots.AutoTeleportForLevel", false);
     AutoDoQuests = sConfigMgr->GetOption<bool>("Playerbots.AutoDoQuests", true);
     EnableNewRpgStrategy = sConfigMgr->GetOption<bool>("Playerbots.EnableNewRpgStrategy", true);
+    EnableProfessionLoop = sConfigMgr->GetOption<bool>("Playerbots.EnableProfessionLoop", true);
+    ProfessionMaxAuctions = std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionMaxAuctions", 12), 1u, 100u);
+    ProfessionLoopInterval =
+        std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionLoopInterval", 1200), 60u, 86400u);
+    ProfessionLoopBatchSize =
+        std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionLoopBatchSize", 4), 1u, 20u);
+    ProfessionAuctionPriceMultiplier =
+        std::clamp(sConfigMgr->GetOption<float>("Playerbots.ProfessionAuctionPriceMultiplier", 5.0f), 1.0f, 100.0f);
     RpgTargetSearchDistance = sConfigMgr->GetOption<float>("Playerbots.RpgTargetSearchDistance", 150.0f);
     CollectDetailedQuestStats = sConfigMgr->GetOption<bool>("Playerbots.CollectDetailedQuestStats", false);
 

@@ -6,6 +6,8 @@
 
 #include "LootObjectStack.h"
 
+#include <algorithm>
+
 #include "LootMgr.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
@@ -24,6 +26,12 @@ bool IsGatheringSkill(uint32 skillId)
 {
     return skillId == SKILL_SKINNING || skillId == SKILL_HERBALISM || skillId == SKILL_MINING ||
            skillId == SKILL_ENGINEERING;
+}
+
+bool HasRequiredSkill(Player const* bot, LootLockRequirement const& requirement)
+{
+    return requirement.ReqItem || requirement.SkillId == SKILL_NONE ||
+           (bot->HasSkill(requirement.SkillId) && bot->GetSkillValue(requirement.SkillId) >= requirement.ReqSkillValue);
 }
 }  // namespace
 
@@ -236,6 +244,12 @@ void LootObject::Refresh(Player* bot, ObjectGuid lootGUID)
                     break;
             }
         }
+
+        // Refresh also feeds gathering movement, which checks IsEmpty before loot eligibility.
+        if (_lockRequirementCount &&
+            std::none_of(_lockRequirements.begin(), _lockRequirements.begin() + _lockRequirementCount,
+                         [bot](LootLockRequirement const& requirement) { return HasRequiredSkill(bot, requirement); }))
+            guid.Clear();
     }
 }
 
@@ -357,6 +371,9 @@ bool LootObject::IsLootPossible(Player* bot)
         if (requirement.SkillId == SKILL_NONE)
             return true;
 
+        if (requirement.SkillId == SKILL_FISHING || !HasRequiredSkill(bot, requirement))
+            return false;
+
         bool const gatheringObject = requirement.SkillId == SKILL_HERBALISM || requirement.SkillId == SKILL_MINING ||
                                      requirement.SkillId == SKILL_SKINNING || requirement.SkillId == SKILL_ENGINEERING;
         Player* master = botAI->GetMaster();
@@ -368,18 +385,14 @@ bool LootObject::IsLootPossible(Player* bot)
                 return false;
         }
 
-        if (requirement.SkillId == SKILL_FISHING || !botAI->HasSkill((SkillType)requirement.SkillId) ||
-            requirement.ReqSkillValue > uint32(bot->GetSkillValue(requirement.SkillId)))
+        if (requirement.SkillId == SKILL_MINING && !bot->HasItemTotemCategory(TC_MINING_PICK))
             return false;
 
-        if (requirement.SkillId == SKILL_MINING && !bot->HasItemCount(756, 1) && !bot->HasItemCount(778, 1) &&
-            !bot->HasItemCount(1819, 1) && !bot->HasItemCount(1893, 1) && !bot->HasItemCount(1959, 1) &&
-            !bot->HasItemCount(2901, 1) && !bot->HasItemCount(9465, 1) && !bot->HasItemCount(20723, 1) &&
-            !bot->HasItemCount(40772, 1) && !bot->HasItemCount(40892, 1) && !bot->HasItemCount(40893, 1))
+        if (requirement.SkillId == SKILL_SKINNING && !bot->HasItemTotemCategory(TC_SKINNING_KNIFE))
             return false;
 
-        if (requirement.SkillId == SKILL_SKINNING && !bot->HasItemCount(7005, 1) && !bot->HasItemCount(40772, 1) &&
-            !bot->HasItemCount(40893, 1) && !bot->HasItemCount(12709, 1) && !bot->HasItemCount(19901, 1))
+        constexpr uint32 ITEM_THIEVES_TOOLS = 5060;
+        if (requirement.SkillId == SKILL_LOCKPICKING && !bot->HasItemCount(ITEM_THIEVES_TOOLS, 1))
             return false;
 
         return true;

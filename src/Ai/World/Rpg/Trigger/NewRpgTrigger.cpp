@@ -8,3 +8,9 @@
 #include "PlayerbotAI.h"
 
 bool NewRpgStatusTrigger::IsActive() { return status == botAI->rpgInfo.GetStatus(); }
+
+bool ProfessionPhaseTrigger::IsActive()
+{
+    return botAI->rpgInfo.GetStatus() == RPG_DO_PROFESSIONS && botAI->rpgInfo.Profession.Phase == _phase &&
+           !botAI->rpgInfo.Profession.Waiting;
+}

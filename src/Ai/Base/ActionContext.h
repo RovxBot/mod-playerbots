@@ -51,6 +51,7 @@
 #include "OutfitAction.h"
 #include "PetsAction.h"
 #include "PositionAction.h"
+#include "ProfessionActions.h"
 #include "PullActions.h"
 #include "RandomBotUpdateAction.h"
 #include "ReachTargetActions.h"
@@ -79,6 +80,11 @@ class ActionContext : public NamedObjectContext<Action>
 public:
     ActionContext()
     {
+        creators["profession plan"] = &ActionContext::profession_plan;
+        creators["profession refine"] = &ActionContext::profession_refine;
+        creators["profession supplies"] = &ActionContext::profession_supplies;
+        creators["profession craft"] = &ActionContext::profession_craft;
+        creators["profession auction"] = &ActionContext::profession_auction;
         creators["mark rti"] = &ActionContext::mark_rti;
         creators["set return position"] = &ActionContext::set_return_position;
         creators["rpg"] = &ActionContext::rpg;
@@ -483,6 +489,11 @@ private:
     static Action* rpg_use(PlayerbotAI* botAI) { return new RpgUseAction(botAI); }
     static Action* rpg_spell(PlayerbotAI* botAI) { return new RpgSpellAction(botAI); }
     static Action* rpg_craft(PlayerbotAI* botAI) { return new RpgCraftAction(botAI); }
+    static Action* profession_plan(PlayerbotAI* botAI) { return new ProfessionPlanAction(botAI); }
+    static Action* profession_refine(PlayerbotAI* botAI) { return new ProfessionRefineAction(botAI); }
+    static Action* profession_supplies(PlayerbotAI* botAI) { return new ProfessionSupplyAction(botAI); }
+    static Action* profession_craft(PlayerbotAI* botAI) { return new ProfessionCraftAction(botAI); }
+    static Action* profession_auction(PlayerbotAI* botAI) { return new ProfessionAuctionAction(botAI); }
     static Action* rpg_trade_useful(PlayerbotAI* botAI) { return new RpgTradeUsefulAction(botAI); }
     static Action* rpg_duel(PlayerbotAI* botAI) { return new RpgDuelAction(botAI); }
     static Action* rpg_mount_anim(PlayerbotAI* botAI) { return new RpgMountAnimAction(botAI); }

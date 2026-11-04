@@ -5,11 +5,27 @@
  */
 
 #include "NewRpgMultipliers.h"
+
+#include "AddLootAction.h"
+#include "LootAction.h"
+#include "MovementActions.h"
 #include "Playerbots.h"
 
 float NewRpgQuestGiverMultiplier::GetValue(Action* action)
 {
-    if (!action || action->getName() != "attack anything")
+    if (!action)
+        return 1.0f;
+
+    if (botAI->rpgInfo.GetStatus() == RPG_DO_PROFESSIONS)
+    {
+        if (action->getName() == "attack anything" || dynamic_cast<LootAction*>(action) ||
+            dynamic_cast<OpenLootAction*>(action) || dynamic_cast<MoveToLootAction*>(action) ||
+            dynamic_cast<AddAllLootAction*>(action))
+            return 0.0f;
+        return 1.0f;
+    }
+
+    if (action->getName() != "attack anything")
         return 1.0f;
 
     switch (botAI->rpgInfo.GetStatus())

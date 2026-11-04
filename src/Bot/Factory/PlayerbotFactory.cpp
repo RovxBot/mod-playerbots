@@ -5,7 +5,11 @@
  */
 
 #include "PlayerbotFactory.h"
-#include "PlayerbotsDatabase.h"
+
+#include <array>
+#include <unordered_set>
+#include <utility>
+
 #include "AccountMgr.h"
 #include "AiFactory.h"
 #include "AiObjectContext.h"
@@ -18,6 +22,7 @@
 #include "Item.h"
 #include "ItemPackets.h"
 #include "ItemTemplate.h"
+#include "ItemUsageValue.h"
 #include "ItemVisitors.h"
 #include "Log.h"
 #include "LootMgr.h"
@@ -31,21 +36,16 @@
 #include "PlayerbotRepository.h"
 #include "PlayerbotSpellRepository.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "QuestDef.h"
 #include "RandomItemMgr.h"
 #include "RandomPlayerbotFactory.h"
 #include "ReputationMgr.h"
 #include "SharedDefines.h"
-#include "StatsWeightCalculator.h"
 #include "SpellMgr.h"
+#include "StatsWeightCalculator.h"
 #include "Trainer.h"
 #include "World.h"
-#include <array>
-#include <unordered_set>
-#include <utility>
-
-#include <array>
-#include <utility>
 
 namespace
 {
@@ -972,6 +972,7 @@ void PlayerbotFactory::Randomize(bool incremental)
     pmo = sPerfMonitor.start(PERF_MON_RNDBOT, "PlayerbotFactory_Bags");
     LOG_DEBUG("playerbots", "Initializing bags...");
     InitBags();
+    InitInventorySkill();
     // bot->SaveToDB(false, false);
     if (pmo)
         pmo->finish();
@@ -1952,13 +1953,32 @@ void PlayerbotFactory::InitTalentsByParsedSpecLink(Player* bot, std::vector<std:
     bot->SendTalentsInfoData(false);
 }
 
+class HasFishingPoleVisitor : public IterateItemsVisitor
+{
+public:
+    bool Visit(Item* item) override
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        Found = Found || (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE);
+        return !Found;
+    }
+
+    bool Found = false;
+};
+
 class DestroyItemsVisitor : public IterateItemsVisitor
 {
 public:
-    DestroyItemsVisitor(Player* bot) : IterateItemsVisitor(), bot(bot) {}
+    DestroyItemsVisitor(Player* bot, bool keepProfessionTools = false)
+        : IterateItemsVisitor(), bot(bot), _keepProfessionTools(keepProfessionTools)
+    {
+    }
 
     bool Visit(Item* item) override
     {
+        if (_keepProfessionTools && ItemUsageValue::IsProfessionTool(bot, item->GetTemplate()))
+            return true;
+
         uint32 id = item->GetTemplate()->ItemId;
         if (CanKeep(id))
         {
@@ -1983,6 +2003,7 @@ private:
     }
 
     Player* bot;
+    bool _keepProfessionTools;
     std::set<uint32> keep;
 };
 
@@ -3959,7 +3980,7 @@ void PlayerbotFactory::InitInstanceQuests()
 
 void PlayerbotFactory::ClearInventory()
 {
-    DestroyItemsVisitor visitor(bot);
+    DestroyItemsVisitor visitor(bot, true);
     IterateItems(&visitor);
 }
 
@@ -4926,21 +4947,111 @@ void PlayerbotFactory::InitInventory()
 
 void PlayerbotFactory::InitInventorySkill()
 {
-    if (bot->HasSkill(SKILL_MINING) && !bot->HasItemCount(2901, 1, true))
-        StoreItem(2901, 1);  // Mining Pick
+    auto ensureTool = [this](uint32 itemId)
+    {
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+        if (!proto || bot->HasItemCount(itemId, 1))
+            return;
 
-    if ((bot->HasSkill(SKILL_BLACKSMITHING) || bot->HasSkill(SKILL_ENGINEERING)) &&
-        !bot->HasItemCount(5956, 1, true))
-        StoreItem(5956, 1);  // Blacksmith Hammer
+        if (proto->RequiredSkill && bot->GetSkillValue(proto->RequiredSkill) < proto->RequiredSkillRank)
+            return;
 
-    if (bot->HasSkill(SKILL_ENGINEERING) && !bot->HasItemCount(6219, 1, true))
-        StoreItem(6219, 1);  // Arclight Spanner
+        if (proto->TotemCategory && bot->HasItemTotemCategory(proto->TotemCategory))
+            return;
 
-    if (bot->HasSkill(SKILL_ENCHANTING) && !bot->HasItemCount(16207, 1, true))
-        StoreItem(16207, 1);  // Runed Arcanite Rod
+        if (bot->HasItemCount(itemId, 1, true))
+        {
+            FindItemByIdVisitor visitor(itemId);
+            IterateItems(&visitor, ITERATE_ITEMS_IN_BANK);
+            if (!visitor.GetResult().empty())
+            {
+                Item* item = visitor.GetResult().front();
+                ItemPosCountVec destination;
+                if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) == EQUIP_ERR_OK)
+                {
+                    bot->RemoveItem(item->GetBagSlot(), item->GetSlot(), true);
+                    bot->StoreItem(destination, item, true);
+                }
+            }
+            return;
+        }
 
-    if (bot->HasSkill(SKILL_SKINNING) && !bot->HasItemCount(7005, 1, true))
-        StoreItem(7005, 1);  // Skinning Knife
+        StoreItem(itemId, 1);
+    };
+
+    constexpr uint32 ITEM_MINING_PICK = 2901;
+    constexpr uint32 ITEM_BLACKSMITH_HAMMER = 5956;
+    constexpr uint32 ITEM_ARCLIGHT_SPANNER = 6219;
+    constexpr uint32 ITEM_GYROMATIC_MICRO_ADJUSTOR = 10498;
+    constexpr uint32 ITEM_SKINNING_KNIFE = 7005;
+    constexpr uint32 ITEM_JEWELERS_KIT = 20815;
+    constexpr uint32 ITEM_VIRTUOSO_INKING_SET = 39505;
+    constexpr uint32 ITEM_PHILOSOPHERS_STONE = 9149;
+    constexpr uint32 ITEM_FLINT_AND_TINDER = 4471;
+    constexpr uint32 ITEM_FISHING_POLE = 6256;
+    constexpr uint32 ITEM_THIEVES_TOOLS = 5060;
+
+    if (bot->HasSkill(SKILL_MINING))
+        ensureTool(ITEM_MINING_PICK);
+
+    if (bot->HasSkill(SKILL_BLACKSMITHING) || bot->HasSkill(SKILL_ENGINEERING))
+        ensureTool(ITEM_BLACKSMITH_HAMMER);
+
+    if (bot->HasSkill(SKILL_ENGINEERING))
+    {
+        ensureTool(ITEM_ARCLIGHT_SPANNER);
+        ensureTool(ITEM_GYROMATIC_MICRO_ADJUSTOR);
+    }
+
+    if (bot->HasSkill(SKILL_ENCHANTING))
+    {
+        static constexpr std::array<std::pair<uint32, uint32>, 9> EnchantingRods = {{
+            {425, 44452},  // Runed Titanium Rod
+            {375, 22463},  // Runed Eternium Rod
+            {350, 22462},  // Runed Adamantite Rod
+            {300, 22461},  // Runed Fel Iron Rod
+            {290, 16207},  // Runed Arcanite Rod
+            {200, 11145},  // Runed Truesilver Rod
+            {150, 11130},  // Runed Golden Rod
+            {100, 6339},   // Runed Silver Rod
+            {1, 6218},     // Runed Copper Rod
+        }};
+        uint32 const skillValue = bot->GetSkillValue(SKILL_ENCHANTING);
+        for (auto const& [requiredSkill, itemId] : EnchantingRods)
+        {
+            if (skillValue >= requiredSkill)
+            {
+                ensureTool(itemId);
+                break;
+            }
+        }
+    }
+
+    if (bot->HasSkill(SKILL_SKINNING))
+        ensureTool(ITEM_SKINNING_KNIFE);
+
+    if (bot->HasSkill(SKILL_JEWELCRAFTING))
+        ensureTool(ITEM_JEWELERS_KIT);
+
+    if (bot->HasSkill(SKILL_INSCRIPTION))
+        ensureTool(ITEM_VIRTUOSO_INKING_SET);
+
+    if (bot->HasSkill(SKILL_ALCHEMY))
+        ensureTool(ITEM_PHILOSOPHERS_STONE);
+
+    if (bot->HasSkill(SKILL_COOKING))
+        ensureTool(ITEM_FLINT_AND_TINDER);
+
+    if (bot->HasSkill(SKILL_FISHING))
+    {
+        HasFishingPoleVisitor visitor;
+        IterateItems(&visitor, static_cast<IterateItemsMask>(ITERATE_ITEMS_IN_BAGS | ITERATE_ITEMS_IN_EQUIP));
+        if (!visitor.Found)
+            ensureTool(ITEM_FISHING_POLE);
+    }
+
+    if (bot->getClass() == CLASS_ROGUE)
+        ensureTool(ITEM_THIEVES_TOOLS);
 }
 
 Item* PlayerbotFactory::StoreItem(uint32 itemId, uint32 count)
