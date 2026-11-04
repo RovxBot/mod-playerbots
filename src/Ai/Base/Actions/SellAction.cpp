@@ -14,6 +14,7 @@
 #include "ItemUsageValue.h"
 #include "ItemVisitors.h"
 #include "Playerbots.h"
+#include "ProfessionMgr.h"
 
 class SellItemsVisitor : public IterateItemsVisitor
 {
@@ -180,6 +181,9 @@ void SellAction::Sell(Item* item, bool force)
     std::ostringstream out;
     uint32 itemId = item->GetEntry();
     ItemTemplate const* proto = item->GetTemplate();
+
+    if (!force && (ItemUsageValue::IsProfessionTool(bot, proto) || ProfessionMgr::IsReserved(botAI, itemId)))
+        return;
 
     uint32 keepRequirement = force ? 0 : GetQuestItemRequirement(itemId);
 

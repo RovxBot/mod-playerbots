@@ -34,6 +34,11 @@ class TriggerContext : public NamedObjectContext<Trigger>
 public:
     TriggerContext()
     {
+        creators["profession plan"] = &TriggerContext::profession_plan;
+        creators["profession refine"] = &TriggerContext::profession_refine;
+        creators["profession supplies"] = &TriggerContext::profession_supplies;
+        creators["profession craft"] = &TriggerContext::profession_craft;
+        creators["profession auction"] = &TriggerContext::profession_auction;
         creators["return"] = &TriggerContext::_return;
         creators["sit"] = &TriggerContext::sit;
         creators["return to stay position"] = &TriggerContext::return_to_stay_position;
@@ -453,6 +458,26 @@ private:
     static Trigger* rpg_use(PlayerbotAI* botAI) { return new RpgUseTrigger(botAI); }
     static Trigger* rpg_spell(PlayerbotAI* botAI) { return new RpgUseTrigger(botAI); }
     static Trigger* rpg_craft(PlayerbotAI* botAI) { return new RpgCraftTrigger(botAI); }
+    static Trigger* profession_plan(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession plan", ProfessionPhase::Plan);
+    }
+    static Trigger* profession_refine(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession refine", ProfessionPhase::Refine);
+    }
+    static Trigger* profession_supplies(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession supplies", ProfessionPhase::Supplies);
+    }
+    static Trigger* profession_craft(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession craft", ProfessionPhase::Craft);
+    }
+    static Trigger* profession_auction(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession auction", ProfessionPhase::Auction);
+    }
     static Trigger* rpg_trade_useful(PlayerbotAI* botAI) { return new RpgTradeUsefulTrigger(botAI); }
     static Trigger* rpg_duel(PlayerbotAI* botAI) { return new RpgDuelTrigger(botAI); }
     static Trigger* go_grind_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GO_GRIND); }

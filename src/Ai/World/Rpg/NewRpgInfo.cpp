@@ -72,6 +72,12 @@ void NewRpgInfo::ChangeToRest()
     data = Rest{};
 }
 
+void NewRpgInfo::ChangeToDoProfessions()
+{
+    startT = getMSTime();
+    data = DoProfessions{};
+}
+
 void NewRpgInfo::ChangeToIdle()
 {
     startT = getMSTime();
@@ -87,6 +93,9 @@ bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 
 void NewRpgInfo::Reset()
 {
+    uint64 const generation = Profession.Generation + 1;
+    Profession = ProfessionWork{};
+    Profession.Generation = generation;
     data = Idle{};
     startT = getMSTime();
     questGiver.Clear();
@@ -130,6 +139,8 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, DoGather>) return RPG_DO_GATHER;
+        if constexpr (std::is_same_v<T, DoProfessions>)
+            return RPG_DO_PROFESSIONS;
         return RPG_IDLE;
     }, data);
 }
@@ -193,6 +204,16 @@ std::string NewRpgInfo::ToString()
             out << "\nfromNode: " << arg.path[0];
             out << "\ntoNode: " << arg.path[arg.path.size() - 1];
             out << "\ninFlight: " << arg.inFlight;
+        }
+        else if constexpr (std::is_same_v<T, DoProfessions>)
+        {
+            static constexpr char const* phases[] = {"planning", "refining",   "buying supplies",
+                                                     "crafting", "auctioning", "done"};
+            out << "DO_PROFESSIONS";
+            out << "\nPhase: " << phases[static_cast<uint8>(Profession.Phase)];
+            out << "\nCraft spell: " << Profession.Craft.SpellId;
+            out << "\nRemaining casts: " << Profession.Craft.Count;
+            out << "\nSupply items: " << Profession.Supplies.size();
         }
         else if constexpr (std::is_same_v<T, OutdoorPvP>)
         {

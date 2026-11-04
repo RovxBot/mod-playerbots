@@ -19,6 +19,13 @@ std::vector<NextAction> NewRpgStrategy::getDefaultActions()
 
 void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(new TriggerNode("profession plan", {NextAction("profession plan", ACTION_DEFAULT + 1.0f)}));
+    triggers.push_back(new TriggerNode("profession refine", {NextAction("profession refine", ACTION_DEFAULT + 1.0f)}));
+    triggers.push_back(
+        new TriggerNode("profession supplies", {NextAction("profession supplies", ACTION_DEFAULT + 1.0f)}));
+    triggers.push_back(new TriggerNode("profession craft", {NextAction("profession craft", ACTION_DEFAULT + 1.0f)}));
+    triggers.push_back(
+        new TriggerNode("profession auction", {NextAction("profession auction", ACTION_DEFAULT + 1.0f)}));
     triggers.push_back(
         new TriggerNode(
             "go grind status",

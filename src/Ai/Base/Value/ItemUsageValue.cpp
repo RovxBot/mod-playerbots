@@ -5,6 +5,9 @@
  */
 
 #include "ItemUsageValue.h"
+
+#include <unordered_set>
+
 #include "AiFactory.h"
 #include "ChatHelper.h"
 #include "GuildTaskMgr.h"
@@ -13,12 +16,11 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
+#include "ProfessionMgr.h"
 #include "QuestAction.h"
 #include "RandomItemMgr.h"
 #include "ServerFacade.h"
 #include "StatsWeightCalculator.h"
-
-#include <unordered_set>
 
 static bool IsRoguePoison(ItemTemplate const* proto);
 
@@ -34,9 +36,18 @@ ItemUsage ItemUsageValue::Calculate()
     if (!proto)
         return ITEM_USAGE_NONE;
 
+    if (ProfessionMgr::IsReserved(botAI, itemId))
+        return ITEM_USAGE_KEEP;
+
+    if (IsProfessionTool(bot, proto))
+        return bot->HasItemCount(itemId, 1) ? ITEM_USAGE_KEEP : ITEM_USAGE_SKILL;
+
+    constexpr uint32 ITEM_SIMPLE_WOOD = 4470;
+    bool const isCookingReagent = itemId == ITEM_SIMPLE_WOOD && botAI->HasSkill(SKILL_COOKING);
+
     if (IsRealPlayer(botAI->GetMaster()))
     {
-        if (IsItemUsefulForSkill(proto) || IsItemNeededForSkill(proto))
+        if (isCookingReagent || IsItemUsefulForSkill(proto))
             return ITEM_USAGE_SKILL;
 
         if ((proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_MISC ||
@@ -48,22 +59,19 @@ ItemUsage ItemUsageValue::Calculate()
     {
         bool needItem = false;
 
-        if (IsItemNeededForSkill(proto))
-            needItem = true;
-        else
-        {
-            bool lowBagSpace = AI_VALUE(uint8, "bag space") > 50;
+        bool lowBagSpace = AI_VALUE(uint8, "bag space") > 50;
 
-            if (proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_MISC ||
-                proto->Class == ITEM_CLASS_REAGENT)
-                needItem = IsItemNeededForUsefullSpell(proto, lowBagSpace);
-            else if (proto->Class == ITEM_CLASS_RECIPE)
-            {
-                if (bot->HasSpell(proto->Spells[2].SpellId))
-                    needItem = false;
-                else
-                    needItem = bot->CanUseItem(proto) == EQUIP_ERR_OK;
-            }
+        if (isCookingReagent)
+            needItem = true;
+        else if (proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_MISC ||
+                 proto->Class == ITEM_CLASS_REAGENT)
+            needItem = IsItemNeededForUsefullSpell(proto, lowBagSpace);
+        else if (proto->Class == ITEM_CLASS_RECIPE)
+        {
+            if (bot->HasSpell(proto->Spells[2].SpellId))
+                needItem = false;
+            else
+                needItem = bot->CanUseItem(proto) == EQUIP_ERR_OK;
         }
 
         if (needItem)
@@ -628,61 +636,62 @@ bool ItemUsageValue::IsStartQuestItemUsefulFor(Player* player, ItemTemplate cons
         QuestAction::CanAcceptQuest(player, quest);
 }
 
-bool ItemUsageValue::IsItemNeededForSkill(ItemTemplate const* proto)
+bool ItemUsageValue::IsProfessionTool(Player const* bot, ItemTemplate const* proto)
 {
-    switch (proto->ItemId)
-    {
-        case 756:  // Tunnel Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 778:  // Kobold Excavation Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 1819:  // Gouging Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 1893:  // Miner's Revenge
-            return botAI->HasSkill(SKILL_MINING);
-        case 1959:  // Cold Iron Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 2901:  // Mining Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 9465:  // Digmaster 5000
-            return botAI->HasSkill(SKILL_MINING);
-        case 20723:  // Brann's Trusty Pick
-            return botAI->HasSkill(SKILL_MINING);
-        case 40772:  // Gnomish Army Knife
-            return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_ENGINEERING) || botAI->HasSkill(SKILL_BLACKSMITHING) || botAI->HasSkill(SKILL_COOKING) || botAI->HasSkill(SKILL_SKINNING);
-        case 40892:  // Hammer Pick
-            return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_BLACKSMITHING);
-        case 40893:  // Bladed Pickaxe
-            return botAI->HasSkill(SKILL_MINING) || botAI->HasSkill(SKILL_SKINNING);
-        case 5956:  // Blacksmith Hammer
-            return botAI->HasSkill(SKILL_BLACKSMITHING) || botAI->HasSkill(SKILL_ENGINEERING);
-        case 6219:  // Arclight Spanner
-            return botAI->HasSkill(SKILL_ENGINEERING);
-        case 6218:  // Runed copper rod
-            return botAI->HasSkill(SKILL_ENCHANTING);
-        case 6339:  // Runed silver rod
-            return botAI->HasSkill(SKILL_ENCHANTING);
-        case 11130:  // Runed golden rod
-            return botAI->HasSkill(SKILL_ENCHANTING);
-        case 11145:  // Runed truesilver rod
-            return botAI->HasSkill(SKILL_ENCHANTING);
-        case 16207:  // Runed Arcanite Rod
-            return botAI->HasSkill(SKILL_ENCHANTING);
-        case 7005:  // Skinning Knife
-            return botAI->HasSkill(SKILL_SKINNING);
-        case 12709:
-            return botAI->HasSkill(SKILL_SKINNING);
-        case 19901:
-            return botAI->HasSkill(SKILL_SKINNING);
-        case 4471:  // Flint and Tinder
-            return botAI->HasSkill(SKILL_COOKING);
-        case 4470:  // Simple Wood
-            return botAI->HasSkill(SKILL_COOKING);
-        case 6256:  // Fishing Rod
-            return botAI->HasSkill(SKILL_FISHING);
-    }
+    constexpr uint32 ITEM_THIEVES_TOOLS = 5060;
+    constexpr uint32 ITEM_JEWELERS_KIT = 20815;
 
-    return false;
+    if (proto->ItemId == ITEM_THIEVES_TOOLS)
+        return bot->getClass() == CLASS_ROGUE;
+
+    if (proto->ItemId == ITEM_JEWELERS_KIT)
+        return bot->HasSkill(SKILL_JEWELCRAFTING);
+
+    if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE)
+        return bot->HasSkill(SKILL_FISHING);
+
+    switch (proto->TotemCategory)
+    {
+        case TC_MINING_PICK_OLD:
+        case TC_MINING_PICK:
+            return bot->HasSkill(SKILL_MINING);
+        case TC_BLACKSMITH_HAMMER_OLD:
+        case TC_BLACKSMITH_HAMMER:
+            return bot->HasSkill(SKILL_BLACKSMITHING) || bot->HasSkill(SKILL_ENGINEERING);
+        case TC_ARCLIGHT_SPANNER:
+        case TC_GYROMATIC_MA:
+            return bot->HasSkill(SKILL_ENGINEERING);
+        case TC_SKINNING_SKIFE_OLD:
+        case TC_SKINNING_KNIFE:
+            return bot->HasSkill(SKILL_SKINNING);
+        case TC_HAMMER_PICK:
+            return bot->HasSkill(SKILL_MINING) || bot->HasSkill(SKILL_BLACKSMITHING) ||
+                   bot->HasSkill(SKILL_ENGINEERING);
+        case TC_BLADED_PICKAXE:
+            return bot->HasSkill(SKILL_MINING) || bot->HasSkill(SKILL_SKINNING);
+        case TC_GNOMISH_ARMY_KNIFE:
+            return bot->HasSkill(SKILL_MINING) || bot->HasSkill(SKILL_BLACKSMITHING) ||
+                   bot->HasSkill(SKILL_ENGINEERING) || bot->HasSkill(SKILL_SKINNING) || bot->HasSkill(SKILL_COOKING);
+        case TC_COPPER_ROD:
+        case TC_SILVER_ROD:
+        case TC_GOLDEN_ROD:
+        case TC_TRUESILVER_ROD:
+        case TC_ARCANITE_ROD:
+        case TC_FEL_IRON_ROD:
+        case TC_ADAMANTITE_ROD:
+        case TC_ETERNIUM_ROD:
+        case TC_RUNED_COBALT_ROD:
+        case TC_RUNED_TITANIUM_ROD:
+            return bot->HasSkill(SKILL_ENCHANTING);
+        case TC_PHILOSOPHERS_STONE:
+            return bot->HasSkill(SKILL_ALCHEMY);
+        case TC_VIRTUOSO_INKING_SET:
+            return bot->HasSkill(SKILL_INSCRIPTION);
+        case TC_FLINT_AND_TINDER:
+            return bot->HasSkill(SKILL_COOKING);
+        default:
+            return false;
+    }
 }
 
 bool ItemUsageValue::IsItemUsefulForSkill(ItemTemplate const* proto)

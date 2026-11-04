@@ -73,7 +73,8 @@ enum NewRpgStatus : int
     RPG_OUTDOOR_PVP = 8,
     // Roam the current zone harvesting herb/ore nodes
     RPG_DO_GATHER = 9,
-    RPG_STATUS_END = 10
+    RPG_DO_PROFESSIONS = 10,
+    RPG_STATUS_END = 11
 };
 
 #define MAX_SPECNO 20
@@ -399,6 +400,11 @@ public:
     bool AutoLearnTrainerSpells;
     bool AutoDoQuests;
     bool EnableNewRpgStrategy;
+    bool EnableProfessionLoop;
+    uint32 ProfessionLoopInterval;
+    uint32 ProfessionLoopBatchSize;
+    uint32 ProfessionMaxAuctions;
+    float ProfessionAuctionPriceMultiplier;
     float RpgTargetSearchDistance;
     bool CollectDetailedQuestStats;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;

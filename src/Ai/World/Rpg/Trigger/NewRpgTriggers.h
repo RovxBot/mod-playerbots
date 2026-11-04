@@ -23,4 +23,17 @@ protected:
     NewRpgStatus status;
 };
 
+class ProfessionPhaseTrigger : public Trigger
+{
+public:
+    ProfessionPhaseTrigger(PlayerbotAI* botAI, std::string name, ProfessionPhase phase)
+        : Trigger(botAI, name), _phase(phase)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    ProfessionPhase _phase;
+};
+
 #endif

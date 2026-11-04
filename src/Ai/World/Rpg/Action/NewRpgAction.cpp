@@ -5,10 +5,15 @@
  */
 
 #include "NewRpgAction.h"
+
+#include <cmath>
+#include <cstdlib>
+
 #include "AreaDefines.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "DBCStores.h"
+#include "G3D/Vector2.h"
 #include "GossipDef.h"
 #include "IVMapMgr.h"
 #include "MotionMaster.h"
@@ -26,15 +31,13 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
+#include "ProfessionMgr.h"
 #include "QuestDef.h"
 #include "Random.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 #include "TravelMgr.h"
 #include "WaypointMovementGenerator.h"
-#include "G3D/Vector2.h"
-#include <cmath>
-#include <cstdlib>
 
 void TellRpgStatusAction::WhisperStatusChange(Player* owner, std::string const& statusName)
 {
@@ -250,12 +253,34 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
     NewRpgStatus status = info.GetStatus();
+    if (status != RPG_DO_PROFESSIONS && info.Profession.Phase != ProfessionPhase::Done)
+    {
+        info.Profession.Phase = ProfessionPhase::Done;
+        info.Profession.Reserved.clear();
+        info.Profession.Products.clear();
+    }
     switch (status)
     {
         case RPG_IDLE:
+            if (ProfessionMgr::Instance().CanStart(botAI))
+            {
+                ProfessionMgr::Instance().Start(botAI);
+                info.ChangeToDoProfessions();
+                return true;
+            }
             return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_DO_QUEST,
                                        RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_DO_GATHER});
 
+        case RPG_DO_PROFESSIONS:
+        {
+            constexpr uint32 PROFESSION_RUN_DURATION = 15 * MINUTE * IN_MILLISECONDS;
+            if (!ProfessionMgr::CanRun(botAI) || info.HasStatusPersisted(PROFESSION_RUN_DURATION))
+            {
+                ProfessionMgr::Finish(botAI);
+                return true;
+            }
+            break;
+        }
         case RPG_GO_GRIND:
         {
             auto& data = std::get<NewRpgInfo::GoGrind>(info.data);

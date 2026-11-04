@@ -9,12 +9,15 @@
 #include <mysqld_error.h>
 
 #include "AllMapScript.h"
+#include "AuctionHouseMgr.h"
+#include "AuctionHouseScript.h"
 #include "BattleGroundTactics.h"
 #include "BattlefieldScript.h"
 #include "BuiltInConfig.h"
 #include "Channel.h"
 #include "CheckMountStateAction.h"
 #include "Config.h"
+#include "DBCStores.h"
 #include "DBUpdater.h"
 #include "DatabaseEnv.h"
 #include "GatherNodeMgr.h"
@@ -23,14 +26,17 @@
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotCommandScript.h"
+#include "PlayerbotFactory.h"
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
 #include "PlayerbotsDatabase.h"
+#include "ProfessionMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "ServerScript.h"
 #include "SessionScript.h"
+#include "SpellMgr.h"
 #include "TierTokenAction.h"
 #include "WorldScript.h"
 #include "cmath"
@@ -130,13 +136,14 @@ class PlayerbotsPlayerScript : public PlayerScript
 {
 public:
     PlayerbotsPlayerScript()
-        : PlayerScript("PlayerbotsPlayerScript",
-                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_GROUP_ROLL_REWARD_ITEM, PLAYERHOOK_ON_BEFORE_LOGOUT,
-                        PLAYERHOOK_ON_AFTER_UPDATE, PLAYERHOOK_ON_CREATURE_KILL_CREDIT,
-                        PLAYERHOOK_ON_BEFORE_PETITION_SIGN, PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS,
-                        PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE, PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT,
-                        PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT, PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
-                        PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT, PLAYERHOOK_ON_GIVE_EXP, PLAYERHOOK_ON_BEFORE_TELEPORT})
+        : PlayerScript(
+              "PlayerbotsPlayerScript",
+              {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_GROUP_ROLL_REWARD_ITEM, PLAYERHOOK_ON_BEFORE_LOGOUT,
+               PLAYERHOOK_ON_AFTER_UPDATE, PLAYERHOOK_ON_CREATURE_KILL_CREDIT, PLAYERHOOK_ON_BEFORE_PETITION_SIGN,
+               PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS, PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
+               PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT, PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT,
+               PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT, PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT, PLAYERHOOK_ON_GIVE_EXP,
+               PLAYERHOOK_ON_BEFORE_TELEPORT, PLAYERHOOK_ON_LEARN_SPELL, PLAYERHOOK_ON_UPDATE_SKILL})
     {
     }
 
@@ -144,6 +151,29 @@ public:
                                      Roll* /*roll*/) override
     {
         ScheduleTierTokenConversion(player, item);
+    }
+
+    void OnPlayerLearnSpell(Player* player, uint32 spellId) override
+    {
+        if (!GET_PLAYERBOT_AI(player))
+            return;
+
+        SpellLearnSkillNode const* skill = sSpellMgr->GetSpellLearnSkill(spellId);
+        if (!skill)
+            return;
+
+        SkillLineEntry const* skillInfo = sSkillLineStore.LookupEntry(skill->skill);
+        if (skillInfo &&
+            (skillInfo->categoryId == SKILL_CATEGORY_PROFESSION || skillInfo->categoryId == SKILL_CATEGORY_SECONDARY))
+            PlayerbotFactory(player, player->GetLevel()).InitInventorySkill();
+    }
+
+    void OnPlayerUpdateSkill(Player* player, uint32 skillId, uint32 /*value*/, uint32 /*max*/, uint32 /*step*/,
+                             uint32 /*newValue*/) override
+    {
+        if ((skillId == SKILL_ENCHANTING || skillId == SKILL_ALCHEMY || skillId == SKILL_ENGINEERING) &&
+            GET_PLAYERBOT_AI(player))
+            PlayerbotFactory(player, player->GetLevel()).InitInventorySkill();
     }
 
     void OnPlayerLogin(Player* player) override
@@ -500,6 +530,28 @@ public:
     }
 };
 
+class PlayerbotsAuctionScript : public AuctionHouseScript
+{
+public:
+    PlayerbotsAuctionScript()
+        : AuctionHouseScript("PlayerbotsAuctionScript",
+                             {AUCTIONHOUSEHOOK_ON_AUCTION_ADD, AUCTIONHOUSEHOOK_ON_AUCTION_REMOVE})
+    {
+    }
+
+    void OnAuctionAdd(AuctionHouseObject* /*house*/, AuctionEntry* entry) override
+    {
+        if (entry && entry->owner)
+            ProfessionMgr::Instance().AuctionAdded(entry->owner);
+    }
+
+    void OnAuctionRemove(AuctionHouseObject* /*house*/, AuctionEntry* entry) override
+    {
+        if (entry && entry->owner)
+            ProfessionMgr::Instance().AuctionRemoved(entry->owner);
+    }
+};
+
 class PlayerbotsWorldScript : public WorldScript
 {
 public:
@@ -541,11 +593,16 @@ public:
 
         LOG_INFO("server.loading", "Loading gather node index...");
         GatherNodeMgr::instance().Load();
+        ProfessionMgr::Instance().Load();
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
 
-    void OnStartup() override { InitializeTierTokenRewards(); }
+    void OnStartup() override
+    {
+        InitializeTierTokenRewards();
+        ProfessionMgr::Instance().InitializeAuctionCounts();
+    }
 
     void OnUpdate(uint32 diff) override
     {
@@ -635,6 +692,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsAllMapScript();
     new PlayerbotsGlobalScript();
     new PlayerbotsWorldScript();
+    new PlayerbotsAuctionScript();
     new PlayerBotsBGScript();
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsSelfBotAfkScripts();
