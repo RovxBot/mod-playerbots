@@ -5,17 +5,19 @@
  */
 
 #include "CheckMountStateAction.h"
-#include "PlayerbotsDatabase.h"
+
 #include "AreaDefines.h"
 #include "BattleGroundTactics.h"
 #include "BattlegroundEY.h"
 #include "BattlegroundWS.h"
 #include "DBCStores.h"
 #include "Event.h"
+#include "LootObjectStack.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotSpellRepository.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "ServerFacade.h"
 #include "SpellAuraEffects.h"
 
@@ -217,6 +219,11 @@ bool CheckMountStateAction::isUseful()
 
 bool CheckMountStateAction::Mount()
 {
+    // Looting dismounts before opening or casting; keep that interaction unmounted between ticks.
+    if (bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID() ||
+        AI_VALUE(LootObjectStack*, "available loot")->IsLootPending() || AI_VALUE(bool, "can loot"))
+        return false;
+
     // Remove current Shapeshift if need be
     if (botInShapeshiftForm != FORM_TRAVEL &&
         botInShapeshiftForm != FORM_FLIGHT &&
