@@ -20,7 +20,6 @@
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MageActions.h"
-#include "NonCombatActions.h"
 #include "PaladinActions.h"
 #include "PartyMemberToDispel.h"
 #include "PriestActions.h"
