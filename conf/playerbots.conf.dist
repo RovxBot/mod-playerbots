@@ -1452,6 +1452,9 @@ Playerbots.EnableNewRpgStrategy = 1
 # Personal, COD and undelivered mail is left alone.
 # Automatic vendor sales of tradeable surplus wait up to one hour for an auction opportunity. An auction attempt,
 # bags over 80% full or a balance below 1 silver allows ordinary vendor selling to resume.
+# Full gather bags request an immediate run, with up to two minutes to visit a vendor and sell surplus first.
+# Within the skill-up/useful-item priorities, lower material costs win. Crafts made only for sale must cover
+# estimated material value, vendor supplies, auction cut and deposit, and stop at one stack in bags/listings.
 # Default: 1 (enabled). Requires EnableNewRpgStrategy.
 Playerbots.EnableProfessionLoop = 1
 
@@ -1468,8 +1471,10 @@ Playerbots.ProfessionLoopBatchSize = 4
 # Range: 1-100. Default: 12.
 Playerbots.ProfessionMaxAuctions = 12
 
-# Auction buyout per item, as a multiple of its vendor sell value (at least 1 copper before the multiplier).
-# Items are considered in random order each run. No live auction scans are performed.
+# Fallback auction buyout per item, as a multiple of its vendor sell value. Items with no vendor sell value use
+# a floor based on item level/quality and vendor buy price. After three sales, use the median of the last eight
+# sales for the same auction house, item and random property. History expires after one day and resets on restart.
+# Prices cover the vendor value after auction cut. Items are considered in random order; no live listing scans.
 # Listings last 12 hours and the core charges the normal deposit. Range: 1-100. Default: 5.
 Playerbots.ProfessionAuctionPriceMultiplier = 5.0
 

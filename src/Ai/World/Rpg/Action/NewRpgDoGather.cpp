@@ -15,6 +15,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "ProfessionMgr.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
 #include "SpellInfo.h"
@@ -67,12 +68,12 @@ bool NewRpgDoGatherAction::Execute(Event /*event*/)
     if (!bot->IsAlive())
         return false;
 
-    // (Nearly) full bags: the loot pipeline refuses to store new items
-    // above this fill level (see StoreLootAction), so every harvest would
-    // open the node, store nothing and stall until the timeout. Stop
-    // farming and let the maintenance logic (sell/destroy) catch up.
+    // Full bags cannot store another harvest; release the node before requesting maintenance.
     if (AI_VALUE(uint8, "bag space") > 80)
     {
+        AbandonNode(data);
+        if (ProfessionMgr::CanRun(botAI))
+            info.Profession.Ready = true;
         info.ChangeToIdle();
         return true;
     }

@@ -72,6 +72,7 @@ private:
     // Bucketed per zone so the zone-scoped queries (HasUsableNodes,
     // GetNextNode) touch only the bot's zone instead of the whole continent.
     std::unordered_map<uint32 /*mapId*/, std::unordered_map<uint32 /*zoneId*/, std::vector<GatherNodeSpawn>>> _nodes;
+    std::unordered_map<uint32, std::unordered_map<uint64, std::vector<GatherNodeSpawn const*>>> _nodeCells;
 };
 
 #define sGatherNodeMgr GatherNodeMgr::instance()

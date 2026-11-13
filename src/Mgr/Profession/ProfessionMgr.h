@@ -7,10 +7,14 @@
 #ifndef PLAYERBOTS_PROFESSIONMGR_H
 #define PLAYERBOTS_PROFESSIONMGR_H
 
+#include <array>
+#include <ctime>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "ObjectGuid.h"
@@ -20,11 +24,14 @@ class Player;
 class PlayerbotAI;
 class Item;
 struct ItemTemplate;
+struct AuctionEntry;
+struct AuctionHouseEntry;
 
 // Each phase has its own action; triggers only inspect this state.
 enum class ProfessionPhase : uint8
 {
     Mail,
+    Sell,
     Plan,
     Refine,
     Supplies,
@@ -103,7 +110,7 @@ struct ProfessionRecipe
     std::vector<std::pair<uint32, uint32>> Reagents;
 };
 
-// Recipe and destination indexes are immutable after startup; auction counts have their own lock.
+// Recipe and destination indexes are immutable after startup; auction stock and prices have their own lock.
 class ProfessionMgr
 {
 public:
@@ -125,16 +132,43 @@ public:
     static bool ShouldDeferSale(PlayerbotAI* botAI, Item const* item);
     static void AuctionAttempted(PlayerbotAI* botAI, ObjectGuid item);
     void InitializeAuctionCounts();
-    void AuctionAdded(ObjectGuid owner);
-    void AuctionRemoved(ObjectGuid owner);
+    void AuctionAdded(AuctionEntry const& auction);
+    void AuctionRemoved(AuctionEntry const& auction);
+    void AuctionSold(AuctionEntry const& auction);
     uint32 GetActiveAuctionCount(ObjectGuid owner) const;
+    uint32 GetActiveAuctionItemCount(ObjectGuid owner, uint32 itemId) const;
+    static uint32 GetAuctionMinimumUnitPrice(ItemTemplate const* item, AuctionHouseEntry const* house);
+    static uint32 GetAuctionStartingBid(ItemTemplate const* item, AuctionHouseEntry const* house, uint32 count,
+                                        uint32 buyout);
+    uint32 GetAuctionUnitPrice(ItemTemplate const* item, AuctionHouseEntry const* house,
+                               int32 randomProperty = 0) const;
 
-    std::optional<ProfessionDestination> FindVendor(Player* bot, uint32 itemId) const;
+    std::optional<ProfessionDestination> FindVendor(Player* bot, uint32 itemId = 0) const;
     std::optional<ProfessionDestination> FindAuctioneer(Player* bot) const;
     std::optional<ProfessionDestination> FindMailbox(Player* bot) const;
     std::optional<ProfessionDestination> FindFocus(Player* bot, uint32 focus) const;
 
 private:
+    static constexpr std::size_t AUCTION_PRICE_SAMPLES = 8;
+
+    struct AuctionStock
+    {
+        uint32 Listings = 0;
+        std::unordered_map<uint32, uint32> Units;
+    };
+
+    struct AuctionPriceSample
+    {
+        uint32 UnitPrice = 0;
+        time_t SoldAt = 0;
+    };
+
+    struct AuctionPriceHistory
+    {
+        std::array<AuctionPriceSample, AUCTION_PRICE_SAMPLES> Samples{};
+        uint8 Cursor = 0;
+    };
+
     using DestinationIndex = std::unordered_map<uint32, std::vector<ProfessionDestination>>;
     std::optional<ProfessionDestination> FindNearest(Player* bot,
                                                      std::vector<ProfessionDestination> const& candidates) const;
@@ -142,11 +176,15 @@ private:
     std::unordered_map<uint32, std::vector<uint32>> _recipesByOutput;
     std::unordered_map<uint32, std::vector<uint32>> _vendorsByItem;
     DestinationIndex _creaturesByEntry;
+    DestinationIndex _vendorsByMap;
     DestinationIndex _auctioneersByMap;
     DestinationIndex _mailboxesByMap;
     DestinationIndex _focusesByType;
-    mutable std::mutex _auctionCountsMutex;
-    std::unordered_map<ObjectGuid, uint32> _auctionCounts;
+    mutable std::mutex _auctionMutex;
+    std::unordered_map<ObjectGuid, AuctionStock> _auctionStock;
+    std::unordered_map<uint32, int32> _auctionProperties;
+    std::unordered_map<uint32, std::unordered_map<uint64, AuctionPriceHistory>> _auctionPrices;
+    std::deque<std::pair<uint32, uint64>> _auctionPriceOrder;
 };
 
 #endif

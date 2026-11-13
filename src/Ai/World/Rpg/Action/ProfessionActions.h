@@ -52,6 +52,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class ProfessionSellAction : public ProfessionAction
+{
+public:
+    ProfessionSellAction(PlayerbotAI* botAI) : ProfessionAction(botAI, "profession sell", ProfessionPhase::Sell) {}
+    bool Execute(Event event) override;
+};
+
 class ProfessionRefineAction : public ProfessionAction
 {
 public:

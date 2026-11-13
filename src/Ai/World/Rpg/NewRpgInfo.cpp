@@ -208,7 +208,8 @@ std::string NewRpgInfo::ToString()
         else if constexpr (std::is_same_v<T, DoProfessions>)
         {
             static constexpr char const* phases[] = {
-                "collecting auction mail", "planning", "refining", "buying supplies", "crafting", "auctioning", "done"};
+                "collecting auction mail", "selling surplus", "planning",   "refining",
+                "buying supplies",         "crafting",        "auctioning", "done"};
             out << "DO_PROFESSIONS";
             out << "\nPhase: " << phases[static_cast<uint8>(Profession.Phase)];
             out << "\nCraft spell: " << Profession.Craft.SpellId;

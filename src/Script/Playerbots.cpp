@@ -535,20 +535,27 @@ class PlayerbotsAuctionScript : public AuctionHouseScript
 public:
     PlayerbotsAuctionScript()
         : AuctionHouseScript("PlayerbotsAuctionScript",
-                             {AUCTIONHOUSEHOOK_ON_AUCTION_ADD, AUCTIONHOUSEHOOK_ON_AUCTION_REMOVE})
+                             {AUCTIONHOUSEHOOK_ON_AUCTION_ADD, AUCTIONHOUSEHOOK_ON_AUCTION_REMOVE,
+                              AUCTIONHOUSEHOOK_ON_AUCTION_SUCCESSFUL})
     {
     }
 
     void OnAuctionAdd(AuctionHouseObject* /*house*/, AuctionEntry* entry) override
     {
         if (entry && entry->owner)
-            ProfessionMgr::Instance().AuctionAdded(entry->owner);
+            ProfessionMgr::Instance().AuctionAdded(*entry);
     }
 
     void OnAuctionRemove(AuctionHouseObject* /*house*/, AuctionEntry* entry) override
     {
         if (entry && entry->owner)
-            ProfessionMgr::Instance().AuctionRemoved(entry->owner);
+            ProfessionMgr::Instance().AuctionRemoved(*entry);
+    }
+
+    void OnAuctionSuccessful(AuctionHouseObject* /*house*/, AuctionEntry* entry) override
+    {
+        if (entry)
+            ProfessionMgr::Instance().AuctionSold(*entry);
     }
 };
 

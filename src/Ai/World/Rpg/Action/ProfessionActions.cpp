@@ -41,6 +41,7 @@ constexpr uint32 AUCTION_DURATION_MINUTES = 12 * HOUR / MINUTE;
 constexpr uint32 SERVICE_RESULT_DELAY_MS = 3 * IN_MILLISECONDS;
 constexpr uint32 MAX_AUCTION_MAIL = 20;
 constexpr uint32 MAX_AUCTION_MAIL_DURATION = 5 * MINUTE * IN_MILLISECONDS;
+constexpr uint32 MAX_VENDOR_DURATION = 2 * MINUTE * IN_MILLISECONDS;
 constexpr float SERVICE_DISTANCE = 3.0f;
 
 bool HasReagents(Player* bot, ProfessionRecipe const& recipe)
@@ -425,6 +426,36 @@ bool ProfessionPlanAction::Execute(Event /*event*/)
     return true;
 }
 
+bool ProfessionSellAction::Execute(Event /*event*/)
+{
+    ProfessionWork& work = botAI->rpgInfo.Profession;
+    auto finish = [&]()
+    {
+        ChangePhase(ProfessionPhase::Mail);
+        return true;
+    };
+    if (botAI->rpgInfo.HasStatusPersisted(MAX_VENDOR_DURATION))
+        return finish();
+    if (!work.Destination)
+        work.Destination = ProfessionMgr::Instance().FindVendor(bot);
+    if (!work.Destination || work.Destination->Position.GetMapId() != bot->GetMapId())
+        return finish();
+    bool arrived;
+    bool const result = Travel(arrived);
+    if (!arrived)
+        return result;
+    Creature* vendor = GetDestinationCreature();
+    if (!vendor || !bot->GetNPCIfCanInteractWith(vendor->GetGUID(), UNIT_NPC_FLAG_VENDOR))
+    {
+        if (++work.Attempts >= MAX_PROFESSION_FAILURES)
+            return finish();
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.RepeatDelay);
+        return true;
+    }
+    botAI->DoSpecificAction("sell", Event("profession sell", "vendor"), true);
+    return finish();
+}
+
 bool ProfessionRefineAction::Execute(Event /*event*/)
 {
     ProfessionWork& work = botAI->rpgInfo.Profession;
@@ -601,7 +632,7 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
     bool const result = Travel(arrived);
     if (!arrived)
         return result;
-    uint32 const amount = GetAuctionAmount(botAI, item);
+    uint32 amount = GetAuctionAmount(botAI, item);
     if (!amount)
         return skipItem();
     Creature* auctioneer = GetDestinationCreature();
@@ -610,17 +641,25 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
     AuctionHouseEntry const* house = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
     if (!house)
         return Fail();
+    uint32 const unitPrice =
+        ProfessionMgr::Instance().GetAuctionUnitPrice(item->GetTemplate(), house, item->GetItemRandomPropertyId());
+    if (!unitPrice)
+        return skipItem();
+    amount = std::min(amount, MAX_MONEY_AMOUNT / unitPrice);
+    if (!amount)
+        return skipItem();
     FreeMoneyForValue availableBudget(botAI);
     availableBudget.Qualify(std::to_string(static_cast<uint32>(NeedMoneyFor::tradeskill)));
     if (AuctionHouseMgr::GetAuctionDeposit(house, AUCTION_DURATION_MINUTES * MINUTE, item, amount) >
         std::min(availableBudget.Calculate(), bot->GetMoney()))
         return skipItem();
-    uint64 const value = uint64(std::max(1u, item->GetTemplate()->SellPrice)) * amount;
-    uint32 const buyout = uint32(std::clamp<double>(
-        static_cast<double>(value) * sPlayerbotAIConfig.ProfessionAuctionPriceMultiplier, 1, MAX_MONEY_AMOUNT));
+    uint32 const buyout = unitPrice * amount;
+    uint32 const bid = ProfessionMgr::GetAuctionStartingBid(item->GetTemplate(), house, amount, buyout);
+    if (!bid)
+        return skipItem();
     WorldPacket* packet = new WorldPacket(CMSG_AUCTION_SELL_ITEM);
     *packet << auctioneer->GetGUID() << uint32(1) << item->GetGUID() << amount;
-    *packet << std::max(1u, uint32(uint64(buyout) * 4 / 5)) << buyout << AUCTION_DURATION_MINUTES;
+    *packet << bid << buyout << AUCTION_DURATION_MINUTES;
     work.PendingItem = item->GetGUID();
     ProfessionMgr::AuctionAttempted(botAI, work.PendingItem);
     work.BeforeCount = item->GetCount();
