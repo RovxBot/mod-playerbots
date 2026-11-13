@@ -13,6 +13,7 @@
 #include "ItemPackets.h"
 #include "ItemUsageValue.h"
 #include "ItemVisitors.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "ProfessionMgr.h"
 
@@ -78,18 +79,32 @@ private:
 class SellVendorItemsVisitor : public SellItemsVisitor
 {
 public:
-    SellVendorItemsVisitor(SellAction* action, AiObjectContext* con) : SellItemsVisitor(action) { context = con; }
+    SellVendorItemsVisitor(SellAction* action, PlayerbotAI* botAI) : SellItemsVisitor(action), _botAI(botAI)
+    {
+        context = botAI->GetAiObjectContext();
+        _deferAuctions = sPlayerbotAIConfig.EnableNewRpgStrategy && ProfessionMgr::CanRun(botAI) &&
+                         context->GetValue<uint8>("bag space")->Get() <= 80;
+    }
 
     AiObjectContext* context;
 
     bool Visit(Item* item) override
     {
-        ItemUsage usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
+        std::string const qualifier =
+            std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
+        ItemUsage usage = context->GetValue<ItemUsage>("item usage", qualifier)->Get();
         if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
+            return true;
+
+        if (_deferAuctions && ProfessionMgr::ShouldDeferSale(_botAI, item))
             return true;
 
         return SellItemsVisitor::Visit(item);
     }
+
+private:
+    PlayerbotAI* _botAI;
+    bool _deferAuctions;
 };
 
 bool SellAction::Execute(Event event)
@@ -105,7 +120,7 @@ bool SellAction::Execute(Event event)
 
     if (text == "vendor")
     {
-        SellVendorItemsVisitor visitor(this, context);
+        SellVendorItemsVisitor visitor(this, botAI);
         IterateItems(&visitor);
         botAI->ConsolidateItems();  // re-stack what the partial sells fragmented
         return true;
@@ -155,7 +170,7 @@ void SellAction::Sell(FindItemVisitor* visitor)
 
 uint32 SellAction::GetQuestItemRequirement(uint32 itemId)
 {
-    uint32 maxRequirement = 0;
+    uint32 totalRequirement = 0;
 
     for (auto const& questPair : botAI->GetCurrentQuestsRequiringItemId(itemId))
     {
@@ -166,11 +181,11 @@ uint32 SellAction::GetQuestItemRequirement(uint32 itemId)
         for (uint8 i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; i++)
         {
             if (quest->RequiredItemId[i] == itemId)
-                maxRequirement = std::max(maxRequirement, quest->RequiredItemCount[i]);
+                totalRequirement += quest->RequiredItemCount[i];
         }
     }
 
-    return maxRequirement;
+    return totalRequirement;
 }
 
 void SellAction::Sell(Item* item, bool force)
@@ -181,6 +196,10 @@ void SellAction::Sell(Item* item, bool force)
     std::ostringstream out;
     uint32 itemId = item->GetEntry();
     ItemTemplate const* proto = item->GetTemplate();
+
+    if (!force && proto->Class == ITEM_CLASS_RECIPE && proto->RequiredSkill && bot->HasSkill(proto->RequiredSkill) &&
+        !bot->HasSpell(proto->Spells[2].SpellId))
+        return;
 
     if (!force && (ItemUsageValue::IsProfessionTool(bot, proto) || ProfessionMgr::IsReserved(botAI, itemId)))
         return;

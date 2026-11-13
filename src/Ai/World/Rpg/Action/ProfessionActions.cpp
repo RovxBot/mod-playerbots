@@ -13,9 +13,12 @@
 #include "BudgetValues.h"
 #include "Containers.h"
 #include "Event.h"
+#include "GameObject.h"
+#include "GameTime.h"
 #include "ItemUsageValue.h"
 #include "LootMgr.h"
 #include "LootObjectStack.h"
+#include "Mail.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -35,7 +38,9 @@ constexpr uint32 REFINEMENT_STACK_SIZE = 5;
 constexpr uint32 SPELL_MILLING = 51005;
 constexpr uint32 SPELL_PROSPECTING = 31252;
 constexpr uint32 AUCTION_DURATION_MINUTES = 12 * HOUR / MINUTE;
-constexpr uint32 AUCTION_RESULT_DELAY_MS = 3 * IN_MILLISECONDS;
+constexpr uint32 SERVICE_RESULT_DELAY_MS = 3 * IN_MILLISECONDS;
+constexpr uint32 MAX_AUCTION_MAIL = 20;
+constexpr uint32 MAX_AUCTION_MAIL_DURATION = 5 * MINUTE * IN_MILLISECONDS;
 constexpr float SERVICE_DISTANCE = 3.0f;
 
 bool HasReagents(Player* bot, ProfessionRecipe const& recipe)
@@ -46,19 +51,9 @@ bool HasReagents(Player* bot, ProfessionRecipe const& recipe)
     return true;
 }
 
-bool CanAuction(Item const* item)
-{
-    if (!item || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() || item->IsNotEmptyBag() ||
-        item->GetUInt32Value(ITEM_FIELD_DURATION))
-        return false;
-
-    ItemTemplate const* proto = item->GetTemplate();
-    return !proto->HasFlag(ITEM_FLAG_CONJURED) && !proto->HasFlag(ITEM_FLAG_IS_BOUND_TO_ACCOUNT);
-}
-
 uint32 GetAuctionAmount(PlayerbotAI* botAI, Item const* item)
 {
-    if (!CanAuction(item))
+    if (!ProfessionMgr::CanAuction(item))
         return 0;
 
     Player* bot = botAI->GetBot();
@@ -95,6 +90,12 @@ uint32 GetAuctionAmount(PlayerbotAI* botAI, Item const* item)
     uint32 const carried = bot->GetItemCount(itemId);
     return carried > keepCount ? std::min(item->GetCount(), carried - keepCount) : 0;
 }
+
+bool CanCollectAuctionMail(Mail const* mail, time_t now)
+{
+    return mail && mail->messageType == MAIL_AUCTION && mail->state != MAIL_STATE_DELETED && !mail->COD &&
+           mail->deliver_time <= now && mail->expire_time > now;
+}
 }  // namespace
 
 bool ProfessionAction::isUseful()
@@ -118,6 +119,23 @@ void ProfessionAction::ChangePhase(ProfessionPhase phase)
     work.Attempts = 0;
     work.InputsChecked = false;
     work.AuctionItemChecked = false;
+}
+
+void ProfessionAction::WaitForResult()
+{
+    ProfessionWork& work = botAI->rpgInfo.Profession;
+    work.Waiting = true;
+    ObjectGuid const botGuid = bot->GetGUID();
+    uint64 const generation = work.Generation;
+    botAI->AddTimedEvent(
+        [botGuid, generation]()
+        {
+            Player* bot = ObjectAccessor::FindPlayer(botGuid);
+            PlayerbotAI* ai = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+            if (ai && ai->rpgInfo.Profession.Generation == generation)
+                ai->rpgInfo.Profession.Waiting = false;
+        },
+        SERVICE_RESULT_DELAY_MS);
 }
 
 bool ProfessionAction::Fail()
@@ -238,6 +256,121 @@ bool ProfessionAction::CastStep(ProfessionStep& step, bool product)
         return Fail();
     work.PendingOutput = step.ItemId;
     work.BeforeCount = before;
+    return true;
+}
+
+bool ProfessionMailAction::FinishMail()
+{
+    ProfessionWork& work = botAI->rpgInfo.Profession;
+    work.AuctionMail.clear();
+    work.MailRequest = ProfessionMailRequest::None;
+    ChangePhase(ProfessionPhase::Plan);
+    return true;
+}
+
+bool ProfessionMailAction::Execute(Event /*event*/)
+{
+    ProfessionWork& work = botAI->rpgInfo.Profession;
+    if (botAI->rpgInfo.HasStatusPersisted(MAX_AUCTION_MAIL_DURATION))
+        return FinishMail();
+    time_t const now = GameTime::GetGameTime().count();
+    if (!work.MailPrepared)
+    {
+        for (Mail const* mail : bot->GetMails())
+        {
+            if (CanCollectAuctionMail(mail, now))
+                work.AuctionMail.push_back(mail->messageID);
+            if (work.AuctionMail.size() >= MAX_AUCTION_MAIL)
+                break;
+        }
+        work.MailPrepared = true;
+    }
+    if (work.AuctionMail.empty())
+        return FinishMail();
+
+    auto nextMail = [&]()
+    {
+        work.AuctionMail.pop_back();
+        work.MailRequest = ProfessionMailRequest::None;
+        work.Attempts = 0;
+        return true;
+    };
+    Mail const* mail = bot->GetMail(work.AuctionMail.back());
+    if (!CanCollectAuctionMail(mail, now))
+        return nextMail();
+
+    if (work.MailRequest != ProfessionMailRequest::None)
+    {
+        bool const completed =
+            work.MailRequest == ProfessionMailRequest::Money
+                ? !mail->money
+                : work.MailRequest == ProfessionMailRequest::Item &&
+                      std::none_of(mail->items.begin(), mail->items.end(),
+                                   [&](MailItemInfo const& item) { return item.item_guid == work.MailItem; });
+        if (completed)
+            work.Attempts = 0;
+        else if (++work.Attempts >= MAX_PROFESSION_FAILURES)
+            return nextMail();
+        work.MailRequest = ProfessionMailRequest::None;
+        return true;
+    }
+
+    if (!work.Destination)
+        work.Destination = ProfessionMgr::Instance().FindMailbox(bot);
+    if (!work.Destination || work.Destination->Position.GetMapId() != bot->GetMapId())
+        return FinishMail();
+    bool arrived;
+    bool const result = Travel(arrived);
+    if (!arrived)
+        return result;
+
+    GameObject* mailbox = nullptr;
+    auto const bounds = bot->GetMap()->GetGameObjectBySpawnIdStore().equal_range(work.Destination->SpawnId);
+    for (auto itr = bounds.first; itr != bounds.second; ++itr)
+        if (itr->second && itr->second->GetEntry() == work.Destination->Entry)
+            if (GameObject* object =
+                    bot->GetGameObjectIfCanInteractWith(itr->second->GetGUID(), GAMEOBJECT_TYPE_MAILBOX))
+            {
+                mailbox = object;
+                break;
+            }
+    if (!mailbox)
+    {
+        if (++work.Attempts >= MAX_PROFESSION_FAILURES)
+            return FinishMail();
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.RepeatDelay);
+        return true;
+    }
+
+    WorldPacket* packet = nullptr;
+    if (mail->money)
+    {
+        if (uint64(bot->GetMoney()) + mail->money > MAX_MONEY_AMOUNT)
+            return nextMail();
+        work.MailRequest = ProfessionMailRequest::Money;
+        packet = new WorldPacket(CMSG_MAIL_TAKE_MONEY);
+        *packet << mailbox->GetGUID() << mail->messageID;
+    }
+    else if (!mail->items.empty())
+    {
+        work.MailItem = mail->items.front().item_guid;
+        Item* item = bot->GetMItem(work.MailItem);
+        ItemPosCountVec destination;
+        if (!item || bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
+            return nextMail();
+        work.MailRequest = ProfessionMailRequest::Item;
+        packet = new WorldPacket(CMSG_MAIL_TAKE_ITEM);
+        *packet << mailbox->GetGUID() << mail->messageID << work.MailItem;
+    }
+    else
+    {
+        work.MailRequest = ProfessionMailRequest::Delete;
+        packet = new WorldPacket(CMSG_MAIL_DELETE);
+        *packet << mailbox->GetGUID() << mail->messageID << uint32(0);
+    }
+    // Mail opcodes are PROCESS_THREADUNSAFE; normal session dispatch owns the writes.
+    bot->GetSession()->QueuePacket(packet);
+    WaitForResult();
     return true;
 }
 
@@ -415,12 +548,14 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
     ProfessionWork& work = botAI->rpgInfo.Profession;
     if (work.PendingItem)
     {
+        ObjectGuid const itemGuid = work.PendingItem;
         Item* item = bot->GetItemByGuid(work.PendingItem);
         uint32 const remaining = item ? item->GetCount() : 0;
         work.PendingItem.Clear();
         if (remaining >= work.BeforeCount)
             return Fail();
         work.AuctionItems.pop_back();
+        work.AuctionSales.erase(itemGuid);
         work.Attempts = 0;
         work.AuctionItemChecked = false;
         return true;
@@ -435,7 +570,7 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
         work.Products.clear();
         work.Reserved.clear();
         for (Item* item : botAI->GetInventoryItems())
-            if (CanAuction(item))
+            if (ProfessionMgr::CanAuction(item))
                 work.AuctionItems.push_back(item->GetGUID());
         Acore::Containers::RandomShuffle(work.AuctionItems);
         work.AuctionsPrepared = true;
@@ -448,6 +583,7 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
 
     auto skipItem = [&]()
     {
+        ProfessionMgr::AuctionAttempted(botAI, work.AuctionItems.back());
         work.AuctionItems.pop_back();
         work.AuctionItemChecked = false;
         return true;
@@ -486,20 +622,10 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
     *packet << auctioneer->GetGUID() << uint32(1) << item->GetGUID() << amount;
     *packet << std::max(1u, uint32(uint64(buyout) * 4 / 5)) << buyout << AUCTION_DURATION_MINUTES;
     work.PendingItem = item->GetGUID();
+    ProfessionMgr::AuctionAttempted(botAI, work.PendingItem);
     work.BeforeCount = item->GetCount();
-    work.Waiting = true;
     // This opcode is PROCESS_THREADUNSAFE: normal session dispatch runs it on the world thread.
     bot->GetSession()->QueuePacket(packet);
-    ObjectGuid const botGuid = bot->GetGUID();
-    uint64 const generation = work.Generation;
-    botAI->AddTimedEvent(
-        [botGuid, generation]()
-        {
-            Player* bot = ObjectAccessor::FindPlayer(botGuid);
-            PlayerbotAI* ai = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-            if (ai && ai->rpgInfo.Profession.Generation == generation)
-                ai->rpgInfo.Profession.Waiting = false;
-        },
-        AUCTION_RESULT_DELAY_MS);
+    WaitForResult();
     return true;
 }

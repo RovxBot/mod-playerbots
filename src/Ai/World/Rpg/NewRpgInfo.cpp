@@ -207,13 +207,14 @@ std::string NewRpgInfo::ToString()
         }
         else if constexpr (std::is_same_v<T, DoProfessions>)
         {
-            static constexpr char const* phases[] = {"planning", "refining",   "buying supplies",
-                                                     "crafting", "auctioning", "done"};
+            static constexpr char const* phases[] = {
+                "collecting auction mail", "planning", "refining", "buying supplies", "crafting", "auctioning", "done"};
             out << "DO_PROFESSIONS";
             out << "\nPhase: " << phases[static_cast<uint8>(Profession.Phase)];
             out << "\nCraft spell: " << Profession.Craft.SpellId;
             out << "\nRemaining casts: " << Profession.Craft.Count;
             out << "\nSupply items: " << Profession.Supplies.size();
+            out << "\nAuction mail remaining: " << Profession.AuctionMail.size();
         }
         else if constexpr (std::is_same_v<T, OutdoorPvP>)
         {

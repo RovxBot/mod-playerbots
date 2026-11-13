@@ -29,9 +29,20 @@ protected:
     bool PrepareSpell(ProfessionRecipe const& recipe, bool& ready);
     bool CastStep(ProfessionStep& step, bool product);
     void ChangePhase(ProfessionPhase phase);
+    void WaitForResult();
 
 private:
     ProfessionPhase _phase;
+};
+
+class ProfessionMailAction : public ProfessionAction
+{
+public:
+    ProfessionMailAction(PlayerbotAI* botAI) : ProfessionAction(botAI, "profession mail", ProfessionPhase::Mail) {}
+    bool Execute(Event event) override;
+
+private:
+    bool FinishMail();
 };
 
 class ProfessionPlanAction : public ProfessionAction

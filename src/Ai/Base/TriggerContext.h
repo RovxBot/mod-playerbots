@@ -34,6 +34,7 @@ class TriggerContext : public NamedObjectContext<Trigger>
 public:
     TriggerContext()
     {
+        creators["profession mail"] = &TriggerContext::profession_mail;
         creators["profession plan"] = &TriggerContext::profession_plan;
         creators["profession refine"] = &TriggerContext::profession_refine;
         creators["profession supplies"] = &TriggerContext::profession_supplies;
@@ -458,6 +459,10 @@ private:
     static Trigger* rpg_use(PlayerbotAI* botAI) { return new RpgUseTrigger(botAI); }
     static Trigger* rpg_spell(PlayerbotAI* botAI) { return new RpgUseTrigger(botAI); }
     static Trigger* rpg_craft(PlayerbotAI* botAI) { return new RpgCraftTrigger(botAI); }
+    static Trigger* profession_mail(PlayerbotAI* botAI)
+    {
+        return new ProfessionPhaseTrigger(botAI, "profession mail", ProfessionPhase::Mail);
+    }
     static Trigger* profession_plan(PlayerbotAI* botAI)
     {
         return new ProfessionPhaseTrigger(botAI, "profession plan", ProfessionPhase::Plan);

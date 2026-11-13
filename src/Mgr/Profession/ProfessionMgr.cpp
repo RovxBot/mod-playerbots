@@ -10,6 +10,7 @@
 #include <atomic>
 #include <functional>
 #include <unordered_set>
+#include <utility>
 
 #include "AuctionHouseMgr.h"
 #include "Bag.h"
@@ -30,6 +31,7 @@
 #include "RandomPlayerbotMgr.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "Timer.h"
 
 namespace
 {
@@ -40,6 +42,8 @@ constexpr uint32 MAX_PRODUCER_CHOICES = 4;
 constexpr uint32 MAX_RECIPE_EXPANSIONS = 128;
 constexpr uint32 MAX_DESTINATIONS = 256;
 constexpr float MAX_TRAVEL_DISTANCE = 15000.0f;
+constexpr uint32 MAX_AUCTION_DEFERRAL = HOUR * IN_MILLISECONDS;
+constexpr uint32 MIN_AUCTION_BALANCE = SILVER;
 std::atomic<uint64> nextProfessionGeneration{1};
 
 struct PlanningInventory
@@ -62,6 +66,7 @@ void ProfessionMgr::Load()
     _vendorsByItem.clear();
     _creaturesByEntry.clear();
     _auctioneersByMap.clear();
+    _mailboxesByMap.clear();
     _focusesByType.clear();
 
     for (SkillLineAbilityEntry const* ability : sSkillLineAbilityStore)
@@ -133,11 +138,15 @@ void ProfessionMgr::Load()
     {
         MapEntry const* map = sMapStore.LookupEntry(data.mapid);
         GameObjectTemplate const* object = sObjectMgr->GetGameObjectTemplate(data.id);
-        if (!map || !map->IsContinent() || !object || object->type != GAMEOBJECT_TYPE_SPELL_FOCUS)
+        if (!map || !map->IsContinent() || !object)
             continue;
 
-        _focusesByType[object->spellFocus.focusId].push_back(
-            {WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId, data.id, 0});
+        if (object->type == GAMEOBJECT_TYPE_MAILBOX)
+            _mailboxesByMap[data.mapid].push_back(
+                {WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId, data.id, object->faction});
+        else if (object->type == GAMEOBJECT_TYPE_SPELL_FOCUS)
+            _focusesByType[object->spellFocus.focusId].push_back(
+                {WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId, data.id, 0});
     }
 
     LOG_INFO("playerbots", "Loaded {} profession recipes and {} vendor supply entries", _recipes.size(),
@@ -208,11 +217,20 @@ void ProfessionMgr::Start(PlayerbotAI* botAI) const
     ProfessionWork& work = botAI->rpgInfo.Profession;
     uint64 const generation = nextProfessionGeneration.fetch_add(1, std::memory_order_relaxed);
     uint32 const cursor = work.RecipeCursor;
+    auto sales = std::move(work.AuctionSales);
     work = ProfessionWork{};
+    work.AuctionSales = std::move(sales);
+    if (!work.AuctionSales.empty())
+    {
+        std::unordered_set<ObjectGuid> carried;
+        for (Item* item : botAI->GetInventoryItems())
+            carried.insert(item->GetGUID());
+        std::erase_if(work.AuctionSales, [&](auto const& sale) { return !carried.contains(sale.first); });
+    }
     work.Generation = generation;
     work.RecipeCursor = cursor;
     work.Ready = false;
-    work.Phase = ProfessionPhase::Plan;
+    work.Phase = ProfessionPhase::Mail;
     botAI->GetAiObjectContext()->GetValue<LootObject>("loot target")->Set(LootObject());
     ObjectGuid const botGuid = botAI->GetBot()->GetGUID();
     uint32 const delay = sPlayerbotAIConfig.ProfessionLoopInterval * IN_MILLISECONDS;
@@ -245,6 +263,33 @@ bool ProfessionMgr::IsReserved(PlayerbotAI* botAI, uint32 itemId)
 {
     ProfessionWork const& work = botAI->rpgInfo.Profession;
     return work.Phase != ProfessionPhase::Done && (work.Reserved.contains(itemId) || work.Products.contains(itemId));
+}
+
+bool ProfessionMgr::CanAuction(Item const* item)
+{
+    if (!item || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() || item->IsNotEmptyBag() ||
+        item->GetUInt32Value(ITEM_FIELD_DURATION))
+        return false;
+
+    ItemTemplate const* proto = item->GetTemplate();
+    return !proto->HasFlag(ITEM_FLAG_CONJURED) && !proto->HasFlag(ITEM_FLAG_IS_BOUND_TO_ACCOUNT);
+}
+
+bool ProfessionMgr::ShouldDeferSale(PlayerbotAI* botAI, Item const* item)
+{
+    if (!sPlayerbotAIConfig.EnableNewRpgStrategy || !CanRun(botAI) || !CanAuction(item) ||
+        botAI->GetBot()->GetMoney() < MIN_AUCTION_BALANCE)
+        return false;
+
+    auto const sale =
+        botAI->rpgInfo.Profession.AuctionSales.try_emplace(item->GetGUID(), AuctionSaleOpportunity{getMSTime(), false})
+            .first;
+    return !sale->second.Attempted && GetMSTimeDiffToNow(sale->second.FirstSeen) < MAX_AUCTION_DEFERRAL;
+}
+
+void ProfessionMgr::AuctionAttempted(PlayerbotAI* botAI, ObjectGuid item)
+{
+    botAI->rpgInfo.Profession.AuctionSales[item].Attempted = true;
 }
 
 std::optional<ProfessionDestination> ProfessionMgr::FindNearest(
@@ -306,6 +351,12 @@ std::optional<ProfessionDestination> ProfessionMgr::FindAuctioneer(Player* bot) 
 {
     auto const itr = _auctioneersByMap.find(bot->GetMapId());
     return itr == _auctioneersByMap.end() ? std::nullopt : FindNearest(bot, itr->second);
+}
+
+std::optional<ProfessionDestination> ProfessionMgr::FindMailbox(Player* bot) const
+{
+    auto const itr = _mailboxesByMap.find(bot->GetMapId());
+    return itr == _mailboxesByMap.end() ? std::nullopt : FindNearest(bot, itr->second);
 }
 
 std::optional<ProfessionDestination> ProfessionMgr::FindFocus(Player* bot, uint32 focus) const

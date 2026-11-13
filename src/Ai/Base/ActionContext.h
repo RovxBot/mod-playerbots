@@ -80,6 +80,7 @@ class ActionContext : public NamedObjectContext<Action>
 public:
     ActionContext()
     {
+        creators["profession mail"] = &ActionContext::profession_mail;
         creators["profession plan"] = &ActionContext::profession_plan;
         creators["profession refine"] = &ActionContext::profession_refine;
         creators["profession supplies"] = &ActionContext::profession_supplies;
@@ -489,6 +490,7 @@ private:
     static Action* rpg_use(PlayerbotAI* botAI) { return new RpgUseAction(botAI); }
     static Action* rpg_spell(PlayerbotAI* botAI) { return new RpgSpellAction(botAI); }
     static Action* rpg_craft(PlayerbotAI* botAI) { return new RpgCraftAction(botAI); }
+    static Action* profession_mail(PlayerbotAI* botAI) { return new ProfessionMailAction(botAI); }
     static Action* profession_plan(PlayerbotAI* botAI) { return new ProfessionPlanAction(botAI); }
     static Action* profession_refine(PlayerbotAI* botAI) { return new ProfessionRefineAction(botAI); }
     static Action* profession_supplies(PlayerbotAI* botAI) { return new ProfessionSupplyAction(botAI); }

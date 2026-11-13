@@ -18,11 +18,13 @@
 
 class Player;
 class PlayerbotAI;
+class Item;
 struct ItemTemplate;
 
 // Each phase has its own action; triggers only inspect this state.
 enum class ProfessionPhase : uint8
 {
+    Mail,
     Plan,
     Refine,
     Supplies,
@@ -46,6 +48,20 @@ struct ProfessionStep
     uint32 Count = 0;
 };
 
+struct AuctionSaleOpportunity
+{
+    uint32 FirstSeen = 0;
+    bool Attempted = false;
+};
+
+enum class ProfessionMailRequest : uint8
+{
+    None,
+    Money,
+    Item,
+    Delete
+};
+
 struct ProfessionWork
 {
     ProfessionPhase Phase = ProfessionPhase::Done;
@@ -55,6 +71,8 @@ struct ProfessionWork
     std::map<uint32, uint32> Reserved;
     std::map<uint32, uint32> Products;
     std::vector<ObjectGuid> AuctionItems;
+    std::vector<uint32> AuctionMail;
+    std::unordered_map<ObjectGuid, AuctionSaleOpportunity> AuctionSales;
     std::optional<ProfessionDestination> Destination;
     ObjectGuid PendingItem;
     uint32 PendingInput = 0;
@@ -63,12 +81,15 @@ struct ProfessionWork
     uint32 Attempts = 0;
     uint32 Conversions = 0;
     uint32 RecipeCursor = 0;
+    uint32 MailItem = 0;
+    ProfessionMailRequest MailRequest = ProfessionMailRequest::None;
     uint64 Generation = 0;
     bool Ready = true;
     bool Waiting = false;
     bool InputsChecked = false;
     bool AuctionsPrepared = false;
     bool AuctionItemChecked = false;
+    bool MailPrepared = false;
 };
 
 struct ProfessionRecipe
@@ -100,6 +121,9 @@ public:
     static void Finish(PlayerbotAI* botAI);
     static bool IsReserved(PlayerbotAI* botAI, uint32 itemId);
     static bool CanRun(PlayerbotAI* botAI);
+    static bool CanAuction(Item const* item);
+    static bool ShouldDeferSale(PlayerbotAI* botAI, Item const* item);
+    static void AuctionAttempted(PlayerbotAI* botAI, ObjectGuid item);
     void InitializeAuctionCounts();
     void AuctionAdded(ObjectGuid owner);
     void AuctionRemoved(ObjectGuid owner);
@@ -107,6 +131,7 @@ public:
 
     std::optional<ProfessionDestination> FindVendor(Player* bot, uint32 itemId) const;
     std::optional<ProfessionDestination> FindAuctioneer(Player* bot) const;
+    std::optional<ProfessionDestination> FindMailbox(Player* bot) const;
     std::optional<ProfessionDestination> FindFocus(Player* bot, uint32 focus) const;
 
 private:
@@ -118,6 +143,7 @@ private:
     std::unordered_map<uint32, std::vector<uint32>> _vendorsByItem;
     DestinationIndex _creaturesByEntry;
     DestinationIndex _auctioneersByMap;
+    DestinationIndex _mailboxesByMap;
     DestinationIndex _focusesByType;
     mutable std::mutex _auctionCountsMutex;
     std::unordered_map<ObjectGuid, uint32> _auctionCounts;

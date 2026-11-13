@@ -1444,10 +1444,14 @@ Playerbots.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,23
 # Default: 1 (enabled)
 Playerbots.EnableNewRpgStrategy = 1
 
-# Let ungrouped random bots process carried materials between new RPG activities:
+# Let ungrouped random bots collect delivered auction mail and process carried materials between new RPG activities:
 # refine known intermediates, buy ordinary vendor reagents, craft, then auction unneeded tradeable bag items.
 # Prioritizes profession skill-ups, then useful items, then tradable surplus. Uses real materials and money.
 # Auction visits also run without crafting. Equipment upgrades, usable recipes, supplies and quest items are kept.
+# Collects up to 20 auction mails per run at a mailbox, allowing up to five minutes for the mailbox step.
+# Personal, COD and undelivered mail is left alone.
+# Automatic vendor sales of tradeable surplus wait up to one hour for an auction opportunity. An auction attempt,
+# bags over 80% full or a balance below 1 silver allows ordinary vendor selling to resume.
 # Default: 1 (enabled). Requires EnableNewRpgStrategy.
 Playerbots.EnableProfessionLoop = 1
 
