@@ -54,6 +54,7 @@ struct ProfessionWork
     std::map<uint32, uint32> Supplies;
     std::map<uint32, uint32> Reserved;
     std::map<uint32, uint32> Products;
+    std::vector<ObjectGuid> AuctionItems;
     std::optional<ProfessionDestination> Destination;
     ObjectGuid PendingItem;
     uint32 PendingInput = 0;
@@ -66,7 +67,8 @@ struct ProfessionWork
     bool Ready = true;
     bool Waiting = false;
     bool InputsChecked = false;
-    bool ProductsChecked = false;
+    bool AuctionsPrepared = false;
+    bool AuctionItemChecked = false;
 };
 
 struct ProfessionRecipe

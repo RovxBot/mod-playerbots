@@ -1445,8 +1445,9 @@ Playerbots.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,23
 Playerbots.EnableNewRpgStrategy = 1
 
 # Let ungrouped random bots process carried materials between new RPG activities:
-# refine known intermediates, buy ordinary vendor reagents, craft, then auction unneeded products.
+# refine known intermediates, buy ordinary vendor reagents, craft, then auction unneeded tradeable bag items.
 # Prioritizes profession skill-ups, then useful items, then tradable surplus. Uses real materials and money.
+# Auction visits also run without crafting. Equipment upgrades, usable recipes, supplies and quest items are kept.
 # Default: 1 (enabled). Requires EnableNewRpgStrategy.
 Playerbots.EnableProfessionLoop = 1
 
@@ -1463,7 +1464,8 @@ Playerbots.ProfessionLoopBatchSize = 4
 # Range: 1-100. Default: 12.
 Playerbots.ProfessionMaxAuctions = 12
 
-# Auction buyout per item, as a multiple of its vendor sell value. No live auction scans are performed.
+# Auction buyout per item, as a multiple of its vendor sell value (at least 1 copper before the multiplier).
+# Items are considered in random order each run. No live auction scans are performed.
 # Listings last 12 hours and the core charges the normal deposit. Range: 1-100. Default: 5.
 Playerbots.ProfessionAuctionPriceMultiplier = 5.0
 

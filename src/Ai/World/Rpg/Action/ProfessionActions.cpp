@@ -7,11 +7,11 @@
 #include "ProfessionActions.h"
 
 #include <algorithm>
-#include <utility>
 
 #include "AuctionHouseMgr.h"
 #include "Bag.h"
 #include "BudgetValues.h"
+#include "Containers.h"
 #include "Event.h"
 #include "ItemUsageValue.h"
 #include "LootMgr.h"
@@ -21,6 +21,7 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "QuestDef.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "WorldPacket.h"
@@ -45,22 +46,54 @@ bool HasReagents(Player* bot, ProfessionRecipe const& recipe)
     return true;
 }
 
-bool WantsToKeep(ItemUsage usage)
+bool CanAuction(Item const* item)
 {
-    return usage == ITEM_USAGE_KEEP || usage == ITEM_USAGE_QUEST || usage == ITEM_USAGE_EQUIP ||
-           usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_USE || usage == ITEM_USAGE_SKILL ||
-           usage == ITEM_USAGE_AMMO;
+    if (!item || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() || item->IsNotEmptyBag() ||
+        item->GetUInt32Value(ITEM_FIELD_DURATION))
+        return false;
+
+    ItemTemplate const* proto = item->GetTemplate();
+    return !proto->HasFlag(ITEM_FLAG_CONJURED) && !proto->HasFlag(ITEM_FLAG_IS_BOUND_TO_ACCOUNT);
 }
 
-bool KeepProduct(PlayerbotAI* botAI, uint32 itemId)
+uint32 GetAuctionAmount(PlayerbotAI* botAI, Item const* item)
 {
-    auto& products = botAI->rpgInfo.Profession.Products;
-    auto product = products.extract(itemId);
+    if (!CanAuction(item))
+        return 0;
+
+    Player* bot = botAI->GetBot();
+    ItemTemplate const* proto = item->GetTemplate();
+    uint32 const itemId = item->GetEntry();
+    if (proto->Class == ITEM_CLASS_RECIPE && proto->RequiredSkill && bot->HasSkill(proto->RequiredSkill) &&
+        !bot->HasSpell(proto->Spells[2].SpellId))
+        return 0;
+
     ItemUsageValue usage(botAI);
-    usage.Qualify(std::to_string(itemId));
-    bool const keep = WantsToKeep(usage.Calculate());
-    products.insert(std::move(product));
-    return keep;
+    usage.Qualify(std::to_string(itemId) + "," + std::to_string(item->GetItemRandomPropertyId()));
+    ItemUsage const itemUsage = usage.Calculate();
+    if (itemUsage != ITEM_USAGE_NONE && itemUsage != ITEM_USAGE_VENDOR && itemUsage != ITEM_USAGE_AH)
+        return 0;
+
+    uint32 keepCount = 0;
+    for (auto const& questPair : botAI->GetCurrentQuestsRequiringItemId(itemId))
+    {
+        Quest const* quest = questPair.first;
+        if (!quest)
+            continue;
+        for (uint8 index = 0; index < QUEST_ITEM_OBJECTIVES_COUNT; ++index)
+            if (quest->RequiredItemId[index] == itemId)
+                keepCount += quest->RequiredItemCount[index];
+    }
+
+    if (proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_MISC || proto->Class == ITEM_CLASS_REAGENT)
+    {
+        bool const lowBagSpace = botAI->GetAiObjectContext()->GetValue<uint8>("bag space")->Get() > 50;
+        if (usage.IsItemNeededForUsefullSpell(proto, lowBagSpace))
+            keepCount = std::max(keepCount, 2u * proto->GetMaxStackSize());
+    }
+
+    uint32 const carried = bot->GetItemCount(itemId);
+    return carried > keepCount ? std::min(item->GetCount(), carried - keepCount) : 0;
 }
 }  // namespace
 
@@ -84,7 +117,7 @@ void ProfessionAction::ChangePhase(ProfessionPhase phase)
     work.Destination.reset();
     work.Attempts = 0;
     work.InputsChecked = false;
-    work.ProductsChecked = false;
+    work.AuctionItemChecked = false;
 }
 
 bool ProfessionAction::Fail()
@@ -255,7 +288,7 @@ bool ProfessionPlanAction::Execute(Event /*event*/)
                     if (tryItem(bag->GetItemByPos(slot)))
                         return true;
     }
-    ProfessionMgr::Finish(botAI);
+    ChangePhase(ProfessionPhase::Auction);
     return true;
 }
 
@@ -387,53 +420,9 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
         work.PendingItem.Clear();
         if (remaining >= work.BeforeCount)
             return Fail();
-        auto product = work.Products.find(work.PendingInput);
-        if (product != work.Products.end())
-        {
-            product->second -= std::min(product->second, work.BeforeCount - remaining);
-            if (!product->second)
-                work.Products.erase(product);
-        }
+        work.AuctionItems.pop_back();
         work.Attempts = 0;
-        work.ProductsChecked = false;
-        return true;
-    }
-    if (work.Products.empty())
-    {
-        ProfessionMgr::Finish(botAI);
-        return true;
-    }
-    uint32 const itemId = work.Products.begin()->first;
-    if (!work.ProductsChecked)
-    {
-        Item* item = bot->GetItemByEntry(itemId);
-        if (!item || item->IsEquipped() || !item->CanBeTraded())
-        {
-            work.Products.erase(itemId);
-            return true;
-        }
-        if (KeepProduct(botAI, itemId))
-        {
-            work.Products.erase(itemId);
-            return true;
-        }
-        if (ProfessionMgr::Instance().GetActiveAuctionCount(bot->GetGUID()) >= sPlayerbotAIConfig.ProfessionMaxAuctions)
-        {
-            ProfessionMgr::Finish(botAI);
-            return true;
-        }
-        work.ProductsChecked = true;
-    }
-    if (!work.Destination)
-        work.Destination = ProfessionMgr::Instance().FindAuctioneer(bot);
-    bool arrived;
-    bool const result = Travel(arrived);
-    if (!arrived)
-        return result;
-    if (KeepProduct(botAI, itemId))
-    {
-        work.Products.erase(itemId);
-        work.ProductsChecked = false;
+        work.AuctionItemChecked = false;
         return true;
     }
     if (ProfessionMgr::Instance().GetActiveAuctionCount(bot->GetGUID()) >= sPlayerbotAIConfig.ProfessionMaxAuctions)
@@ -441,34 +430,62 @@ bool ProfessionAuctionAction::Execute(Event /*event*/)
         ProfessionMgr::Finish(botAI);
         return true;
     }
-    uint32 const count = work.Products.at(itemId);
-    Item* item = bot->GetItemByEntry(itemId);
-    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
-    if (!item || !proto || item->IsEquipped() || !item->CanBeTraded() || item->IsNotEmptyBag() || proto->Duration ||
-        proto->HasFlag(ITEM_FLAG_CONJURED) || !proto->SellPrice)
+    if (!work.AuctionsPrepared)
     {
-        work.Products.erase(itemId);
-        work.ProductsChecked = false;
+        work.Products.clear();
+        work.Reserved.clear();
+        for (Item* item : botAI->GetInventoryItems())
+            if (CanAuction(item))
+                work.AuctionItems.push_back(item->GetGUID());
+        Acore::Containers::RandomShuffle(work.AuctionItems);
+        work.AuctionsPrepared = true;
+    }
+    if (work.AuctionItems.empty())
+    {
+        ProfessionMgr::Finish(botAI);
         return true;
     }
+
+    auto skipItem = [&]()
+    {
+        work.AuctionItems.pop_back();
+        work.AuctionItemChecked = false;
+        return true;
+    };
+    Item* item = bot->GetItemByGuid(work.AuctionItems.back());
+    if (!work.AuctionItemChecked)
+    {
+        if (!GetAuctionAmount(botAI, item))
+            return skipItem();
+        work.AuctionItemChecked = true;
+    }
+    if (!work.Destination)
+        work.Destination = ProfessionMgr::Instance().FindAuctioneer(bot);
+    bool arrived;
+    bool const result = Travel(arrived);
+    if (!arrived)
+        return result;
+    uint32 const amount = GetAuctionAmount(botAI, item);
+    if (!amount)
+        return skipItem();
     Creature* auctioneer = GetDestinationCreature();
     if (!auctioneer || !bot->GetNPCIfCanInteractWith(auctioneer->GetGUID(), UNIT_NPC_FLAG_AUCTIONEER))
         return Fail();
-    uint32 const amount = std::min(count, item->GetCount());
     AuctionHouseEntry const* house = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
+    if (!house)
+        return Fail();
     FreeMoneyForValue availableBudget(botAI);
     availableBudget.Qualify(std::to_string(static_cast<uint32>(NeedMoneyFor::tradeskill)));
-    if (!house || AuctionHouseMgr::GetAuctionDeposit(house, AUCTION_DURATION_MINUTES * MINUTE, item, amount) >
-                      std::min(availableBudget.Calculate(), bot->GetMoney()))
-        return Fail();
-    uint64 const value = uint64(proto->SellPrice) * amount;
+    if (AuctionHouseMgr::GetAuctionDeposit(house, AUCTION_DURATION_MINUTES * MINUTE, item, amount) >
+        std::min(availableBudget.Calculate(), bot->GetMoney()))
+        return skipItem();
+    uint64 const value = uint64(std::max(1u, item->GetTemplate()->SellPrice)) * amount;
     uint32 const buyout = uint32(std::clamp<double>(
         static_cast<double>(value) * sPlayerbotAIConfig.ProfessionAuctionPriceMultiplier, 1, MAX_MONEY_AMOUNT));
     WorldPacket* packet = new WorldPacket(CMSG_AUCTION_SELL_ITEM);
     *packet << auctioneer->GetGUID() << uint32(1) << item->GetGUID() << amount;
     *packet << std::max(1u, uint32(uint64(buyout) * 4 / 5)) << buyout << AUCTION_DURATION_MINUTES;
     work.PendingItem = item->GetGUID();
-    work.PendingInput = itemId;
     work.BeforeCount = item->GetCount();
     work.Waiting = true;
     // This opcode is PROCESS_THREADUNSAFE: normal session dispatch runs it on the world thread.
