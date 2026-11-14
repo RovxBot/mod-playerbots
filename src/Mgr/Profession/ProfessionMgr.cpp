@@ -80,8 +80,9 @@ double EstimateAuctionDeposit(ItemTemplate const* item, AuctionHouseEntry const*
     if (!house)
         return 0.0;
     double const rate = sWorld->getRate(RATE_AUCTION_DEPOSIT);
-    return std::ceil(std::max<double>(
-        SILVER * rate, house->depositPercent * AUCTION_DEPOSIT_DBC_FACTOR * item->SellPrice * count * rate));
+    return std::ceil(
+        std::max<double>(static_cast<double>(SILVER) * rate,
+                         house->depositPercent * AUCTION_DEPOSIT_DBC_FACTOR * item->SellPrice * count * rate));
 }
 }  // namespace
 
@@ -170,8 +171,11 @@ void ProfessionMgr::Load()
             continue;
 
         if (object->type == GAMEOBJECT_TYPE_MAILBOX)
-            _mailboxesByMap[data.mapid].push_back(
-                {WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId, data.id, object->faction});
+        {
+            GameObjectTemplateAddon const* addon = sObjectMgr->GetGameObjectTemplateAddon(data.id);
+            _mailboxesByMap[data.mapid].push_back({WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId,
+                                                   data.id, addon ? addon->faction : 0});
+        }
         else if (object->type == GAMEOBJECT_TYPE_SPELL_FOCUS)
             _focusesByType[object->spellFocus.focusId].push_back(
                 {WorldPosition(data.mapid, data.posX, data.posY, data.posZ), spawnId, data.id, 0});
