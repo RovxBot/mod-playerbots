@@ -14,6 +14,7 @@
 #include "Playerbots.h"
 #include "ReputationMgr.h"
 #include "Trainer.h"
+#include "RoutineMaintenance.h"
 
 bool TrainerAction::Execute(Event event)
 {
@@ -187,6 +188,10 @@ void TrainerAction::TellFooter(uint32 totalCost)
 
 bool MaintenanceAction::Execute(Event /*event*/)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
+                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
+        return false;
+
     if (!sPlayerbotAIConfig.MaintenanceCommand)
     {
         botAI->TellError("maintenance command is not allowed, please check the configuration.");

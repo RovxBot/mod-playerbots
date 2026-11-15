@@ -1,0 +1,1266 @@
+diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
+index d4465a051..fc1d32e19 100644
+--- a/src/Ai/Base/Actions/TrainerAction.cpp
++++ b/src/Ai/Base/Actions/TrainerAction.cpp
+@@ -14,6 +14,7 @@
+ #include "Playerbots.h"
+ #include "ReputationMgr.h"
+ #include "Trainer.h"
++#include "RoutineMaintenance.h"
+ 
+ bool TrainerAction::Execute(Event event)
+ {
+@@ -187,6 +188,10 @@ void TrainerAction::TellFooter(uint32 totalCost)
+ 
+ bool MaintenanceAction::Execute(Event /*event*/)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return false;
++
+     if (!sPlayerbotAIConfig.MaintenanceCommand)
+     {
+         botAI->TellError("maintenance command is not allowed, please check the configuration.");
+diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
+index bb9e4cb23..7f9ebd4aa 100644
+--- a/src/Bot/Factory/PlayerbotFactory.cpp
++++ b/src/Bot/Factory/PlayerbotFactory.cpp
+@@ -46,6 +46,7 @@
+ #include "StatsWeightCalculator.h"
+ #include "Trainer.h"
+ #include "World.h"
++#include "RoutineMaintenance.h"
+ 
+ namespace
+ {
+@@ -791,6 +792,10 @@ uint8 PlayerbotFactory::GetPreferredArmorType(uint8 cls)
+ 
+ void PlayerbotFactory::Prepare()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     if (bot->isDead())
+         bot->ResurrectPlayer(1.0f, false);
+ 
+@@ -825,6 +830,10 @@ void PlayerbotFactory::Prepare()
+ 
+ void PlayerbotFactory::Randomize(bool incremental)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     // if (sPlayerbotAIConfig.DisableRandomLevels)
+     //     return;
+ 
+@@ -1090,6 +1099,10 @@ void PlayerbotFactory::Randomize(bool incremental)
+ 
+ void PlayerbotFactory::Refresh()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     // Prepare();
+     // if (!sPlayerbotAIConfig.EquipAndSpecPersistence ||
+     //     bot->GetLevel() < sPlayerbotAIConfig.EquipAndSpecPersistenceLevel)
+@@ -1130,6 +1143,10 @@ void PlayerbotFactory::Refresh()
+ 
+ void PlayerbotFactory::InitConsumables()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint8 specTab = AiFactory::GetPlayerSpecTab(bot);
+     std::vector<std::pair<uint32, uint32>> items;
+ 
+@@ -1344,6 +1361,10 @@ void PlayerbotFactory::InitConsumables()
+ 
+ void PlayerbotFactory::InitPetTalents()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (bot->GetLevel() <= 70 && sPlayerbotAIConfig.LimitTalentsExpansion)
+         return;
+ 
+@@ -1496,6 +1517,10 @@ void PlayerbotFactory::InitPetTalents()
+ 
+ void PlayerbotFactory::InitPet()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     Pet* pet = bot->GetPet();
+ 
+     if (!pet && bot->GetPetStable() && bot->GetPetStable()->CurrentPet)
+@@ -1630,6 +1655,10 @@ void PlayerbotFactory::InitPet()
+ 
+ void PlayerbotFactory::ClearSkills()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (uint32 i = 0; i < sizeof(tradeSkills) / sizeof(uint32); ++i)
+     {
+         bot->SetSkill(tradeSkills[i], 0, 0, 0);
+@@ -1652,6 +1681,10 @@ void PlayerbotFactory::ClearSkills()
+ 
+ void PlayerbotFactory::ClearEverything()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     bot->GiveLevel(bot->getClass() == CLASS_DEATH_KNIGHT ? sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL)
+                                                          : sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL));
+     bot->SetUInt32Value(PLAYER_XP, 0);
+@@ -1666,6 +1699,10 @@ void PlayerbotFactory::ClearEverything()
+ 
+ void PlayerbotFactory::ClearSpells()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     std::list<uint32> spells;
+     for (PlayerSpellMap::iterator itr = bot->GetSpellMap().begin(); itr != bot->GetSpellMap().end(); ++itr)
+     {
+@@ -1687,6 +1724,10 @@ void PlayerbotFactory::ClearSpells()
+ 
+ void PlayerbotFactory::ResetQuests()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+     {
+         bot->SetQuestSlot(slot, 0);
+@@ -1708,6 +1749,10 @@ void PlayerbotFactory::ResetQuests()
+ 
+ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_template /*true*/, bool reset /*false*/)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return 0;
++
+     uint32 specTab;
+     uint8 cls = bot->getClass();
+     std::map<uint8, uint32> tabs = AiFactory::GetPlayerSpecTabs(bot);
+@@ -2362,6 +2407,10 @@ void Shuffle(std::vector<uint32>& items)
+ 
+ void PlayerbotFactory::InitEquipment(bool incremental, bool second_chance)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     if (level < 5)
+     {
+         // original items
+@@ -2923,6 +2972,10 @@ inline Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint3
+ 
+ void PlayerbotFactory::InitBags(bool destroyOld)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
+     {
+         uint32 newItemId = 51809;
+@@ -3057,6 +3110,10 @@ bool PlayerbotFactory::CanEquipUnseenItem(uint8 slot, uint16& dest, uint32 item)
+ 
+ void PlayerbotFactory::InitTradeSkills()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(bot))
+         return;
+ 
+@@ -3213,6 +3270,10 @@ void PlayerbotFactory::InitTradeSkills()
+ 
+ void PlayerbotFactory::InitTradeSpecializations()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     InitAlchemySpecialization();
+     InitEngineeringSpecialization();
+     InitLeatherworkingSpecialization();
+@@ -3390,6 +3451,10 @@ bool PlayerbotFactory::InitBlacksmithingSpecialization()
+ 
+ void PlayerbotFactory::UpdateTradeSkills()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (uint32 i = 0; i < sizeof(tradeSkills) / sizeof(uint32); ++i)
+     {
+         if (bot->GetSkillValue(tradeSkills[i]) == 1)
+@@ -3399,6 +3464,10 @@ void PlayerbotFactory::UpdateTradeSkills()
+ 
+ void PlayerbotFactory::InitSkills()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     //uint32 maxValue = level * 5; //not used, line marked for removal.
+     bot->UpdateSkillsForLevel();
+ 
+@@ -3569,6 +3638,10 @@ void PlayerbotFactory::SetRandomSkill(uint16 id)
+ 
+ void PlayerbotFactory::InitAvailableSpells()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (trainerIdCache[bot->getClass()].empty())
+     {
+         CreatureTemplateContainer const* creatureTemplateContainer = sObjectMgr->GetCreatureTemplates();
+@@ -3619,6 +3692,10 @@ void PlayerbotFactory::InitAvailableSpells()
+ 
+ void PlayerbotFactory::InitClassSpells()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     int32_t level = bot->GetLevel();
+     switch (bot->getClass())
+     {
+@@ -3716,6 +3793,10 @@ void PlayerbotFactory::InitClassSpells()
+ 
+ void PlayerbotFactory::InitSpecialSpells()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (std::vector<uint32>::iterator i = sPlayerbotAIConfig.RandomBotSpellIds.begin();
+          i != sPlayerbotAIConfig.RandomBotSpellIds.end(); ++i)
+     {
+@@ -3927,6 +4008,10 @@ void PlayerbotFactory::AddPrevQuests(uint32 questId, std::list<uint32>& questIds
+ 
+ void PlayerbotFactory::InitQuests(std::list<uint32>& questMap, bool withRewardItem)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     for (std::list<uint32>::iterator i = questMap.begin(); i != questMap.end(); ++i)
+     {
+         uint32 questId = *i;
+@@ -3965,6 +4050,10 @@ void PlayerbotFactory::InitQuests(std::list<uint32>& questMap, bool withRewardIt
+ 
+ void PlayerbotFactory::InitInstanceQuests()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     // Yunfan: use configuration instead of hard code
+     uint32 currentXP = bot->GetUInt32Value(PLAYER_XP);
+     // LOG_INFO("playerbots", "Initializing quests...");
+@@ -3980,12 +4069,20 @@ void PlayerbotFactory::InitInstanceQuests()
+ 
+ void PlayerbotFactory::ClearInventory()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     DestroyItemsVisitor visitor(bot, true);
+     IterateItems(&visitor);
+ }
+ 
+ void PlayerbotFactory::ClearAllItems()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     DestroyItemsVisitor visitor(bot);
+     IterateItems(&visitor, ITERATE_ALL_ITEMS);
+ }
+@@ -4028,6 +4125,10 @@ static void DestroyObsoleteAmmo(Player* bot, ItemTemplate const* ammo)
+ 
+ void PlayerbotFactory::InitAmmo()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint8 const botClass = bot->getClass();
+     if (botClass != CLASS_HUNTER && botClass != CLASS_ROGUE && botClass != CLASS_WARRIOR)
+         return;
+@@ -4089,6 +4190,10 @@ uint32 PlayerbotFactory::CalcMixedGearScore(uint32 gs, uint32 quality)
+ 
+ void PlayerbotFactory::DestroyEquippedGear(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+     {
+         if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
+@@ -4101,6 +4206,10 @@ void PlayerbotFactory::DestroyEquippedGear(Player* bot)
+ void PlayerbotFactory::AutoGear(Player* bot, uint32 itemQuality, uint32 ilvl, bool incremental, bool secondChance,
+                                 bool applyFinishers)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     uint32 gs = ilvl == 0 ? 0 : CalcMixedGearScore(ilvl, itemQuality);
+     PlayerbotFactory factory(bot, bot->GetLevel(), itemQuality, gs);
+     factory.InitEquipment(incremental, secondChance);
+@@ -4116,6 +4225,10 @@ void PlayerbotFactory::AutoGear(Player* bot, uint32 itemQuality, uint32 ilvl, bo
+ 
+ void PlayerbotFactory::InitMounts()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint32 firstmount = sPlayerbotAIConfig.UseGroundMountAtMinLevel;
+     uint32 secondmount = sPlayerbotAIConfig.UseFastGroundMountAtMinLevel;
+     uint32 thirdmount = sPlayerbotAIConfig.UseFlyMountAtMinLevel;
+@@ -4242,6 +4355,10 @@ void PlayerbotFactory::InitMounts()
+ 
+ void PlayerbotFactory::UnbindInstance()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     Player* p = bot;
+     ObjectGuid guid = p->GetGUID();
+ 
+@@ -4261,6 +4378,10 @@ void PlayerbotFactory::UnbindInstance()
+ 
+ void PlayerbotFactory::InitPotions()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint32 effects[] = {SPELL_EFFECT_HEAL, SPELL_EFFECT_ENERGIZE};
+     for (uint8 i = 0; i < 2; ++i)
+     {
+@@ -4341,6 +4462,10 @@ std::vector<uint32> PlayerbotFactory::GetCurrentGemsCount()
+ 
+ void PlayerbotFactory::InitFood()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (botAI && botAI->HasCheat(BotCheatMask::food))
+     {
+         return;
+@@ -4406,6 +4531,10 @@ void PlayerbotFactory::InitFood()
+ 
+ void PlayerbotFactory::InitReagents()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     std::vector<std::pair<uint32, uint32>> items;
+     switch (bot->getClass())
+     {
+@@ -4528,6 +4657,10 @@ void PlayerbotFactory::InitReagents()
+ 
+ void PlayerbotFactory::CleanupConsumables() // remove old consumables as part of randombot level-up maintenance
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     std::vector<Item*> itemsToDelete;
+ 
+     std::vector<Item*> items;
+@@ -4591,6 +4724,10 @@ void PlayerbotFactory::CleanupConsumables() // remove old consumables as part of
+ 
+ void PlayerbotFactory::InitGlyphs(bool increment)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     bot->InitGlyphsForLevel();
+     if (!increment && botAI &&
+         botAI->GetAiObjectContext()->GetValue<bool>("custom_glyphs")->Get())
+@@ -4940,6 +5077,10 @@ void PlayerbotFactory::CancelAuras() { bot->RemoveAllAuras(); }
+ 
+ void PlayerbotFactory::InitInventory()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     InitInventoryTrade();
+     InitInventoryEquip();
+     InitInventorySkill();
+@@ -5150,6 +5291,10 @@ void PlayerbotFactory::InitInventoryEquip()
+ 
+ void PlayerbotFactory::InitGuild()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::LegacyGuildAssignment))
++        return;
++
+     if (bot->GetGuildId())
+     {
+         if (!bot->HasItemCount(5976, 1) && bot->GetLevel() > 9)
+@@ -5373,6 +5518,10 @@ void PlayerbotFactory::ApplyEnchantTemplate(uint8 spec)
+ 
+ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     std::vector<uint32> curCount = GetCurrentGemsCount();
+     uint8 jewelersCount = 0;
+     int requiredActive = 2;
+@@ -5744,6 +5893,10 @@ void PlayerbotFactory::IterateItemsInBank(IterateItemsVisitor* visitor)
+ 
+ void PlayerbotFactory::InitKeyring()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (!bot)
+         return;
+ 
+@@ -5794,6 +5947,10 @@ void PlayerbotFactory::InitKeyring()
+ }
+ void PlayerbotFactory::InitReputation()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     if (!bot)
+         return;
+ 
+@@ -5839,6 +5996,10 @@ void PlayerbotFactory::InitReputation()
+ 
+ void PlayerbotFactory::InitAttunementQuests()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     uint32 level = bot->GetLevel();
+     if (level < 55)
+         return; // Only apply for level 55+ bots
+diff --git a/src/Bot/Factory/RandomPlayerbotFactory.cpp b/src/Bot/Factory/RandomPlayerbotFactory.cpp
+index 45ea8d29c..35869daac 100644
+--- a/src/Bot/Factory/RandomPlayerbotFactory.cpp
++++ b/src/Bot/Factory/RandomPlayerbotFactory.cpp
+@@ -28,6 +28,7 @@
+ #include "StringFormat.h"
+ #include "Timer.h"
+ #include "World.h"
++#include "RoutineMaintenancePolicy.h"
+ 
+ void RandomPlayerbotFactory::LoadLocalizedNameColumns()
+ {
+@@ -504,7 +505,8 @@ void RandomPlayerbotFactory::CreateRandomBots()
+ {
+     /* multi-thread here is meaningless? since the async db operations */
+ 
+-    if (sPlayerbotAIConfig.DeleteRandomBotAccounts)
++    if (sPlayerbotAIConfig.DeleteRandomBotAccounts && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                                                          0, Playerbots::RoutineMaintenance::Action::AccountDeletion))
+     {
+         // Collect bot account ids from the login database so the cleanup below
+         // never needs a cross-database subquery (the login database may live on
+diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
+index 5e131cf2e..f317d11b5 100644
+--- a/src/Bot/PlayerbotAI.cpp
++++ b/src/Bot/PlayerbotAI.cpp
+@@ -5,6 +5,8 @@
+  */
+ 
+ #include "PlayerbotAI.h"
++#include "PlayerbotWorldThreadProcessor.h"
++#include "RoutineGroupLeaveOperation.h"
+ #include "AiFactory.h"
+ #include "BudgetValues.h"
+ #include "ChannelMgr.h"
+@@ -1016,11 +1018,18 @@ void PlayerbotAI::Reset(bool full)
+     }
+ }
+ 
+-void PlayerbotAI::LeaveOrDisbandGroup()
++void PlayerbotAI::LeaveOrDisbandGroup(bool routineMaintenance)
+ {
+     if (!bot || !bot->GetGroup() || IsSelfBot(bot))
+         return;
+ 
++    if (routineMaintenance && Playerbots::RoutineMaintenance::PolicyProvider.load(std::memory_order_acquire))
++    {
++        PlayerbotWorldThreadProcessor::instance().QueueOperation(
++            std::make_unique<RoutineGroupLeaveOperation>(bot->GetGUID(), bot->GetGroup()->GetGUID()));
++        return;
++    }
++
+     WorldPacket* packet = new WorldPacket(CMSG_GROUP_DISBAND);
+     bot->GetSession()->QueuePacket(packet);
+ }
+diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
+index d8d7c978f..4e955b038 100644
+--- a/src/Bot/PlayerbotAI.h
++++ b/src/Bot/PlayerbotAI.h
+@@ -439,7 +439,7 @@ public:
+     void ResetStrategies(bool load = false);
+     void ReInitCurrentEngine();
+     void Reset(bool full = false);
+-    void LeaveOrDisbandGroup();
++    void LeaveOrDisbandGroup(bool routineMaintenance = false);
+     static bool IsTank(Player* player, bool bySpec = false);
+     static bool IsHeal(Player* player, bool bySpec = false);
+     static bool IsDps(Player* player, bool bySpec = false);
+diff --git a/src/Bot/PlayerbotMgr.cpp b/src/Bot/PlayerbotMgr.cpp
+index 64baab231..7df6cafa6 100644
+--- a/src/Bot/PlayerbotMgr.cpp
++++ b/src/Bot/PlayerbotMgr.cpp
+@@ -41,6 +41,7 @@
+ #include <string>
+ #include <vector>
+ #include <unordered_set>
++#include "RoutineMaintenance.h"
+ 
+ class BotInitGuard
+ {
+@@ -320,7 +321,7 @@ void PlayerbotHolder::HandleBotPackets(WorldSession* session)
+     }
+ }
+ 
+-void PlayerbotHolder::LogoutAllBots()
++void PlayerbotHolder::LogoutAllBots(bool routineMaintenance)
+ {
+     /*
+     while (true)
+@@ -341,6 +342,10 @@ void PlayerbotHolder::LogoutAllBots()
+         Player* bot = itr.second;
+         if (!bot)
+             continue;
++        if (routineMaintenance && (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                                       bot, Playerbots::RoutineMaintenance::Action::PopulationTrim) ||
++                                   Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(bot->GetGroup())))
++            continue;
+ 
+         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+         if (!botAI || IsSelfBot(bot))
+@@ -558,7 +563,7 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
+             }
+         }
+ 
+-        if (!groupValid)
++        if (!groupValid && !Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(group))
+         {
+             botAI->LeaveOrDisbandGroup();
+         }
+diff --git a/src/Bot/PlayerbotMgr.h b/src/Bot/PlayerbotMgr.h
+index a7d390549..44999d0f5 100644
+--- a/src/Bot/PlayerbotMgr.h
++++ b/src/Bot/PlayerbotMgr.h
+@@ -51,7 +51,7 @@ public:
+     static void UpdatePendingLogins();  // world thread, once per tick
+     static void ClearPendingLogins();   // shutdown, outside any callback
+ 
+-    void LogoutAllBots();
++    void LogoutAllBots(bool routineMaintenance = false);
+     void OnBotLogin(Player* const bot);
+ 
+     std::vector<std::string> HandlePlayerbotCommand(char const* args, Player* master = nullptr);
+diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
+index d3ecf1155..3ba565131 100644
+--- a/src/Bot/RandomBotLevelMgr.cpp
++++ b/src/Bot/RandomBotLevelMgr.cpp
+@@ -27,6 +27,7 @@
+ #include <limits>
+ #include <string>
+ #include <vector>
++#include "RoutineMaintenance.h"
+ 
+ // True if bot's name is present in excludeList.
+ static bool IsNameInExcludeList(Player* bot, std::vector<std::string> const& excludeList)
+@@ -293,6 +294,10 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
+ // be resized on a config reload.
+ void RandomBotLevelMgr::AdjustBotToRange(Player* bot, int targetRangeIndex, TeamId team)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
+         bot->IsDuringRemoveFromWorld())
+         return;
+@@ -388,6 +393,10 @@ void RandomBotLevelMgr::LoadSocialFriendList()
+ // inherited from the original module that this port fixes.
+ int RandomBotLevelMgr::GetOrFlagPlayerBracket(Player* player)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            player, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return -1;
++
+     bool isRandomBot = sRandomPlayerbotMgr.IsRandomBot(player);
+ 
+     if (isRandomBot && IsNameInExcludeList(player, sPlayerbotAIConfig.LevelBracketsExcludeNames))
+@@ -485,6 +494,9 @@ void RandomBotLevelMgr::RedistributeSurplusBots(std::vector<Player*>& sourceBots
+     {
+         Player* bot = sourceBots.back();
+         sourceBots.pop_back();
++        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                bot, Playerbots::RoutineMaintenance::Action::LevelReset))
++            continue;
+ 
+         int targetRange = targetRanges[targetIdx];
+         if (actualCounts[targetRange] >= desiredCounts[targetRange])
+@@ -663,6 +675,9 @@ void RandomBotLevelMgr::RunLevelBracketsDistribution()
+             continue;
+         if (!sRandomPlayerbotMgr.IsRandomBot(player))
+             continue;
++        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                player, Playerbots::RoutineMaintenance::Action::LevelReset))
++            continue;
+         if (IsNameInExcludeList(player, sPlayerbotAIConfig.LevelBracketsExcludeNames))
+             continue;
+ 
+@@ -723,6 +738,13 @@ void RandomBotLevelMgr::ProcessPendingLevelResets()
+             processed >= sPlayerbotAIConfig.LevelBracketsFlaggedProcessLimit)
+             break;
+ 
++        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                it->botGuid.GetCounter(), Playerbots::RoutineMaintenance::Action::LevelReset))
++        {
++            it = _pendingLevelResets.erase(it);
++            continue;
++        }
++
+         Player* bot = ObjectAccessor::FindPlayer(it->botGuid);
+ 
+         if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
+@@ -828,6 +850,10 @@ uint8 RandomBotLevelMgr::ComputeResetChance(uint8 level) const
+ // whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            player, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     uint8 levelToResetTo = sPlayerbotAIConfig.ResetBotLevelResetTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -851,6 +877,10 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ // level, whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::SkipBotLevel(Player* player, uint8 currentLevel)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            player, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     uint8 levelToSkipTo = sPlayerbotAIConfig.ResetBotLevelSkipTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -884,6 +914,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
+             continue;
+         if (!sRandomPlayerbotMgr.IsRandomBot(candidate))
+             continue;
++        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                candidate, Playerbots::RoutineMaintenance::Action::LevelReset))
++            continue;
+ 
+         if (IsNameInExcludeList(candidate, sPlayerbotAIConfig.ResetBotLevelExcludeNames))
+             continue;
+@@ -960,6 +993,10 @@ void RandomBotLevelMgr::Update(uint32 diff)
+ 
+ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            player, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+@@ -1013,6 +1050,10 @@ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ 
+ void RandomBotLevelMgr::OnBotLevelChanged(Player* player, uint8 oldLevel)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            player, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
+index 129a25970..b7a08dcae 100644
+--- a/src/Bot/RandomPlayerbotMgr.cpp
++++ b/src/Bot/RandomPlayerbotMgr.cpp
+@@ -58,6 +58,7 @@
+ #include "Unit.h"
+ #include "World.h"
+ #include "WorldSessionMgr.h"
++#include "RoutineMaintenance.h"
+ 
+ namespace
+ {
+@@ -449,8 +450,8 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
+             if (RealPlayerLastTimeSeen != 0 && onlineBotCount > 0 &&
+                 time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.DisabledWithoutRealPlayerLogoutDelay)
+             {
+-                LogoutAllBots();
+-                LOG_INFO("playerbots", "Logout all bots due no real player session.");
++                LogoutAllBots(true);
++                LOG_INFO("playerbots", "Logout unreserved bots due no real player session.");
+             }
+         }
+ 
+@@ -904,8 +905,14 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
+ // and simply get trimmed on a later tick, if they become free and there's still unfulfilled demand for logouts.
+ bool RandomPlayerbotMgr::IsRemovableBot(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::PopulationTrim))
++        return false;
++
+     if (!bot || !bot->IsInWorld() || !IsRandomBot(bot))
+         return false;
++    if (Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(bot->GetGroup()))
++        return false;
+ 
+     if (bot->IsInCombat())
+         return false;
+@@ -1012,19 +1019,22 @@ uint32 RandomPlayerbotMgr::RemoveRandomBots()
+     toLogout.insert(toLogout.end(), hordeBots.begin(), hordeBots.begin() + removeHorde);
+ 
+     // Reuse the same teardown as the 'add' event expiry path from ProcessBot.
++    uint32 removed = 0;
+     for (ObjectGuid guid : toLogout)
+     {
++        if (!IsRemovableBot(GetPlayerBot(guid)))
++            continue;
+         uint32 bot = guid.GetCounter();
+         SetEventValue(bot, "add", 0, 0);
+         currentBots.erase(bot);
+         LogoutPlayerBot(guid);
++        ++removed;
+     }
+ 
+-    if (!toLogout.empty())
+-        LOG_DEBUG("playerbots", "Logged-out {} randombots to match target count of {}", toLogout.size(),
+-                  maxAllowedBotCount);
++    if (removed)
++        LOG_DEBUG("playerbots", "Logged-out {} randombots to match target count of {}", removed, maxAllowedBotCount);
+ 
+-    return toLogout.size();
++    return removed;
+ }
+ 
+ // Population target for RandomBotCountMode 2: a 24 hour cycle ramping from MinRandomBots at RandomBotCountMinTime
+@@ -1686,7 +1696,8 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+     PlayerbotAI* botAI = player ? GET_PLAYERBOT_AI(player) : nullptr;
+ 
+     uint32 isValid = GetEventValue(bot, "add");
+-    if (!isValid)
++    if (!isValid && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                        bot, Playerbots::RoutineMaintenance::Action::PopulationTrim))
+     {
+         if (!player || !player->GetGroup())
+         {
+@@ -1789,12 +1800,25 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+ 
+     uint32 botId = bot->GetGUID().GetCounter();
+ 
++    // Enrollment can become known after login or change while the bot is online.
++    if (Playerbots::RoutineMaintenance::PolicyProvider.load(std::memory_order_acquire) && IsRandomBot(bot))
++    {
++        if (sPlayerbotAIConfig.RandomBotFixedLevel && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                                                          bot, Playerbots::RoutineMaintenance::Action::LevelReset))
++            bot->SetPlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
++        else
++            bot->RemovePlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
++    }
++
+     if (ProcessPendingGuildBankDeposit(bot))
+         return true;
+ 
+     // if death revive
+     if (bot->isDead())
+     {
++        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                bot, Playerbots::RoutineMaintenance::Action::Refresh))
++            return false;
+         if (!GetEventValue(botId, "dead"))
+         {
+             uint32 randomTime =
+@@ -1816,9 +1840,11 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+ 
+     // leave group if leader is rndbot
+     Group* group = bot->GetGroup();
+-    if (group && !group->isLFGGroup() && IsRandomBot(group->GetLeader()))
++    if (group && !group->isLFGGroup() && IsRandomBot(group->GetLeader()) &&
++        !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::GroupTeardown))
+     {
+-        botAI->LeaveOrDisbandGroup();
++        botAI->LeaveOrDisbandGroup(true);
+         LOG_INFO("playerbots", "Bot {} remove from group since leader is random bot.", bot->GetName().c_str());
+     }
+ 
+@@ -1840,7 +1866,8 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+     {
+         // randomize
+         uint32 randomize = GetEventValue(botId, "randomize");
+-        if (!randomize)
++        if (!randomize && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                              bot, Playerbots::RoutineMaintenance::Action::Randomize))
+         {
+             // bool randomiser = true;
+             // if (player->GetGuildId())
+@@ -1881,7 +1908,11 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+         // }
+ 
+         uint32 teleport = GetEventValue(botId, "teleport");
+-        if (!teleport)
++        if (!teleport &&
++            !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                bot, Playerbots::RoutineMaintenance::Action::RandomTeleport) &&
++            !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                bot, Playerbots::RoutineMaintenance::Action::Refresh))
+         {
+             LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
+             Refresh(bot);
+@@ -1898,6 +1929,10 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+ 
+ void RandomPlayerbotMgr::Revive(Player* player)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(player,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint32 bot = player->GetGUID().GetCounter();
+ 
+     // LOG_INFO("playerbots", "Bot {} revived", player->GetName().c_str());
+@@ -1910,6 +1945,10 @@ void RandomPlayerbotMgr::Revive(Player* player)
+ 
+ bool RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
++        return false;
++
+     // ignore when alrdy teleported or not in the world yet.
+     if (bot->IsBeingTeleported() || !bot->IsInWorld())
+         return false;
+@@ -2123,6 +2162,10 @@ void RandomPlayerbotMgr::InitArenaTeams()
+ 
+ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
++        return;
++
+     if (bot->InBattleground())
+         return;
+ 
+@@ -2325,6 +2368,10 @@ void RandomPlayerbotMgr::UpdatePlayerZones()
+ 
+ void RandomPlayerbotMgr::RandomTeleportGrindForLevel(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
++        return;
++
+     if (bot->InBattleground())
+         return;
+ 
+@@ -2337,6 +2384,10 @@ void RandomPlayerbotMgr::RandomTeleportGrindForLevel(Player* bot)
+ 
+ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
++        return;
++
+     if (bot->InBattleground())
+         return;
+ 
+@@ -2376,6 +2427,10 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
+ 
+ void RandomPlayerbotMgr::Randomize(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     if (bot->InBattleground())
+         return;
+ 
+@@ -2398,6 +2453,10 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
+ 
+ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::LevelReset))
++        return;
++
+     uint32 maxLevel = sPlayerbotAIConfig.RandomBotMaxLevel;
+     if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
+         maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+@@ -2421,6 +2480,10 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+ 
+ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+@@ -2495,7 +2558,7 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+     botAI->Reset(true);
+ 
+     if (bot->GetGroup())
+-        botAI->LeaveOrDisbandGroup();
++        botAI->LeaveOrDisbandGroup(true);
+ 
+     if (pmo)
+         pmo->finish();
+@@ -2505,6 +2568,10 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+ 
+ void RandomPlayerbotMgr::RandomizeMin(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+@@ -2528,7 +2595,7 @@ void RandomPlayerbotMgr::RandomizeMin(Player* bot)
+     botAI->Reset(true);
+ 
+     if (bot->GetGroup())
+-        botAI->LeaveOrDisbandGroup();
++        botAI->LeaveOrDisbandGroup(true);
+ 
+     if (pmo)
+         pmo->finish();
+@@ -2536,6 +2603,10 @@ void RandomPlayerbotMgr::RandomizeMin(Player* bot)
+ 
+ void RandomPlayerbotMgr::Clear(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::Randomize))
++        return;
++
+     PlayerbotFactory factory(bot, bot->GetLevel());
+     factory.ClearEverything();
+ }
+@@ -2571,6 +2642,10 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
+ 
+ void RandomPlayerbotMgr::Refresh(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(bot,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+@@ -2610,7 +2685,7 @@ void RandomPlayerbotMgr::Refresh(Player* bot)
+     bot->SetMoney(money + 500 * sqrt(urand(1, bot->GetLevel() * 5)));
+ 
+     if (bot->GetGroup())
+-        botAI->LeaveOrDisbandGroup();
++        botAI->LeaveOrDisbandGroup(true);
+ 
+     if (pmo)
+         pmo->finish();
+@@ -3080,7 +3155,8 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
+ 
+     RandomPlayerbotFactory::AssignBotToArenaTeam(bot);
+ 
+-    if (sPlayerbotAIConfig.RandomBotFixedLevel)
++    if (sPlayerbotAIConfig.RandomBotFixedLevel && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                                                      bot, Playerbots::RoutineMaintenance::Action::LevelReset))
+     {
+         bot->SetPlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
+     }
+@@ -3279,7 +3355,7 @@ void RandomPlayerbotMgr::PrintStats()
+         if (botAI->GetAiObjectContext()->GetValue<bool>("random bot update")->Get())
+             ++update;
+ 
+-        uint32 botId = bot->GetGUID().GetCounter();
++       uint32 botId = bot->GetGUID().GetCounter();
+         if (!GetEventValue(botId, "randomize"))
+             ++randomize;
+ 
+@@ -3782,6 +3858,10 @@ std::string const RandomPlayerbotMgr::HandleRemoteCommand(std::string const requ
+ 
+ void RandomPlayerbotMgr::ChangeStrategy(Player* player)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(player,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint32 bot = player->GetGUID().GetCounter();
+ 
+     if (frand(0.f, 100.f) > sPlayerbotAIConfig.RandomBotRpgChance)
+@@ -3802,6 +3882,10 @@ void RandomPlayerbotMgr::ChangeStrategy(Player* player)
+ 
+ void RandomPlayerbotMgr::ChangeStrategyOnce(Player* player)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(player,
++                                                                      Playerbots::RoutineMaintenance::Action::Refresh))
++        return;
++
+     uint32 bot = player->GetGUID().GetCounter();
+ 
+     if (frand(0.f, 100.f) > sPlayerbotAIConfig.RandomBotRpgChance)  // select grind / pvp
+@@ -3819,6 +3903,10 @@ void RandomPlayerbotMgr::ChangeStrategyOnce(Player* player)
+ 
+ void RandomPlayerbotMgr::RandomTeleportForRpg(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
++        return;
++
+     uint32 race = bot->getRace();
+     uint32 level = bot->GetLevel();
+     LOG_DEBUG("playerbots", "Random teleporting bot {} for RPG ({} locations available)", bot->GetName().c_str(),
+@@ -3828,6 +3916,10 @@ void RandomPlayerbotMgr::RandomTeleportForRpg(Player* bot)
+ 
+ void RandomPlayerbotMgr::Remove(Player* bot)
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            bot, Playerbots::RoutineMaintenance::Action::PopulationTrim))
++        return;
++
+     ObjectGuid owner = bot->GetGUID();
+ 
+     PlayerbotsDatabasePreparedStatement* stmt =
+diff --git a/src/Bot/RoutineMaintenance.h b/src/Bot/RoutineMaintenance.h
+new file mode 100644
+index 000000000..46308fb95
+--- /dev/null
++++ b/src/Bot/RoutineMaintenance.h
+@@ -0,0 +1,36 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_ROUTINE_MAINTENANCE_H
++#define PLAYERBOTS_ROUTINE_MAINTENANCE_H
++
++#include "Group.h"
++#include "Player.h"
++#include "RoutineMaintenancePolicy.h"
++
++namespace Playerbots::RoutineMaintenance
++{
++inline bool ShouldBlockGroupTeardown(Group const* group)
++{
++    if (!PolicyProvider.load(std::memory_order_acquire) || !group)
++        return false;
++    // Offline members count too. This runs only at a disruptive operation, with
++    // party/raid size as the bound, never by enumerating a guild or realm.
++    for (auto const& member : group->GetMemberSlots())
++        if (ShouldBlockRoutineMaintenance(member.guid.GetCounter(), Action::GroupTeardown))
++            return true;
++    return false;
++}
++
++inline bool ShouldBlockRoutineMaintenance(Player const* bot, Action action)
++{
++    if (!PolicyProvider.load(std::memory_order_acquire) || !bot)
++        return false;
++    return ShouldBlockRoutineMaintenance(bot->GetGUID().GetCounter(), action);
++}
++}  // namespace Playerbots::RoutineMaintenance
++
++#endif
+diff --git a/src/Bot/RoutineMaintenancePolicy.h b/src/Bot/RoutineMaintenancePolicy.h
+new file mode 100644
+index 000000000..be73c01a8
+--- /dev/null
++++ b/src/Bot/RoutineMaintenancePolicy.h
+@@ -0,0 +1,68 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_ROUTINE_MAINTENANCE_POLICY_H
++#define PLAYERBOTS_ROUTINE_MAINTENANCE_POLICY_H
++
++#include <array>
++#include <atomic>
++#include <cstdint>
++
++namespace Playerbots::RoutineMaintenance
++{
++inline constexpr std::uint32_t ContractVersion = 1;
++
++enum class Action : std::uint8_t
++{
++    Randomize,
++    LevelReset,
++    Refresh,
++    RandomTeleport,
++    GroupTeardown,
++    PopulationTrim,
++    LegacyGuildAssignment,
++    AccountDeletion,
++    Count
++};
++
++// Process-lifetime function only: no captured world objects, SQL, configuration
++// reads, or map-thread mutations. Registration cannot replace an existing owner.
++using Provider = bool (*)(std::uint32_t characterGuid, Action action);
++inline std::atomic<Provider> PolicyProvider{nullptr};
++inline std::array<std::atomic<std::uint64_t>, static_cast<std::size_t>(Action::Count)> VetoCounts{};
++
++inline bool RegisterProvider(Provider provider)
++{
++    if (!provider)
++        return false;
++    Provider expected = nullptr;
++    return PolicyProvider.compare_exchange_strong(expected, provider, std::memory_order_acq_rel) ||
++           expected == provider;
++}
++
++inline bool IsProvider(Provider provider) { return PolicyProvider.load(std::memory_order_acquire) == provider; }
++
++inline void UnregisterProvider(Provider provider)
++{
++    PolicyProvider.compare_exchange_strong(provider, nullptr, std::memory_order_acq_rel);
++}
++
++inline bool ShouldBlockRoutineMaintenance(std::uint32_t characterGuid, Action action)
++{
++    Provider provider = PolicyProvider.load(std::memory_order_acquire);
++    if (!provider || !provider(characterGuid, action))
++        return false;
++    VetoCounts[static_cast<std::size_t>(action)].fetch_add(1, std::memory_order_relaxed);
++    return true;
++}
++
++inline std::uint64_t GetVetoCount(Action action)
++{
++    return VetoCounts[static_cast<std::size_t>(action)].load(std::memory_order_relaxed);
++}
++}  // namespace Playerbots::RoutineMaintenance
++
++#endif
+diff --git a/src/Mgr/Guild/PlayerbotGuildMgr.cpp b/src/Mgr/Guild/PlayerbotGuildMgr.cpp
+index 378e1e478..7373f7df2 100644
+--- a/src/Mgr/Guild/PlayerbotGuildMgr.cpp
++++ b/src/Mgr/Guild/PlayerbotGuildMgr.cpp
+@@ -13,6 +13,7 @@
+ #include "PlayerbotAIConfig.h"
+ #include "RandomPlayerbotFactory.h"
+ #include "ScriptMgr.h"
++#include "RoutineMaintenancePolicy.h"
+ 
+ void PlayerbotGuildMgr::Init()
+ {
+@@ -237,6 +238,10 @@ void PlayerbotGuildMgr::ValidateGuildCache()
+ 
+ void PlayerbotGuildMgr::DeleteRandomBotGuilds()
+ {
++    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++            0, Playerbots::RoutineMaintenance::Action::LegacyGuildAssignment))
++        return;
++
+     LOG_INFO("playerbots", "Deleting randombot guilds...");
+     std::vector<uint32> guildsToDisband;
+ 
+diff --git a/src/Script/WorldThr/RoutineGroupLeaveOperation.h b/src/Script/WorldThr/RoutineGroupLeaveOperation.h
+new file mode 100644
+index 000000000..a6983087f
+--- /dev/null
++++ b/src/Script/WorldThr/RoutineGroupLeaveOperation.h
+@@ -0,0 +1,54 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_ROUTINE_GROUP_LEAVE_OPERATION_H
++#define PLAYERBOTS_ROUTINE_GROUP_LEAVE_OPERATION_H
++
++#include <chrono>
++
++#include "ObjectAccessor.h"
++#include "PlayerbotAI.h"
++#include "PlayerbotOperation.h"
++#include "Playerbots.h"
++#include "RoutineMaintenance.h"
++
++class RoutineGroupLeaveOperation final : public PlayerbotOperation
++{
++public:
++    RoutineGroupLeaveOperation(ObjectGuid guid, ObjectGuid groupGuid)
++        : _guid(guid), _groupGuid(groupGuid), _expiresAt(std::chrono::steady_clock::now() + std::chrono::seconds(30))
++    {
++    }
++
++    bool Execute() override
++    {
++        if (!IsValid() || !Playerbots::RoutineMaintenance::PolicyProvider.load(std::memory_order_acquire))
++            return false;
++        Player* bot = ObjectAccessor::FindPlayer(_guid);
++        if (!bot || !bot->GetGroup() || bot->GetGroup()->GetGUID() != _groupGuid ||
++            Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
++                bot, Playerbots::RoutineMaintenance::Action::GroupTeardown) ||
++            Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(bot->GetGroup()))
++            return false;
++        auto* ai = GET_PLAYERBOT_AI(bot);
++        if (!ai || IsSelfBot(bot) || ai->HasGameClientMaster())
++            return false;
++        // Reuse the original packet path and its core permissions.
++        ai->LeaveOrDisbandGroup();
++        return true;
++    }
++
++    ObjectGuid GetBotGuid() const override { return _guid; }
++    std::string GetName() const override { return "RoutineGroupLeave"; }
++    bool IsValid() const override { return std::chrono::steady_clock::now() <= _expiresAt; }
++
++private:
++    ObjectGuid _guid;
++    ObjectGuid _groupGuid;
++    std::chrono::steady_clock::time_point _expiresAt;
++};
++
++#endif

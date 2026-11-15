@@ -27,6 +27,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include "RoutineMaintenance.h"
 
 // True if bot's name is present in excludeList.
 static bool IsNameInExcludeList(Player* bot, std::vector<std::string> const& excludeList)
@@ -293,6 +294,10 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
 // be resized on a config reload.
 void RandomBotLevelMgr::AdjustBotToRange(Player* bot, int targetRangeIndex, TeamId team)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            bot, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return;
+
     if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
         bot->IsDuringRemoveFromWorld())
         return;
@@ -388,6 +393,10 @@ void RandomBotLevelMgr::LoadSocialFriendList()
 // inherited from the original module that this port fixes.
 int RandomBotLevelMgr::GetOrFlagPlayerBracket(Player* player)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            player, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return -1;
+
     bool isRandomBot = sRandomPlayerbotMgr.IsRandomBot(player);
 
     if (isRandomBot && IsNameInExcludeList(player, sPlayerbotAIConfig.LevelBracketsExcludeNames))
@@ -485,6 +494,9 @@ void RandomBotLevelMgr::RedistributeSurplusBots(std::vector<Player*>& sourceBots
     {
         Player* bot = sourceBots.back();
         sourceBots.pop_back();
+        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                bot, Playerbots::RoutineMaintenance::Action::LevelReset))
+            continue;
 
         int targetRange = targetRanges[targetIdx];
         if (actualCounts[targetRange] >= desiredCounts[targetRange])
@@ -663,6 +675,9 @@ void RandomBotLevelMgr::RunLevelBracketsDistribution()
             continue;
         if (!sRandomPlayerbotMgr.IsRandomBot(player))
             continue;
+        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                player, Playerbots::RoutineMaintenance::Action::LevelReset))
+            continue;
         if (IsNameInExcludeList(player, sPlayerbotAIConfig.LevelBracketsExcludeNames))
             continue;
 
@@ -722,6 +737,13 @@ void RandomBotLevelMgr::ProcessPendingLevelResets()
         if (sPlayerbotAIConfig.LevelBracketsFlaggedProcessLimit > 0 &&
             processed >= sPlayerbotAIConfig.LevelBracketsFlaggedProcessLimit)
             break;
+
+        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                it->botGuid.GetCounter(), Playerbots::RoutineMaintenance::Action::LevelReset))
+        {
+            it = _pendingLevelResets.erase(it);
+            continue;
+        }
 
         Player* bot = ObjectAccessor::FindPlayer(it->botGuid);
 
@@ -828,6 +850,10 @@ uint8 RandomBotLevelMgr::ComputeResetChance(uint8 level) const
 // whichever is higher) via a full PlayerbotFactory randomize.
 void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            player, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return;
+
     uint8 levelToResetTo = sPlayerbotAIConfig.ResetBotLevelResetTo;
 
     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
@@ -851,6 +877,10 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
 // level, whichever is higher) via a full PlayerbotFactory randomize.
 void RandomBotLevelMgr::SkipBotLevel(Player* player, uint8 currentLevel)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            player, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return;
+
     uint8 levelToSkipTo = sPlayerbotAIConfig.ResetBotLevelSkipTo;
 
     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
@@ -883,6 +913,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
         if (!candidate || !candidate->IsInWorld())
             continue;
         if (!sRandomPlayerbotMgr.IsRandomBot(candidate))
+            continue;
+        if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                candidate, Playerbots::RoutineMaintenance::Action::LevelReset))
             continue;
 
         if (IsNameInExcludeList(candidate, sPlayerbotAIConfig.ResetBotLevelExcludeNames))
@@ -960,6 +993,10 @@ void RandomBotLevelMgr::Update(uint32 diff)
 
 void RandomBotLevelMgr::OnBotLogin(Player* player)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            player, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return;
+
     if (!sRandomPlayerbotMgr.IsRandomBot(player))
         return;
 
@@ -1013,6 +1050,10 @@ void RandomBotLevelMgr::OnBotLogin(Player* player)
 
 void RandomBotLevelMgr::OnBotLevelChanged(Player* player, uint8 oldLevel)
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            player, Playerbots::RoutineMaintenance::Action::LevelReset))
+        return;
+
     if (!sRandomPlayerbotMgr.IsRandomBot(player))
         return;
 

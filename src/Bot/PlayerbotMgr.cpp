@@ -41,6 +41,7 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
+#include "RoutineMaintenance.h"
 
 class BotInitGuard
 {
@@ -320,7 +321,7 @@ void PlayerbotHolder::HandleBotPackets(WorldSession* session)
     }
 }
 
-void PlayerbotHolder::LogoutAllBots()
+void PlayerbotHolder::LogoutAllBots(bool routineMaintenance)
 {
     /*
     while (true)
@@ -340,6 +341,10 @@ void PlayerbotHolder::LogoutAllBots()
     {
         Player* bot = itr.second;
         if (!bot)
+            continue;
+        if (routineMaintenance && (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                                       bot, Playerbots::RoutineMaintenance::Action::PopulationTrim) ||
+                                   Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(bot->GetGroup())))
             continue;
 
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
@@ -556,7 +561,7 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
             }
         }
 
-        if (!groupValid)
+        if (!groupValid && !Playerbots::RoutineMaintenance::ShouldBlockGroupTeardown(group))
         {
             botAI->LeaveOrDisbandGroup();
         }

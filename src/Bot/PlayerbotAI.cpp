@@ -5,6 +5,8 @@
  */
 
 #include "PlayerbotAI.h"
+#include "PlayerbotWorldThreadProcessor.h"
+#include "RoutineGroupLeaveOperation.h"
 #include "AiFactory.h"
 #include "BudgetValues.h"
 #include "ChannelMgr.h"
@@ -1016,10 +1018,17 @@ void PlayerbotAI::Reset(bool full)
     }
 }
 
-void PlayerbotAI::LeaveOrDisbandGroup()
+void PlayerbotAI::LeaveOrDisbandGroup(bool routineMaintenance)
 {
     if (!bot || !bot->GetGroup() || IsSelfBot(bot))
         return;
+
+    if (routineMaintenance && Playerbots::RoutineMaintenance::PolicyProvider.load(std::memory_order_acquire))
+    {
+        PlayerbotWorldThreadProcessor::instance().QueueOperation(
+            std::make_unique<RoutineGroupLeaveOperation>(bot->GetGUID(), bot->GetGroup()->GetGUID()));
+        return;
+    }
 
     WorldPacket* packet = new WorldPacket(CMSG_GROUP_DISBAND);
     bot->GetSession()->QueuePacket(packet);
