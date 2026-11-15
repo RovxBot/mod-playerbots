@@ -1,0 +1,20 @@
+name: Optional maintenance contract
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise optional callback contract
+        run: |
+          for standard in c++17 c++20; do
+            c++ -std="$standard" -O2 -pthread -Wall -Wextra -Werror -pedantic -Isrc/Bot \
+              tests/RoutineMaintenancePolicyTests.cpp -o /tmp/maintenance-policy-tests
+            /tmp/maintenance-policy-tests
+          done
+      - name: Exercise source-extracted mutation guards and boundary contracts
+        run: python3 -m unittest discover -s tests -p 'test_routine_maintenance_*.py' -v

@@ -51,7 +51,7 @@ public:
     static void UpdatePendingLogins();  // world thread, once per tick
     static void ClearPendingLogins();   // shutdown, outside any callback
 
-    void LogoutAllBots();
+    void LogoutAllBots(bool routineMaintenance = false);
     void OnBotLogin(Player* const bot);
 
     std::vector<std::string> HandlePlayerbotCommand(char const* args, Player* master = nullptr);

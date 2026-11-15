@@ -13,6 +13,7 @@
 #include "PlayerbotAIConfig.h"
 #include "RandomPlayerbotFactory.h"
 #include "ScriptMgr.h"
+#include "RoutineMaintenancePolicy.h"
 
 void PlayerbotGuildMgr::Init()
 {
@@ -237,6 +238,10 @@ void PlayerbotGuildMgr::ValidateGuildCache()
 
 void PlayerbotGuildMgr::DeleteRandomBotGuilds()
 {
+    if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+            0, Playerbots::RoutineMaintenance::Action::LegacyGuildAssignment))
+        return;
+
     LOG_INFO("playerbots", "Deleting randombot guilds...");
     std::vector<uint32> guildsToDisband;
 

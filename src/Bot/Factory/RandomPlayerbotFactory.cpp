@@ -28,6 +28,7 @@
 #include "StringFormat.h"
 #include "Timer.h"
 #include "World.h"
+#include "RoutineMaintenancePolicy.h"
 
 void RandomPlayerbotFactory::LoadLocalizedNameColumns()
 {
@@ -504,7 +505,8 @@ void RandomPlayerbotFactory::CreateRandomBots()
 {
     /* multi-thread here is meaningless? since the async db operations */
 
-    if (sPlayerbotAIConfig.DeleteRandomBotAccounts)
+    if (sPlayerbotAIConfig.DeleteRandomBotAccounts && !Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
+                                                          0, Playerbots::RoutineMaintenance::Action::AccountDeletion))
     {
         // Collect bot account ids from the login database so the cleanup below
         // never needs a cross-database subquery (the login database may live on
