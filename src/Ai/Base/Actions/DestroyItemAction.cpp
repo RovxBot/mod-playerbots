@@ -5,10 +5,14 @@
  */
 
 #include "DestroyItemAction.h"
+
+#include <algorithm>
+
 #include "Event.h"
 #include "ItemCountValue.h"
+#include "ItemUsageValue.h"
 #include "Playerbots.h"
-#include <algorithm>
+#include "ProfessionMgr.h"
 
 namespace
 {
@@ -110,6 +114,10 @@ bool SmartDestroyItemAction::DestroyUntilBagSpace(std::vector<uint32> const& ite
     // Ids, not Item*: one destroy frees every stack of an id, including later entries.
     for (uint32 const itemId : itemIds)
     {
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+        if ((proto && ItemUsageValue::IsProfessionTool(bot, proto)) || ProfessionMgr::IsReserved(botAI, itemId))
+            continue;
+
         FindItemByIdVisitor visitor(itemId);
         DestroyItem(&visitor);
 

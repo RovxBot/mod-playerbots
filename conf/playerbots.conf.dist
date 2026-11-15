@@ -303,6 +303,16 @@ Playerbots.RandomBotShowCloak = 1
 # Default: 1 (enabled)
 Playerbots.AutoEquipUpgradeLoot = 1
 
+# Converts awarded, non-stackable epic raid tier tokens into an affordable class/spec-appropriate tier-set upgrade
+# that the token purchases from a vendor, using EquipUpgradeThreshold. This applies only to loot awards,
+# never traded or created tokens. Bots only roll Need when a reward upgrades their gear and other item costs are met.
+# Conversion waits until the bot is out of combat and retries every 30 seconds while the awarded token stays in its bags.
+# All required items, including lower-tier pieces, must be equipped or in bags and are consumed during conversion.
+# Tokens remain untouched until an affordable, usable upgrade is available.
+# Only item costs are supported; exchanges that also charge gold, honor or arena points are left to vendors.
+# Default: 1 (enabled)
+Playerbots.AutoConvertTierTokens = 1
+
 # Threshold for auto equipping upgrades
 # Default: 1.1 (Equip when the equipment score of the new item is 1.1 times higher than the currently equipped item)
 Playerbots.EquipUpgradeThreshold = 1.1
@@ -1434,6 +1444,40 @@ Playerbots.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,23
 # Default: 1 (enabled)
 Playerbots.EnableNewRpgStrategy = 1
 
+# Let ungrouped random bots collect delivered auction mail and process carried materials between new RPG activities:
+# refine known intermediates, buy ordinary vendor reagents, craft, then auction unneeded tradeable bag items.
+# Prioritizes profession skill-ups, then useful items, then tradable surplus. Uses real materials and money.
+# Auction visits also run without crafting. Equipment upgrades, usable recipes, supplies and quest items are kept.
+# Collects up to 20 auction mails per run at a mailbox, allowing up to five minutes for the mailbox step.
+# Personal, COD and undelivered mail is left alone.
+# Automatic vendor sales of tradeable surplus wait up to one hour for an auction opportunity. An auction attempt,
+# bags over 80% full or a balance below 1 silver allows ordinary vendor selling to resume.
+# Full gather bags request an immediate run, with up to two minutes to visit a vendor and sell surplus first.
+# Within the skill-up/useful-item priorities, lower material costs win. Crafts made only for sale must cover
+# estimated material value, vendor supplies, auction cut and deposit, and stop at one stack in bags/listings.
+# Default: 1 (enabled). Requires EnableNewRpgStrategy.
+Playerbots.EnableProfessionLoop = 1
+
+# Minimum seconds between profession runs, with up to 25% random extra delay to spread work across bots.
+# Range: 60-86400. Default: 1200 (20 minutes).
+Playerbots.ProfessionLoopInterval = 1200
+
+# Maximum final recipe casts per run. Intermediate refinement is also bounded.
+# Range: 1-20. Default: 4.
+Playerbots.ProfessionLoopBatchSize = 4
+
+# Stop posting when this bot already owns this many active auctions, including other sources.
+# Counts are maintained by auction events; bots do not scan live auction listings.
+# Range: 1-100. Default: 12.
+Playerbots.ProfessionMaxAuctions = 12
+
+# Fallback auction buyout per item, as a multiple of its vendor sell value. Items with no vendor sell value use
+# a floor based on item level/quality and vendor buy price. After three sales, use the median of the last eight
+# sales for the same auction house, item and random property. History expires after one day and resets on restart.
+# Prices cover the vendor value after auction cut. Items are considered in random order; no live listing scans.
+# Listings last 12 hours and the core charges the normal deposit. Range: 1-100. Default: 5.
+Playerbots.ProfessionAuctionPriceMultiplier = 5.0
+
 # Radius (yards) of the new RPG strategy's NPC and gameobject scans. Cost grows with the square of the radius.
 # Default: 150.0
 Playerbots.RpgTargetSearchDistance = 150.0
@@ -1624,6 +1668,16 @@ Playerbots.RandomBotMaps = 0,1,530,571
 # Probability bots teleport to banker (city)
 # Default: 0.25
 Playerbots.ProbTeleToBankers = 0.25
+
+# Let guilded randombots use their normal city-banker visits to deposit surplus crafting materials into their guild bank.
+# The bot must have a depositable material, a guild-bank tab, and permission to deposit into it.
+# Default: 1 (enabled)
+Playerbots.EnableRandomBotGuildBankDeposits = 1
+
+# Minimum seconds between successful automatic guild-bank material deposits per randombot.
+# Set to 0 to allow a deposit on every eligible city visit.
+# Default: 14400 (4 hours)
+Playerbots.RandomBotGuildBankDepositCooldown = 14400
 
 # Probability an idle random bot's random move targets a quest giver it can accept a quest from
 # right now (level/faction valid, no unmet prereq, not in progress, quest-log + item room).

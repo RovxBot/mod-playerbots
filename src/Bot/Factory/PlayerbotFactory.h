@@ -87,6 +87,7 @@ public:
     void InitPetTalents();
     void CleanupConsumables();
     void InitReagents();
+    void InitInventorySkill();
     void InitConsumables();
     void InitPotions();
     void InitGlyphs(bool increment = false);
@@ -213,7 +214,6 @@ private:
     void InitInventory();
     void InitInventoryTrade();
     void InitInventoryEquip();
-    void InitInventorySkill();
     Item* StoreItem(uint32 itemId, uint32 count);
     void InitImmersive();
     static void AddPrevQuests(uint32 questId, std::list<uint32>& questIds);

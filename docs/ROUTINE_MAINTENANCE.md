@@ -62,28 +62,24 @@ repairs are suppressed for protected GUIDs.
 
 ## Branch compatibility and rollout
 
-PR base: **test-staging** `889e9dd6e354d87d11933a093c709016b110e179`, as required by
-this repository's contributor rules. Production **master**
-`59e5f26d417fca173d969cd6a1064ec9638b1afa` is 184 commits ahead, not interchangeable.
-Both branches include population trimming; the newer guild-bank deposit path
-is absent on the PR base.
-The independently prepared `compatibility/master-59e5f26-maintenance.patch` applies
-the same interface/guards to that exact master snapshot. Both variants guard
-`IsRemovableBot` and recheck `RemoveRandomBots` at execution. It retains the
-newer guild-bank deposit flow before destructive ProcessBot gates.
+PR #21 now targets **master** directly at base
+`59e5f26d417fca173d969cd6a1064ec9638b1afa`. Its original
+`test-staging` maintenance changes have been replayed against the exact
+master source files, using the independently reviewed master compatibility
+patch with strict hunk/context validation. The head retains the original
+feature branch history via a merge commit whose other parent is master;
+the PR diff contains only the maintenance implementation, standalone tests
+and this documentation (not the 184 commits already present on master).
+The newer master profession and guild-bank deposit functionality is retained.
 
-The patch is a compatibility review artifact, not an automatic promotion or
-permission to deploy master. Reconcile branch policy with maintainers; do not
-merge 184 unrelated commits into this change or quietly switch production.
-Apply only in an isolated checkout at the pinned master revision:
+**Policy exception still needed:** this repository's
+`.github/workflows/check_pr_source.yml` requires every PR into master to
+come from a branch literally named `test-staging`. The owner explicitly
+requested retargeting this PR directly to master; the workflow was not
+bypassed or modified by the port and will reject PR #21 until the
+maintainer approves a specific exception or changes the workflow.
 
-```sh
-git apply /path/to/master-59e5f26-maintenance.patch
-PLAYERBOTS_MAINTENANCE_ROOT=/path/to/master-checkout \
-python3 -m unittest discover -s tests -p 'test_routine_maintenance_*.py' -v
-```
-
-Core inspected for both syntax checks: playerbots AzerothCore **test-staging**
+Core previously inspected for source syntax checks: playerbots AzerothCore **test-staging**
 `0554bcdd664ff6d85291ca2a10fd31d3e37e89e6`. This is the owner's stated production
 core branch. The documented normal pairing says module master/core Playerbot;
 that discrepancy remains a full integration gate. Neither syntax success nor
@@ -103,8 +99,10 @@ registration/removal, every action, concurrent readers and aggregate counts.
 Source-extracted entry guards execute with fake Player/Group types under C++17
 and C++20. Static contracts cover deferred/reclaim/bulk-delete boundaries and the
 master deposit ordering. These tests do **not** execute full engine methods.
-All eight changed C++ source files were syntax-checked with actual pinned core
-headers on test-staging and the isolated master port. No full compilation/link,
+The original implementation and the master compatibility patch were
+syntax-checked against pinned core headers by Codex. The replayed master
+port must be retested by the PR's lightweight CI and later a complete
+linked worldserver build. No full compilation/link,
 worldserver startup, game-server pilot or pmon baseline was performed. Local
 callback timing is a microbenchmark only; measure full realm overhead separately.
 No deployment or production config/database was changed.

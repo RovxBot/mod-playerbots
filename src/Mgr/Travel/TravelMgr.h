@@ -880,6 +880,7 @@ public:
     const std::vector<WorldLocation> GetTeleportLocations(Player* bot, uint32 level);
     const std::vector<WorldLocation> GetTravelHubs(Player* bot);
     std::vector<WorldLocation> GetCityLocations(Player* bot);
+    std::vector<WorldLocation> GetCityGuildBankLocations(Player* bot);
     // Returns the world locations of quest givers the bot can accept a quest from right now
     // (level/faction valid, no unmet prereq, not in progress, quest-log + item room).
     // Backed by a startup-built per-(level, team) index; empty when there is no valid giver.
@@ -1016,6 +1017,7 @@ private:
     std::map<uint8, std::vector<WorldLocation>> hordeHubsPerLevelCache;
     std::map<uint8, std::vector<BankerLocation>> bankerLocsPerLevelCache;
     std::unordered_map<uint32, WorldLocation> bankerEntryToLocation;
+    std::map<uint32, std::vector<WorldLocation>> guildBankLocsByCity;
     std::map<uint8, std::vector<WorldLocation>> locsPerLevelCache;
     std::unordered_map<uint32, std::vector<WorldLocation>> creatureSpawnsByTemplate;
     std::map<uint32, LevelBracket> zone2LevelBracket;

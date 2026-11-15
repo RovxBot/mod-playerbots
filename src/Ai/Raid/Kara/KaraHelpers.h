@@ -24,7 +24,7 @@ namespace KaraHelpers
 {
 
 template <typename T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
-constexpr uint32 Id(T value)
+constexpr uint32 KaraId(T value)
 {
     return static_cast<uint32>(value);
 }
@@ -77,6 +77,11 @@ enum class KaraNpcs : uint32
 
     // Attumen the Huntsman
     NPC_ATTUMEN_THE_HUNTSMAN      = 16152, // ID for mounted version
+
+    // Terestian Illhoof
+    NPC_TERESTIAN_ILLHOOF         = 15688,
+    NPC_DEMON_CHAINS              = 17248,
+    NPC_KILREK                    = 17229,
 
     // Shade of Aran
     NPC_CONJURED_ELEMENTAL        = 17167,

@@ -5,8 +5,19 @@
  */
 
 #include "RandomPlayerbotMgr.h"
-#include "PlayerbotsDatabase.h"
+
+#include <algorithm>
+#include <boost/thread/thread.hpp>
+#include <cstdlib>
+#include <ctime>
+#include <iomanip>
+#include <random>
+#include <set>
+#include <utility>
+
+#include "Action.h"
 #include "AiFactory.h"
+#include "AiObjectContext.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
 #include "Cell.h"
@@ -25,6 +36,7 @@
 #include "MapMgr.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
+#include "ObjectAccessor.h"
 #include "ObjectGuid.h"
 #include "PerfMonitor.h"
 #include "Player.h"
@@ -32,7 +44,9 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
 #include "PlayerbotTextMgr.h"
+#include "PlayerbotWorldThreadProcessor.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "Position.h"
 #include "RaceMgr.h"
 #include "Random.h"
@@ -44,15 +58,46 @@
 #include "Unit.h"
 #include "World.h"
 #include "WorldSessionMgr.h"
-#include <algorithm>
-#include <boost/thread/thread.hpp>
-#include <cstdlib>
-#include <ctime>
-#include <iomanip>
-#include <random>
-#include <set>
-#include <utility>
 #include "RoutineMaintenance.h"
+
+namespace
+{
+constexpr char GUILD_BANK_DEPOSIT_PENDING_EVENT[] = "guild_bank_deposit_pending";
+constexpr char GUILD_BANK_DEPOSIT_COOLDOWN_EVENT[] = "guild_bank_deposit_cooldown";
+constexpr uint32 GUILD_BANK_DEPOSIT_PENDING_TIMEOUT = MINUTE;
+constexpr uint32 GUILD_BANK_DEPOSIT_DISPATCH_DELAY_MS = 5 * IN_MILLISECONDS;
+
+bool CanDepositGuildMaterials(PlayerbotAI* botAI)
+{
+    if (!botAI || !botAI->GetAiObjectContext())
+        return false;
+
+    Action* action = botAI->GetAiObjectContext()->GetAction("deposit guild materials");
+    return action && action->isUseful() && action->isPossible();
+}
+}  // namespace
+
+class RandomPlayerbotMgr::GuildBankDepositOperation : public PlayerbotOperation
+{
+public:
+    explicit GuildBankDepositOperation(ObjectGuid botGuid) : _botGuid(botGuid) {}
+
+    bool Execute() override
+    {
+        Player* bot = ObjectAccessor::FindPlayer(_botGuid);
+        if (!bot)
+            return false;
+
+        bool const processed = sRandomPlayerbotMgr.ProcessPendingGuildBankDeposit(bot);
+        sRandomPlayerbotMgr.ScheduleGuildBankDepositAttempt(bot);
+        return processed;
+    }
+
+    std::string GetName() const override { return "GuildBankDeposit"; }
+
+private:
+    ObjectGuid _botGuid;
+};
 
 struct GuidClassRaceInfo
 {
@@ -378,9 +423,9 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
     uint32 updateIntervalTurboBoost = _isBotInitializing ? 1 : sPlayerbotAIConfig.RandomBotUpdateInterval;
     SetNextCheckDelay(updateIntervalTurboBoost * (onlineBotFocus + 25) * 10);
 
-    PerfMonitorOperation* pmo = sPerfMonitor.start(
-        PERF_MON_TOTAL,
-        onlineBotCount < maxAllowedBotCount ? "RandomPlayerbotMgr::Login" : "RandomPlayerbotMgr::UpdateAIInternal");
+    PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_TOTAL, onlineBotCount < maxAllowedBotCount
+                                                                       ? "RandomPlayerbotMgr::Login"
+                                                                       : "RandomPlayerbotMgr::UpdateAIInternal");
 
     bool realPlayerIsLogged = false;
     if (sPlayerbotAIConfig.DisabledWithoutRealPlayer)
@@ -424,8 +469,7 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
 
     // If the randombot population requires a trim this cycle, it is not executed when DisabledWithoutRealPlayer is
     // enabled and there are no real players logged-in. In that case, DisabledWithoutRealPlayer handles logouts.
-    if (availableBotCount > maxAllowedBotCount &&
-        (!sPlayerbotAIConfig.DisabledWithoutRealPlayer || realPlayerIsLogged))
+    if (availableBotCount > maxAllowedBotCount && (!sPlayerbotAIConfig.DisabledWithoutRealPlayer || realPlayerIsLogged))
         RemoveRandomBots();
 
     if (sPlayerbotAIConfig.SyncLevelWithPlayers && !players.empty())
@@ -553,9 +597,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
 
     // First, get ALL randombot accounts from the database
     std::vector<uint32> allRandomBotAccounts;
-    QueryResult allAccounts = LoginDatabase.Query(
-        "SELECT id FROM account WHERE username LIKE '{}%%' ORDER BY id",
-        sPlayerbotAIConfig.RandomBotAccountPrefix.c_str());
+    QueryResult allAccounts = LoginDatabase.Query("SELECT id FROM account WHERE username LIKE '{}%%' ORDER BY id",
+                                                  sPlayerbotAIConfig.RandomBotAccountPrefix.c_str());
 
     if (allAccounts)
     {
@@ -570,7 +613,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
     LOG_INFO("playerbots", "Found {} total randombot accounts in database", allRandomBotAccounts.size());
 
     // Check existing assignments
-    PlayerbotsDatabasePreparedStatement* assignmentsStmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_ACCOUNT_TYPE);
+    PlayerbotsDatabasePreparedStatement* assignmentsStmt =
+        PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_ACCOUNT_TYPE);
     PreparedQueryResult existingAssignments = PlayerbotsDatabase.Query(assignmentsStmt);
     std::map<uint32, uint8> currentAssignments;
 
@@ -590,7 +634,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
     {
         if (currentAssignments.find(accountId) == currentAssignments.end())
         {
-            PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_INS_ACCOUNT_TYPE);
+            PlayerbotsDatabasePreparedStatement* stmt =
+                PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_INS_ACCOUNT_TYPE);
             stmt->SetData(0, accountId);
             stmt->SetData(1, uint8(0));
             PlayerbotsDatabase.DirectExecute(stmt);
@@ -605,7 +650,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
         int divisor = RandomPlayerbotFactory::CalculateAvailableCharsPerAccount();
         int maxBots = sPlayerbotAIConfig.MaxRandomBots;
 
-        // Calculate base accounts needed for RNDbots, ensuring round up for maxBots not cleanly divisible by the divisor
+        // Calculate base accounts needed for RNDbots, ensuring round up for maxBots not cleanly divisible by the
+        // divisor
         neededRndBotAccounts = (maxBots + divisor - 1) / divisor;
     }
 
@@ -630,9 +676,10 @@ void RandomPlayerbotMgr::AssignAccountTypes()
         for (uint32 i = 0; i < allRandomBotAccounts.size() && assigned < toAssign; i++)
         {
             uint32 accountId = allRandomBotAccounts[i];
-            if (currentAssignments[accountId] == 0) // Unassigned
+            if (currentAssignments[accountId] == 0)  // Unassigned
             {
-                PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_UPD_ACCOUNT_TYPE);
+                PlayerbotsDatabasePreparedStatement* stmt =
+                    PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_UPD_ACCOUNT_TYPE);
                 stmt->SetData(0, uint8(1));
                 stmt->SetData(1, accountId);
                 PlayerbotsDatabase.DirectExecute(stmt);
@@ -642,7 +689,9 @@ void RandomPlayerbotMgr::AssignAccountTypes()
         }
 
         if (assigned < toAssign)
-            LOG_ERROR("playerbots", "Not enough unassigned accounts to fulfill RNDbot requirements. Need {} more accounts.", toAssign - assigned);
+            LOG_ERROR("playerbots",
+                      "Not enough unassigned accounts to fulfill RNDbot requirements. Need {} more accounts.",
+                      toAssign - assigned);
     }
 
     // Assign AddClass accounts from highest position if needed
@@ -656,9 +705,10 @@ void RandomPlayerbotMgr::AssignAccountTypes()
         for (size_t idx = allRandomBotAccounts.size(); idx-- > 0 && assigned < toAssign;)
         {
             uint32 accountId = allRandomBotAccounts[idx];
-            if (currentAssignments[accountId] == 0) // Unassigned
+            if (currentAssignments[accountId] == 0)  // Unassigned
             {
-                PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_UPD_ACCOUNT_TYPE);
+                PlayerbotsDatabasePreparedStatement* stmt =
+                    PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_UPD_ACCOUNT_TYPE);
                 stmt->SetData(0, uint8(2));
                 stmt->SetData(1, accountId);
                 PlayerbotsDatabase.DirectExecute(stmt);
@@ -668,7 +718,9 @@ void RandomPlayerbotMgr::AssignAccountTypes()
         }
 
         if (assigned < toAssign)
-            LOG_ERROR("playerbots", "Not enough unassigned accounts to fulfill AddClass requirements. Need {} more accounts.", toAssign - assigned);
+            LOG_ERROR("playerbots",
+                      "Not enough unassigned accounts to fulfill AddClass requirements. Need {} more accounts.",
+                      toAssign - assigned);
     }
 
     // Populate filtered account lists with ALL accounts of each type
@@ -687,7 +739,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
 
 bool RandomPlayerbotMgr::IsAccountType(uint32 accountId, uint8 accountType)
 {
-    PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_ACCOUNT_TYPE_BY_ACCOUNT_AND_TYPE);
+    PlayerbotsDatabasePreparedStatement* stmt =
+        PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_ACCOUNT_TYPE_BY_ACCOUNT_AND_TYPE);
     stmt->SetData(0, accountId);
     stmt->SetData(1, accountType);
     return PlayerbotsDatabase.Query(stmt) != nullptr;
@@ -695,8 +748,7 @@ bool RandomPlayerbotMgr::IsAccountType(uint32 accountId, uint8 accountType)
 
 bool RandomPlayerbotMgr::IsAddClassAccount(uint32 accountId) const
 {
-    return std::find(addClassTypeAccounts.begin(), addClassTypeAccounts.end(), accountId) !=
-           addClassTypeAccounts.end();
+    return std::find(addClassTypeAccounts.begin(), addClassTypeAccounts.end(), accountId) != addClassTypeAccounts.end();
 }
 
 // Logs-in bots in 4 phases. Phase 1 logs Alliance bots up to how much is expected according to the faction ratio,
@@ -778,8 +830,7 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
         // Lambda to handle bot login logic
         auto tryLoginBot = [&](CharacterInfo const& charInfo) -> bool
         {
-            if (GetEventValue(charInfo.guid, "add") ||
-                GetPlayerBot(charInfo.guid) ||
+            if (GetEventValue(charInfo.guid, "add") || GetPlayerBot(charInfo.guid) ||
                 currentBots.contains(charInfo.guid) ||
                 (sPlayerbotAIConfig.DisableDeathKnightLogin && charInfo.rClass == CLASS_DEATH_KNIGHT))
                 return false;
@@ -833,17 +884,19 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
             {
                 int divisor = RandomPlayerbotFactory::CalculateAvailableCharsPerAccount();
                 uint32 moreAccountsNeeded = (maxAllowedBotCount + divisor - 1) / divisor;
-                LOG_ERROR("playerbots",
-                          "Can't log-in all the requested bots. Try increasing RandomBotAccountCount in your conf file.\n"
-                          "{} more accounts needed.", moreAccountsNeeded);
-                missingBotsTimer = 0;   // Reset timer so error is not spammed every tick
+                LOG_ERROR(
+                    "playerbots",
+                    "Can't log-in all the requested bots. Try increasing RandomBotAccountCount in your conf file.\n"
+                    "{} more accounts needed.",
+                    moreAccountsNeeded);
+                missingBotsTimer = 0;  // Reset timer so error is not spammed every tick
             }
         }
         else
-            missingBotsTimer = 0;       // Reset timer if logins for this interval were successful
+            missingBotsTimer = 0;  // Reset timer if logins for this interval were successful
     }
     else
-        missingBotsTimer = 0;           // Reset timer if there's enough bots
+        missingBotsTimer = 0;  // Reset timer if there's enough bots
 
     return currentBots.size();
 }
@@ -906,8 +959,8 @@ uint32 RandomPlayerbotMgr::RemoveRandomBots()
         return 0;
 
     // Per-tick cap keeps the downsize gradual, matching how AddRandomBots throttles logins.
-    uint32 toRemove = std::min(sPlayerbotAIConfig.RandomBotsPerInterval,
-                               (uint32)(currentBots.size() - maxAllowedBotCount));
+    uint32 toRemove =
+        std::min(sPlayerbotAIConfig.RandomBotsPerInterval, (uint32)(currentBots.size() - maxAllowedBotCount));
 
     // Ineligible bots still count toward their faction, as they keep occupying its share.
     std::vector<ObjectGuid> allianceBots;
@@ -1007,7 +1060,7 @@ uint32 RandomPlayerbotMgr::GetScheduledBotCount()
     uint32 riseDuration = (maxCountTime + DAY - minCountTime) % DAY;
     uint32 fallDuration = DAY - riseDuration;
 
-    uint64 range = maxCount - minCount; // uint64, for a cursed server with more than 49710 bots.
+    uint64 range = maxCount - minCount;  // uint64, for a cursed server with more than 49710 bots.
 
     if (sinceMinCount < riseDuration)
         return static_cast<uint32>(minCount + range * sinceMinCount / riseDuration);
@@ -1128,8 +1181,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
 
     // A participant may level past the queue's bracket while waiting or inside the match.
     // Use the bracket assigned by the queue or the instance, never their current level.
-    auto getQueueBracket = [&](Player* participant, Battleground* bg, uint8 slot,
-                               BattlegroundQueueTypeId queueTypeId, uint32 mapId) -> PvPDifficultyEntry const*
+    auto getQueueBracket = [&](Player* participant, Battleground* bg, uint8 slot, BattlegroundQueueTypeId queueTypeId,
+                               uint32 mapId) -> PvPDifficultyEntry const*
     {
         if (participant->InBattleground() && participant->GetCurrentBattlegroundQueueSlot() == slot)
             return bg ? GetBattlegroundBracketById(mapId, bg->GetBracketId()) : nullptr;
@@ -1185,8 +1238,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
                     isRated = ginfo.IsRated;
                 }
 
-                if (bgQueue.IsPlayerInvitedToRatedArena(player->GetGUID()) ||
-                    (player->InArena() && bg->isRated()))
+                if (bgQueue.IsPlayerInvitedToRatedArena(player->GetGUID()) || (player->InArena() && bg->isRated()))
                     isRated = true;
 
                 if (isRated)
@@ -1560,10 +1612,81 @@ void RandomPlayerbotMgr::ScheduleTeleport(uint32 bot, uint32 time)
 void RandomPlayerbotMgr::ScheduleChangeStrategy(uint32 bot, uint32 time)
 {
     if (!time)
-        time = urand(sPlayerbotAIConfig.MinRandomBotChangeStrategyTime,
-                     sPlayerbotAIConfig.MaxRandomBotChangeStrategyTime);
+        time =
+            urand(sPlayerbotAIConfig.MinRandomBotChangeStrategyTime, sPlayerbotAIConfig.MaxRandomBotChangeStrategyTime);
 
     SetEventValue(bot, "change_strategy", 1, time);
+}
+
+void RandomPlayerbotMgr::ScheduleGuildBankDeposit(Player* bot)
+{
+    if (!bot || !sPlayerbotAIConfig.EnableRandomBotGuildBankDeposits)
+        return;
+
+    uint32 botId = bot->GetGUID().GetCounter();
+    SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 1, GUILD_BANK_DEPOSIT_PENDING_TIMEOUT);
+
+    ScheduleGuildBankDepositAttempt(bot);
+}
+
+void RandomPlayerbotMgr::ScheduleGuildBankDepositAttempt(Player* bot)
+{
+    if (!bot || !GetEventValue(bot->GetGUID().GetCounter(), GUILD_BANK_DEPOSIT_PENDING_EVENT))
+        return;
+
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+    {
+        ObjectGuid const guid = bot->GetGUID();
+        botAI->AddTimedEvent(
+            [guid]()
+            {
+                PlayerbotWorldThreadProcessor::instance().QueueOperation(
+                    std::make_unique<GuildBankDepositOperation>(guid));
+            },
+            GUILD_BANK_DEPOSIT_DISPATCH_DELAY_MS);
+    }
+}
+
+bool RandomPlayerbotMgr::ProcessPendingGuildBankDeposit(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    uint32 botId = bot->GetGUID().GetCounter();
+    if (!GetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT))
+        return false;
+
+    // The callback normally runs after the teleport acknowledgement. Keep the short-lived pending event intact while
+    // the server is still relocating the bot; the timed callback retries independently of the random-bot update rate.
+    if (!bot->IsInWorld() || bot->IsBeingTeleported())
+        return true;
+
+    if (!sPlayerbotAIConfig.EnableRandomBotGuildBankDeposits || !bot->GetGuildId() || bot->isDead() ||
+        bot->IsInCombat())
+    {
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+        return true;
+    }
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || !CanDepositGuildMaterials(botAI))
+    {
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+        return true;
+    }
+
+    if (botAI->DoSpecificAction("deposit guild materials", Event(), true))
+    {
+        if (sPlayerbotAIConfig.RandomBotGuildBankDepositCooldown)
+        {
+            SetEventValue(botId, GUILD_BANK_DEPOSIT_COOLDOWN_EVENT, 1,
+                          sPlayerbotAIConfig.RandomBotGuildBankDepositCooldown);
+        }
+
+        SetEventValue(botId, GUILD_BANK_DEPOSIT_PENDING_EVENT, 0, 0);
+    }
+
+    return true;
 }
 
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
@@ -1687,6 +1810,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
             bot->RemovePlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
     }
 
+    if (ProcessPendingGuildBankDeposit(bot))
+        return true;
+
     // if death revive
     if (bot->isDead())
     {
@@ -1697,8 +1823,7 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
         {
             uint32 randomTime =
                 urand(sPlayerbotAIConfig.MinRandomBotReviveTime, sPlayerbotAIConfig.MaxRandomBotReviveTime);
-            LOG_DEBUG("playerbots", "Mark bot {} as dead, will be revived in {}s.", bot->GetName().c_str(),
-                      randomTime);
+            LOG_DEBUG("playerbots", "Mark bot {} as dead, will be revived in {}s.", bot->GetName().c_str(), randomTime);
             SetEventValue(botId, "dead", 1, DAY);
             SetEventValue(botId, "revive", 1, randomTime);
             return false;
@@ -1792,8 +1917,8 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
             LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
             Refresh(bot);
             RandomTeleportForLevel(bot);
-            uint32 time = urand(sPlayerbotAIConfig.MinRandomBotTeleportInterval,
-                                sPlayerbotAIConfig.MaxRandomBotTeleportInterval);
+            uint32 time =
+                urand(sPlayerbotAIConfig.MinRandomBotTeleportInterval, sPlayerbotAIConfig.MaxRandomBotTeleportInterval);
             ScheduleTeleport(botId, time);
             return true;
         }
@@ -1818,31 +1943,31 @@ void RandomPlayerbotMgr::Revive(Player* player)
     RandomTeleportGrindForLevel(player);
 }
 
-void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
+bool RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
 {
     if (Playerbots::RoutineMaintenance::ShouldBlockRoutineMaintenance(
             bot, Playerbots::RoutineMaintenance::Action::RandomTeleport))
-        return;
+        return false;
 
     // ignore when alrdy teleported or not in the world yet.
     if (bot->IsBeingTeleported() || !bot->IsInWorld())
-        return;
+        return false;
 
     // no teleport / movement update when rooted.
     if (bot->IsRooted())
-        return;
+        return false;
 
     // ignore when in queue for battle grounds.
     if (bot->InBattlegroundQueue())
-        return;
+        return false;
 
     // ignore when in battle grounds or arena.
     if (bot->InBattleground() || bot->InArena())
-        return;
+        return false;
 
     // ignore when in group (e.g. world, dungeons, raids) and leader is not a player.
     if (bot->GetGroup() && !bot->GetGroup()->IsLeader(bot->GetGUID()))
-        return;
+        return false;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (botAI)
@@ -1850,8 +1975,11 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
         // ignore when in when taxi with boat/zeppelin and has players nearby
         if (bot->HasUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT) && bot->HasUnitState(UNIT_STATE_IGNORE_PATHFINDING) &&
             botAI->HasPlayerNearby())
-            return;
+            return false;
     }
+
+    if (!botAI)
+        return false;
 
     // if (sPlayerbotAIConfig.RandomBotRpgChance < 0)
     //     return;
@@ -1859,7 +1987,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
     if (locs.empty())
     {
         LOG_DEBUG("playerbots", "Cannot teleport bot {} - no locations available", bot->GetName().c_str());
-        return;
+        return false;
     }
 
     std::vector<WorldPosition> tlocs;
@@ -1878,7 +2006,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
     if (tlocs.empty())
     {
         LOG_DEBUG("playerbots", "Cannot teleport bot {} - all locations removed by filter", bot->GetName().c_str());
-        return;
+        return false;
     }
 
     PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_RNDBOT, "RandomTeleportByLocations");
@@ -1934,11 +2062,6 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
                   zone->area_name[locale], area->ID, area->area_name[locale], zone->area_level, area->area_level, x, y,
                   z, i + 1, tlocs.size());
 
-        if (hearth)
-        {
-            bot->SetHomebind(loc, zone->ID);
-        }
-
         // Prevent blink to be detected by visible real players
         if (botAI->HasPlayerNearby(150.0f))
         {
@@ -1946,17 +2069,20 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
         }
 
         bot->GetMotionMaster()->Clear();
-        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-        if (botAI)
-            botAI->Reset(true);
+        botAI->Reset(true);
         bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
-        bot->TeleportTo(loc.GetMapId(), x, y, z, 0);
+        if (!bot->TeleportTo(loc.GetMapId(), x, y, z, 0))
+            continue;
+
+        if (hearth)
+            bot->SetHomebind(loc, zone->ID);
+
         bot->SendMovementFlagUpdate();
 
         if (pmo)
             pmo->finish();
 
-        return;
+        return true;
     }
 
     if (pmo)
@@ -1964,6 +2090,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
 
     // LOG_ERROR("playerbots", "Cannot teleport bot {} - no locations available ({} locations)", bot->GetName().c_str(),
     //           tlocs.size());
+    return false;
 }
 
 void RandomPlayerbotMgr::PrepareAddclassCache()
@@ -1998,7 +2125,8 @@ void RandomPlayerbotMgr::PrepareAddclassCache()
         }
     }
 
-    LOG_INFO("playerbots", ">> {} characters collected for addclass command from {} AddClass accounts.", collected, addClassTypeAccounts.size());
+    LOG_INFO("playerbots", ">> {} characters collected for addclass command from {} AddClass accounts.", collected,
+             addClassTypeAccounts.size());
 }
 
 void RandomPlayerbotMgr::Init()
@@ -2009,7 +2137,8 @@ void RandomPlayerbotMgr::Init()
     if (sPlayerbotAIConfig.RandomBotJoinBG)
         sRandomPlayerbotMgr.LoadBattleMastersCache();
 
-    PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_DEL_RANDOM_BOTS_BY_EVENT);
+    PlayerbotsDatabasePreparedStatement* stmt =
+        PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_DEL_RANDOM_BOTS_BY_EVENT);
     stmt->SetData(0, std::string("add"));
     PlayerbotsDatabase.DirectExecute(stmt);
 }
@@ -2024,10 +2153,11 @@ void RandomPlayerbotMgr::InitArenaTeams()
 
     RandomPlayerbotFactory::LoadArenaTeamData();
 
-    LOG_INFO("playerbots", "Bot arena teams: 2v2={}/{}, 3v3={}/{}, 5v5={}/{}",
-             RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_2v2), sPlayerbotAIConfig.RandomBotArenaTeam2v2Count,
-             RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_3v3), sPlayerbotAIConfig.RandomBotArenaTeam3v3Count,
-             RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_5v5), sPlayerbotAIConfig.RandomBotArenaTeam5v5Count);
+    LOG_INFO(
+        "playerbots", "Bot arena teams: 2v2={}/{}, 3v3={}/{}, 5v5={}/{}",
+        RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_2v2), sPlayerbotAIConfig.RandomBotArenaTeam2v2Count,
+        RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_3v3), sPlayerbotAIConfig.RandomBotArenaTeam3v3Count,
+        RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_5v5), sPlayerbotAIConfig.RandomBotArenaTeam5v5Count);
 }
 
 void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
@@ -2067,9 +2197,26 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
             return;
         }
     }
-    else if (bot->GetLevel() >= 10
-             && roll < (sPlayerbotAIConfig.ProbTeleToQuestGivers + sPlayerbotAIConfig.ProbTeleToBankers) * 100)
+    else if (bot->GetLevel() >= 10 &&
+             roll < (sPlayerbotAIConfig.ProbTeleToQuestGivers + sPlayerbotAIConfig.ProbTeleToBankers) * 100)
     {
+        uint32 botId = bot->GetGUID().GetCounter();
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+        bool canDeposit = sPlayerbotAIConfig.EnableRandomBotGuildBankDeposits && bot->GetGuildId() &&
+                          (!sPlayerbotAIConfig.RandomBotGuildBankDepositCooldown ||
+                           !GetEventValue(botId, GUILD_BANK_DEPOSIT_COOLDOWN_EVENT)) &&
+                          CanDepositGuildMaterials(botAI);
+
+        if (canDeposit)
+        {
+            std::vector<WorldLocation> guildBankLocs = sTravelMgr.GetCityGuildBankLocations(bot);
+            if (!guildBankLocs.empty() && RandomTeleport(bot, guildBankLocs, true))
+            {
+                ScheduleGuildBankDeposit(bot);
+                return;
+            }
+        }
+
         std::vector<WorldLocation> locs = sTravelMgr.GetCityLocations(bot);
         if (!locs.empty())
         {
@@ -2605,7 +2752,7 @@ bool RandomPlayerbotMgr::IsAddclassBot(ObjectGuid::LowType bot)
 
     // If not in cache, check the account type
     uint32 accountId = sCharacterCache->GetCharacterAccountIdByGuid(guid);
-    if (accountId && IsAccountType(accountId, 2)) // Type 2 = AddClass
+    if (accountId && IsAccountType(accountId, 2))  // Type 2 = AddClass
     {
         return true;
     }
@@ -2990,8 +3137,8 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
 {
     if (_isBotLogging)
     {
-        LOG_INFO("playerbots", "{}/{} Bot {} logged in", playerBots.size(),
-                 sRandomPlayerbotMgr.GetMaxAllowedBotCount(), bot->GetName().c_str());
+        LOG_INFO("playerbots", "{}/{} Bot {} logged in", playerBots.size(), sRandomPlayerbotMgr.GetMaxAllowedBotCount(),
+                 bot->GetName().c_str());
 
         if (playerBots.size() == sRandomPlayerbotMgr.GetMaxAllowedBotCount())
         {
@@ -3049,8 +3196,7 @@ void RandomPlayerbotMgr::OnPlayerLogin(Player* player)
                 {
                     botAI->SetMaster(player);
                     botAI->ResetStrategies();
-                    botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault(
-                        "hello", "Hello", {}));
+                    botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
                 }
 
                 break;
@@ -3073,7 +3219,8 @@ void RandomPlayerbotMgr::OnPlayerLogin(Player* player)
         }
         else
         {
-            std::vector<TravelDestination*> dests = TravelMgr::instance().getRpgTravelDestinations(player, true, true, 200000.0f);
+            std::vector<TravelDestination*> dests =
+                TravelMgr::instance().getRpgTravelDestinations(player, true, true, 200000.0f);
 
             do
             {
@@ -3160,10 +3307,10 @@ void RandomPlayerbotMgr::PrintStats()
     uint32 heal = 0;
     uint32 tank = 0;
     uint32 active = 0;
-/*    uint32 update = 0;
-    uint32 randomize = 0;
-    uint32 teleport = 0;
-    uint32 changeStrategy = 0;*/
+    /*    uint32 update = 0;
+        uint32 randomize = 0;
+        uint32 teleport = 0;
+        uint32 changeStrategy = 0;*/
     uint32 dead = 0;
     uint32 combat = 0;
     // uint32 revive = 0; //not used, line marked for removal.
@@ -3197,7 +3344,8 @@ void RandomPlayerbotMgr::PrintStats()
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
         if (!botAI)
         {
-            LOG_ERROR("playerbots", "Player/Bot {} is registered in sRandomPlayerbotMgr playerBots and has no bot AI!", bot->GetName().c_str());
+            LOG_ERROR("playerbots", "Player/Bot {} is registered in sRandomPlayerbotMgr playerBots and has no bot AI!",
+                      bot->GetName().c_str());
             continue;
         }
 
@@ -3340,11 +3488,11 @@ void RandomPlayerbotMgr::PrintStats()
         LOG_INFO("playerbots", "Bots rpg status:");
         LOG_INFO("playerbots",
                  "    Idle: {}, Rest: {}, GoGrind: {}, GoCamp: {}, MoveRandom: {}, MoveNpc: {}, DoQuest: {}, "
-                 "TravelFlight: {}, OutdoorPvP: {}, DoGather: {}",
+                 "TravelFlight: {}, OutdoorPvP: {}, DoGather: {}, DoProfessions: {}",
                  rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
                  rpgStatusCount[RPG_GO_CAMP], rpgStatusCount[RPG_WANDER_RANDOM], rpgStatusCount[RPG_WANDER_NPC],
                  rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_OUTDOOR_PVP],
-                 rpgStatusCount[RPG_DO_GATHER]);
+                 rpgStatusCount[RPG_DO_GATHER], rpgStatusCount[RPG_DO_PROFESSIONS]);
 
         PrintQuestTotals(rpgStasticTotal);
     }
@@ -3373,15 +3521,13 @@ void RandomPlayerbotMgr::PrintQuestTotals(NewRpgStatistic const& stats)
 {
     LOG_INFO("playerbots", "Bots total quests:");
     LOG_INFO("playerbots", "    Accepted: {}, Completed: {}, Rewarded: {}, Dropped: {}, Abandoned: {}",
-             stats.questAccepted, stats.questCompleted, stats.questRewarded, stats.questDropped,
-             stats.questAbandoned);
+             stats.questAccepted, stats.questCompleted, stats.questRewarded, stats.questDropped, stats.questAbandoned);
 
     if (stats.questAccepted > 0)
     {
         LOG_INFO("playerbots", "    Completed: {:.2f}%, Rewarded: {:.2f}%, Dropped: {:.2f}%, Abandoned: {:.2f}%",
                  stats.questCompleted * 100.0f / stats.questAccepted,
-                 stats.questRewarded * 100.0f / stats.questAccepted,
-                 stats.questDropped * 100.0f / stats.questAccepted,
+                 stats.questRewarded * 100.0f / stats.questAccepted, stats.questDropped * 100.0f / stats.questAccepted,
                  stats.questAbandoned * 100.0f / stats.questAccepted);
     }
 }

@@ -7,6 +7,7 @@
 #include "GatherNodeMgr.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
@@ -25,6 +26,12 @@
 
 namespace
 {
+constexpr float GATHER_CELL_SIZE = 128.0f;
+
+int32 GatherCell(float coordinate) { return int32(std::floor(coordinate / GATHER_CELL_SIZE)); }
+
+uint64 GatherCellKey(int32 x, int32 y) { return (uint64(uint32(x)) << 32) | uint32(y); }
+
 bool GetGatherSkillFromTemplate(GameObjectTemplate const* goInfo, uint32& skillId, uint32& reqSkillValue)
 {
     if (!goInfo || goInfo->type != GAMEOBJECT_TYPE_CHEST)
@@ -58,6 +65,8 @@ bool GetGatherSkillFromTemplate(GameObjectTemplate const* goInfo, uint32& skillI
 
 void GatherNodeMgr::Load()
 {
+    _nodeCells.clear();
+    _nodes.clear();
     uint32 oldMSTime = getMSTime();
     uint32 count = 0;
 
@@ -116,6 +125,16 @@ void GatherNodeMgr::Load()
         _nodes[goData.mapid][zoneId].push_back(std::move(node));
         ++count;
     }
+
+    // Zone vectors must stop growing before the spatial index stores node addresses.
+    for (auto const& [mapId, zones] : _nodes)
+        for (auto const& [zoneId, nodes] : zones)
+            for (GatherNodeSpawn const& node : nodes)
+            {
+                uint64 const cell =
+                    GatherCellKey(GatherCell(node.pos.GetPositionX()), GatherCell(node.pos.GetPositionY()));
+                _nodeCells[mapId][cell].push_back(&node);
+            }
 
     LOG_INFO("playerbots", ">> Loaded {} gather node spawns in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
@@ -216,8 +235,10 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
                                                          std::unordered_set<ObjectGuid::LowType> const& visited,
                                                          float radius)
 {
-    auto mapItr = _nodes.find(bot->GetMapId());
-    if (mapItr == _nodes.end())
+    if (!std::isfinite(radius) || radius < 0.0f)
+        return nullptr;
+    auto mapItr = _nodeCells.find(bot->GetMapId());
+    if (mapItr == _nodeCells.end())
         return nullptr;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
@@ -228,27 +249,33 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
     WorldPosition botPos(bot);
     GatherNodeSpawn const* nearest = nullptr;
     float nearestDistSq = radius * radius;
-    // All zone buckets of the map: this query is deliberately not
-    // zone-scoped, and a radius this small prunes nearly everything on the
-    // cheap distance check.
-    for (auto const& [zoneId, nodes] : mapItr->second)
+    int32 const minX = GatherCell(bot->GetPositionX() - radius);
+    int32 const minY = GatherCell(bot->GetPositionY() - radius);
+    int32 const maxX = GatherCell(bot->GetPositionX() + radius);
+    int32 const maxY = GatherCell(bot->GetPositionY() + radius);
+    uint32 const width = maxX - minX + 1;
+    uint32 const height = maxY - minY + 1;
+    for (uint32 index = 0; index < width * height; ++index)
     {
-        for (GatherNodeSpawn const& node : nodes)
+        auto const cell = mapItr->second.find(GatherCellKey(minX + int32(index % width), minY + int32(index / width)));
+        if (cell == mapItr->second.end())
+            continue;
+        for (GatherNodeSpawn const* node : cell->second)
         {
-            float distSq = botPos.sqDistance(node.pos);
+            float distSq = botPos.sqDistance(node->pos);
             if (distSq > nearestDistSq)
                 continue;
 
-            if (visited.contains(node.spawnId) || !IsUsable(botAI, bot, node))
+            if (visited.contains(node->spawnId) || !IsUsable(botAI, bot, *node))
                 continue;
 
-            if (!map->IsGridLoaded(node.pos.GetPositionX(), node.pos.GetPositionY()))
+            if (!map->IsGridLoaded(node->pos.GetPositionX(), node->pos.GetPositionY()))
                 continue;
 
-            if (!FindLiveNode(map, node.spawnId))
+            if (!FindLiveNode(map, node->spawnId))
                 continue;
 
-            nearest = &node;
+            nearest = node;
             nearestDistSq = distSq;
         }
     }

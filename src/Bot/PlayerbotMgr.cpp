@@ -529,6 +529,8 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
         return;
     }
 
+    PlayerbotFactory(bot, bot->GetLevel()).InitInventorySkill();
+
     Player* master = botAI->GetMaster();
 
     Group* group = bot->GetGroup();

@@ -103,6 +103,3 @@ TODO         text
 ## EXECUTABLES
 *.exe binary
 *.pyc binary
-
-# Unified diffs retain a space prefix on empty context lines.
-docs/compatibility/*.patch -whitespace

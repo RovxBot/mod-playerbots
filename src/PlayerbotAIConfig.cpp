@@ -199,6 +199,9 @@ bool PlayerbotAIConfig::Initialize()
     ProbTeleToQuestGivers = sConfigMgr->GetOption<float>("Playerbots.ProbTeleToQuestGivers", 0.0f);
 
     EnableWeightTeleToCityBankers = sConfigMgr->GetOption<bool>("Playerbots.EnableWeightTeleToCityBankers", false);
+    EnableRandomBotGuildBankDeposits = sConfigMgr->GetOption<bool>("Playerbots.EnableRandomBotGuildBankDeposits", true);
+    RandomBotGuildBankDepositCooldown =
+        sConfigMgr->GetOption<uint32>("Playerbots.RandomBotGuildBankDepositCooldown", 4 * HOUR);
     WeightTeleToStormwind = sConfigMgr->GetOption<int>("Playerbots.TeleToStormwindWeight", 2);
     WeightTeleToIronforge = sConfigMgr->GetOption<int>("Playerbots.TeleToIronforgeWeight", 1);
     WeightTeleToDarnassus = sConfigMgr->GetOption<int>("Playerbots.TeleToDarnassusWeight", 1);
@@ -742,6 +745,7 @@ bool PlayerbotAIConfig::Initialize()
     LootGreedRollLevel = sConfigMgr->GetOption<bool>("Playerbots.LootGreedRollLevel", false);
     AutoPickReward = sConfigMgr->GetOption<std::string>("Playerbots.AutoPickReward", "yes");
     AutoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("Playerbots.AutoEquipUpgradeLoot", true);
+    AutoConvertTierTokens = sConfigMgr->GetOption<bool>("Playerbots.AutoConvertTierTokens", true);
     EquipUpgradeThreshold = sConfigMgr->GetOption<float>("Playerbots.EquipUpgradeThreshold", 1.1f);
     TwoRoundsGearInit = sConfigMgr->GetOption<bool>("Playerbots.TwoRoundsGearInit", false);
     SyncQuestWithPlayer = sConfigMgr->GetOption<bool>("Playerbots.SyncQuestWithPlayer", true);
@@ -759,6 +763,14 @@ bool PlayerbotAIConfig::Initialize()
     AutoTeleportForLevel = sConfigMgr->GetOption<bool>("Playerbots.AutoTeleportForLevel", false);
     AutoDoQuests = sConfigMgr->GetOption<bool>("Playerbots.AutoDoQuests", true);
     EnableNewRpgStrategy = sConfigMgr->GetOption<bool>("Playerbots.EnableNewRpgStrategy", true);
+    EnableProfessionLoop = sConfigMgr->GetOption<bool>("Playerbots.EnableProfessionLoop", true);
+    ProfessionMaxAuctions = std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionMaxAuctions", 12), 1u, 100u);
+    ProfessionLoopInterval =
+        std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionLoopInterval", 1200), 60u, 86400u);
+    ProfessionLoopBatchSize =
+        std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.ProfessionLoopBatchSize", 4), 1u, 20u);
+    ProfessionAuctionPriceMultiplier =
+        std::clamp(sConfigMgr->GetOption<float>("Playerbots.ProfessionAuctionPriceMultiplier", 5.0f), 1.0f, 100.0f);
     RpgTargetSearchDistance = sConfigMgr->GetOption<float>("Playerbots.RpgTargetSearchDistance", 150.0f);
     CollectDetailedQuestStats = sConfigMgr->GetOption<bool>("Playerbots.CollectDetailedQuestStats", false);
 

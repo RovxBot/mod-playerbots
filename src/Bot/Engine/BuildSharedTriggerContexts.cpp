@@ -22,6 +22,7 @@
 #include "OnyTriggerContext.h"
 #include "RSTriggerContext.h"
 #include "SSCTriggerContext.h"
+#include "SWPTriggerContext.h"
 #include "TKTriggerContext.h"
 #include "TbcDungeonTriggerContext.h"
 #include "TriggerContext.h"
@@ -31,8 +32,7 @@
 #include "WotlkDungeonTriggerContext.h"
 #include "ZATriggerContext.h"
 
-void AiObjectContext::BuildSharedTriggerContexts(
-    SharedNamedObjectContextList<Trigger>& triggerContexts)
+void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Trigger>& triggerContexts)
 {
     triggerContexts.Add(new TriggerContext());
     triggerContexts.Add(new ChatTriggerContext());
@@ -50,6 +50,7 @@ void AiObjectContext::BuildSharedTriggerContexts(
     triggerContexts.Add(new RaidHyjalTriggerContext());
     triggerContexts.Add(new RaidBlackTempleTriggerContext());
     triggerContexts.Add(new RaidZulAmanTriggerContext());
+    triggerContexts.Add(new RaidSunwellTriggerContext());
     triggerContexts.Add(new RaidOsTriggerContext());
     triggerContexts.Add(new RaidEoETriggerContext());
     triggerContexts.Add(new RaidVoATriggerContext());

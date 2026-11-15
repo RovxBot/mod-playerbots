@@ -37,7 +37,6 @@ public:
     {
         // Vanilla
         // ...
-
         // Burning Crusade
         creators["tbc-ac"] = &DungeonStrategyContext::tbc_ac;           // Auchindoun: Auchenai Crypts
         creators["tbc-seth"] = &DungeonStrategyContext::tbc_seth;       // Auchindoun: Sethekk Halls

@@ -176,7 +176,7 @@ std::string ChangeTalentsAction::SpecApply(std::string param)
 // std::vector<TalentPath*> ChangeTalentsAction::getPremadePaths(std::string const findName)
 // {
 //     std::vector<TalentPath*> ret;
-//     // for (auto& path : sPlayerbotAIConfig.classSpecs[bot->getClass()].talentPath)
+//     // for (auto& path : sPlayerbotAIConfig.ClassSpecs[bot->getClass()].talentPath)
 //     // {
 //     //     if (findName.empty() || path.name.find(findName) != std::string::npos)
 //     //     {
@@ -191,7 +191,7 @@ std::string ChangeTalentsAction::SpecApply(std::string param)
 // {
 //     std::vector<TalentPath*> ret;
 
-//     // for (auto& path : sPlayerbotAIConfig.classSpecs[bot->getClass()].talentPath)
+//     // for (auto& path : sPlayerbotAIConfig.ClassSpecs[bot->getClass()].talentPath)
 //     // {
 //     //     TalentSpec newSpec = *GetBestPremadeSpec(path.id);
 //     //     newSpec.CropTalents(bot->GetLevel());
@@ -206,7 +206,7 @@ std::string ChangeTalentsAction::SpecApply(std::string param)
 
 // TalentPath* ChangeTalentsAction::getPremadePath(uint32 id)
 // {
-//     // for (auto& path : sPlayerbotAIConfig.classSpecs[bot->getClass()].talentPath)
+//     // for (auto& path : sPlayerbotAIConfig.ClassSpecs[bot->getClass()].talentPath)
 //     // {
 //     //     if (id == path.id)
 //     //     {
@@ -214,7 +214,7 @@ std::string ChangeTalentsAction::SpecApply(std::string param)
 //     //     }
 //     // }
 
-//     // return &sPlayerbotAIConfig.classSpecs[bot->getClass()].talentPath[0];
+//     // return &sPlayerbotAIConfig.ClassSpecs[bot->getClass()].talentPath[0];
 //     return nullptr;
 // }
 
@@ -364,7 +364,7 @@ std::string ChangeTalentsAction::SpecApply(std::string param)
 //     if (path->talentSpec.size())
 //         return &path->talentSpec.back();
 
-//     // return &sPlayerbotAIConfig.classSpecs[bot->getClassMask()].baseSpec;
+//     // return &sPlayerbotAIConfig.ClassSpecs[bot->getClassMask()].baseSpec;
 //     return nullptr;
 // }
 
