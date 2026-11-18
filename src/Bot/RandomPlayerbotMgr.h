@@ -209,6 +209,7 @@ public:
     bool IsAccountType(uint32 accountId, uint8 accountType);
     bool IsAddClassAccount(uint32 accountId) const;
     // World-thread snapshot of explicit type-1 assignments, never factory/prefix membership or SQL.
+    bool DedicatedAccountSnapshotReady() const { return _dedicatedAccountsReady; }
     bool IsDedicatedRandomAccount(uint32 accountId) const { return _dedicatedRandomAccounts.count(accountId) != 0; }
 
 protected:
@@ -308,6 +309,7 @@ private:
     std::set<std::pair<uint32, uint32>> _playerZones;
     std::mutex _playerZonesLock;
 
+    bool _dedicatedAccountsReady = false;
     std::unordered_set<uint32> _dedicatedRandomAccounts;
 
     // Account lists

@@ -20,3 +20,6 @@ class EnrollmentBoundaryTests(unittest.TestCase):
         self.assertIn('fields[1].Get<uint8>() == 1', population)
         self.assertIn('PreparedQueryResult persisted = PlayerbotsDatabase.Query(', population)
         self.assertIn('_dedicatedRandomAccounts.clear();', source)
+        self.assertIn('_dedicatedAccountsReady = false;', source)
+        self.assertIn('_dedicatedAccountsReady = true;', population)
+        self.assertIn('DedicatedAccountSnapshotReady()', header)

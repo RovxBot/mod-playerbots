@@ -594,6 +594,7 @@ void RandomPlayerbotMgr::AssignAccountTypes()
     // Clear existing filtered lists
     rndBotTypeAccounts.clear();
     _dedicatedRandomAccounts.clear();
+    _dedicatedAccountsReady = false;
     addClassTypeAccounts.clear();
 
     // First, get ALL randombot accounts from the database
@@ -746,6 +747,7 @@ void RandomPlayerbotMgr::AssignAccountTypes()
             if (fields[1].Get<uint8>() == 1)
                 _dedicatedRandomAccounts.insert(fields[0].Get<uint32>());
         } while (persisted->NextRow());
+        _dedicatedAccountsReady = true;
     }
 
     LOG_INFO("playerbots", "Account type assignment complete: {} RNDbot accounts, {} AddClass accounts, {} unassigned",
