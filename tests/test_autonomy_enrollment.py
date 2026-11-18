@@ -16,5 +16,7 @@ class EnrollmentBoundaryTests(unittest.TestCase):
         self.assertIn('return _dedicatedRandomAccounts.count(accountId) != 0;', header)
         population = source.split('// Populate filtered account lists', 1)[1].split('bool RandomPlayerbotMgr::IsAccountType', 1)[0]
         self.assertIn('if (accountType == 1)', population)
-        self.assertIn('_dedicatedRandomAccounts.insert(accountId);', population)
+        self.assertIn('_dedicatedRandomAccounts.insert(fields[0].Get<uint32>());', population)
+        self.assertIn('fields[1].Get<uint8>() == 1', population)
+        self.assertIn('PreparedQueryResult persisted = PlayerbotsDatabase.Query(', population)
         self.assertIn('_dedicatedRandomAccounts.clear();', source)

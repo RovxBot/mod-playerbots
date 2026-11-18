@@ -110,7 +110,8 @@ No deployment or production config/database was changed.
 ## Enrollment handoff API (release candidate)
 
 `RandomPlayerbotMgr::IsDedicatedRandomAccount(account)` reads an O(1) world-thread
-snapshot populated exclusively by explicit type-1 assignments. It is false until
+snapshot populated exclusively by read-back of persisted explicit type-1 assignments.
+A failed read leaves it empty, even if prefix-based assignment was attempted. It is false until
 assignment completes. `RandomBotAccounts` is a factory-populated broad pool (also
 AddClass/unassigned and possibly empty when creation is skipped); neither it nor
 an account prefix establishes autonomy eligibility. `IsAccountType()` performs
