@@ -593,6 +593,8 @@ void RandomPlayerbotMgr::AssignAccountTypes()
 
     // Clear existing filtered lists
     rndBotTypeAccounts.clear();
+    _dedicatedRandomAccounts.clear();
+    _dedicatedAccountsReady = false;
     addClassTypeAccounts.clear();
 
     // First, get ALL randombot accounts from the database
@@ -727,9 +729,25 @@ void RandomPlayerbotMgr::AssignAccountTypes()
     for (auto const& [accountId, accountType] : currentAssignments)
     {
         if (accountType == 1)
+        {
             rndBotTypeAccounts.push_back(accountId);
+        }
         else if (accountType == 2)
             addClassTypeAccounts.push_back(accountId);
+    }
+
+    // Read back explicit persisted types: a prefix or an attempted assignment
+    // is not sufficient proof for autonomous enrollment. Failure stays empty.
+    if (PreparedQueryResult persisted = PlayerbotsDatabase.Query(
+            PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_ACCOUNT_TYPE)))
+    {
+        do
+        {
+            Field* fields = persisted->Fetch();
+            if (fields[1].Get<uint8>() == 1)
+                _dedicatedRandomAccounts.insert(fields[0].Get<uint32>());
+        } while (persisted->NextRow());
+        _dedicatedAccountsReady = true;
     }
 
     LOG_INFO("playerbots", "Account type assignment complete: {} RNDbot accounts, {} AddClass accounts, {} unassigned",

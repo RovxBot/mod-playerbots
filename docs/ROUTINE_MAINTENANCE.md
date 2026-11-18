@@ -106,3 +106,33 @@ linked worldserver build. No full compilation/link,
 worldserver startup, game-server pilot or pmon baseline was performed. Local
 callback timing is a microbenchmark only; measure full realm overhead separately.
 No deployment or production config/database was changed.
+
+## Enrollment handoff API (release candidate)
+
+`RandomPlayerbotMgr::IsDedicatedRandomAccount(account)` reads an O(1) world-thread
+snapshot populated exclusively by read-back of persisted explicit type-1 assignments.
+A failed/empty read leaves readiness false, even if prefix-based assignment was
+attempted. `DedicatedAccountSnapshotReady()` distinguishes unavailable type data
+from a known non-dedicated account; consumers must retain protection until startup
+or a configuration reload obtains a verified snapshot. It is false until
+assignment completes. `RandomBotAccounts` is a factory-populated broad pool (also
+AddClass/unassigned and possibly empty when creation is skipped); neither it nor
+an account prefix establishes autonomy eligibility. `IsAccountType()` performs
+synchronous SQL and is unsuitable for autonomy observation/tick paths.
+
+`AutonomyEnrollment.h` v1 installs one process-lifetime per-character login veto.
+`AddPlayerBot` checks before query-holder initialization; the asynchronous callback
+checks again before `HandlePlayerLoginFromDB`. A rejected callback follows normal
+`AbandonPendingLogin` and deferred session cleanup. Missing provider preserves
+existing permissions and behavior. `PlayerbotHolder::HasPendingBotLogin` is a
+world-thread observation, not a login bypass. The caller must hold its reservation
+until outstanding login cleanup and normal `LogoutPlayerBot`/save have completed;
+then persist Pending and use the ordinary login path. No `characters.online`
+updates, forced account classification, bot AI or guild orchestration live here.
+
+Exact baseline: master `08b6bd127513d7273b1fcb765e537c5a3cd813ec`.
+The release owner explicitly requires PRs to their master fork. Existing source
+promotion governance may reject that branch name; no workflow exemption is made.
+Keep the companion PR draft: full-build workflows skip drafts. Cheap tests cover
+callback ownership/per-character scope and both source barriers; real asynchronous
+engine login/logout, map-thread races and combined linking remain pilot gates.
