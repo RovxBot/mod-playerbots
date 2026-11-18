@@ -5,7 +5,19 @@
  */
 
 #include "PlayerbotMgr.h"
-#include "PlayerbotsDatabase.h"
+
+#include <openssl/sha.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <iomanip>
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#include "AutonomyEnrollment.h"
 #include "BroadcastHelper.h"
 #include "ChannelMgr.h"
 #include "CharacterCache.h"
@@ -28,20 +40,12 @@
 #include "PlayerbotTextMgr.h"
 #include "PlayerbotWorldThreadProcessor.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "RandomPlayerbotMgr.h"
+#include "RoutineMaintenance.h"
 #include "SharedDefines.h"
 #include "WorldSession.h"
 #include "WorldSessionMgr.h"
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
-#include <iomanip>
-#include <memory>
-#include <openssl/sha.h>
-#include <string>
-#include <vector>
-#include <unordered_set>
-#include "RoutineMaintenance.h"
 
 class BotInitGuard
 {
@@ -88,6 +92,9 @@ public:
 
 void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId)
 {
+    if (Playerbots::AutonomyEnrollment::LoginBlocked(playerGuid.GetCounter()))
+        return;
+
     if (botLoading.find(playerGuid) != botLoading.end())
         return;
 
@@ -252,6 +259,12 @@ bool PlayerbotHolder::IsAccountLinked(uint32 accountId, uint32 linkedAccountId)
 
 void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder const& holder, WorldSession* botSession)
 {
+    if (Playerbots::AutonomyEnrollment::LoginBlocked(holder.GetGuid().GetCounter()))
+    {
+        AbandonPendingLogin(holder.GetGuid());
+        return;
+    }
+
     uint32 botAccountId = holder.GetAccountId();
 
     botSession->HandlePlayerLoginFromDB(holder);  // will delete lqh

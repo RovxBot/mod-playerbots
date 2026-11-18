@@ -12,9 +12,11 @@ jobs:
       - name: Exercise optional callback contract
         run: |
           for standard in c++17 c++20; do
+            c++ -std="$standard" -pthread -Wall -Wextra -Werror -pedantic -Isrc/Bot tests/AutonomyEnrollmentTests.cpp -o /tmp/enrollment-tests
+            /tmp/enrollment-tests
             c++ -std="$standard" -O2 -pthread -Wall -Wextra -Werror -pedantic -Isrc/Bot \
               tests/RoutineMaintenancePolicyTests.cpp -o /tmp/maintenance-policy-tests
             /tmp/maintenance-policy-tests
           done
       - name: Exercise source-extracted mutation guards and boundary contracts
-        run: python3 -m unittest discover -s tests -p 'test_routine_maintenance_*.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v

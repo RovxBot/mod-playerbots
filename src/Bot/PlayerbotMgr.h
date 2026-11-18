@@ -49,6 +49,7 @@ public:
     void UpdateSessions();
     void HandleBotPackets(WorldSession* session);
     static void UpdatePendingLogins();  // world thread, once per tick
+    static bool HasPendingBotLogin(ObjectGuid guid) { return botLoading.find(guid) != botLoading.end(); }
     static void ClearPendingLogins();   // shutdown, outside any callback
 
     void LogoutAllBots(bool routineMaintenance = false);

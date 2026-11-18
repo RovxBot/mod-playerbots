@@ -593,6 +593,7 @@ void RandomPlayerbotMgr::AssignAccountTypes()
 
     // Clear existing filtered lists
     rndBotTypeAccounts.clear();
+    _dedicatedRandomAccounts.clear();
     addClassTypeAccounts.clear();
 
     // First, get ALL randombot accounts from the database
@@ -727,7 +728,10 @@ void RandomPlayerbotMgr::AssignAccountTypes()
     for (auto const& [accountId, accountType] : currentAssignments)
     {
         if (accountType == 1)
+        {
             rndBotTypeAccounts.push_back(accountId);
+            _dedicatedRandomAccounts.insert(accountId);
+        }
         else if (accountType == 2)
             addClassTypeAccounts.push_back(accountId);
     }
